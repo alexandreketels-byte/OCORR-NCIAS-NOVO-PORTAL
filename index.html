@@ -73,7 +73,7 @@
     <table id="tabelaTransportadoras" style="display:none">
       <thead><tr>
         <th>Transportadora</th><th>Pedidos não recebidos</th><th>Em atraso</th>
-        <th>% atraso</th><th>Atraso médio (dias)</th><th>Performance</th><th>Valor NF</th>
+        <th>% atraso</th><th>Atraso médio (dias)</th><th>Performance</th>
       </tr></thead>
       <tbody id="tabelaTransportadorasBody"></tbody>
     </table>
@@ -249,16 +249,16 @@ async function carregarIndicadores() {
 }
 
 function renderKpis(dados) {
+  const perf = dados.pedidosNaoRecebidos.performanceGeral;
+  const corPerf = perf >= 90 ? 'var(--verde)' : (perf >= 80 ? '#c77b00' : 'var(--vermelho)');
   const kpis = [
     { valor: dados.tabDinamica.totalPedidos, rotulo: 'Pedidos (Tabela Dinâmica)' },
-    { valor: fmtMoeda(dados.tabDinamica.valorTotalNf), rotulo: 'Valor Total NF' },
     { valor: dados.pedidosNaoRecebidos.total, rotulo: 'Pedidos não recebidos' },
-    { valor: fmtMoeda(dados.pedidosNaoRecebidos.valorTotalNf), rotulo: 'Valor NF (não recebidos)' },
     { valor: dados.pedidosNaoRecebidos.totalEmAtraso, rotulo: 'Em atraso' },
-    { valor: dados.pedidosNaoRecebidos.percentualAtrasoGeral.toFixed(1) + '%', rotulo: '% em atraso (geral)' }
+    { valor: perf.toFixed(1) + '%', rotulo: 'Performance geral', cor: corPerf }
   ];
   document.getElementById('kpis').innerHTML = kpis.map(k =>
-    `<div class="kpi"><div class="valor">${k.valor}</div><div class="rotulo">${k.rotulo}</div></div>`
+    `<div class="kpi"><div class="valor"${k.cor ? ` style="color:${k.cor}"` : ''}>${k.valor}</div><div class="rotulo">${k.rotulo}</div></div>`
   ).join('');
 }
 
@@ -275,20 +275,19 @@ function renderMeta(status) {
 
 function renderTabelaTransportadoras(porTransportadora) {
   const tbody = document.getElementById('tabelaTransportadorasBody');
-  // Ordena pela pior performance primeiro (maior % de atraso)
-  const linhas = Object.entries(porTransportadora || {}).sort((a, b) => b[1].percentualAtraso - a[1].percentualAtraso);
+  // Ordena pela pior performance primeiro
+  const linhas = Object.entries(porTransportadora || {}).sort((a, b) => a[1].performance - b[1].performance);
   if (linhas.length === 0) { document.getElementById('tabelaTransportadoras').style.display = 'none'; return; }
   document.getElementById('tabelaTransportadoras').style.display = 'table';
   tbody.innerHTML = linhas.map(([nome, v]) => {
-    const cor = v.percentualAtraso >= 20 ? 'var(--vermelho)' : (v.percentualAtraso >= 5 ? '#c77b00' : 'var(--verde)');
+    const cor = v.performance >= 90 ? 'var(--verde)' : (v.performance >= 80 ? '#c77b00' : 'var(--vermelho)');
     return `<tr>
       <td>${nome}</td>
       <td>${v.qtd}</td>
       <td>${v.emAtraso}</td>
-      <td style="color:${cor};font-weight:600">${v.percentualAtraso.toFixed(1)}%</td>
+      <td>${v.percentualAtraso.toFixed(1)}%</td>
       <td>${v.atrasoMedioDias.toFixed(1)}</td>
-      <td>${v.performance.toFixed(1)}%</td>
-      <td>${fmtMoeda(v.valorNf)}</td>
+      <td style="color:${cor};font-weight:600">${v.performance.toFixed(1)}%</td>
     </tr>`;
   }).join('');
 }
