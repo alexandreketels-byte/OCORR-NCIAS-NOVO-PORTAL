@@ -116,6 +116,13 @@
       <tbody id="tabelaOcorrenciasBody"></tbody>
     </table>
   </div>
+
+  <div class="indicadores">
+    <h2>Colar Ocorrências (texto)</h2>
+    <p class="desc">Cole aqui o texto do relatório de ocorrências copiado direto da tela do sistema (sem precisar exportar arquivo). Isso só monta a tabela na hora, na tela — não salva nada na planilha.</p>
+    <textarea id="colarOcorrenciasTexto" rows="8" style="width:100%;font-family:inherit;font-size:0.9rem;padding:10px;border:1px solid var(--borda);border-radius:8px;"></textarea>
+    <button onclick="processarOcorrenciasTexto()" style="margin-top:10px">Processar texto</button>
+  </div>
 </main>
 
 <div class="modal-overlay" id="modalOverlay" onclick="fecharModalSeClicouFora(event)">
@@ -301,6 +308,58 @@ function parseOcorrenciasAoa(aoa) {
       r[idx.loja], r[idx.cd], r[idx.pedido], r[idx.nf], r[idx.cliente], r[idx.estado], r[idx.cidade],
       r[idx.transportadora], r[idx.contato], r[idx.telefone], r[idx.ocorrencia], r[idx.tipoOcorrencia], r[idx.status]
     ]);
+}
+
+// ---------- Colar Ocorrências como texto (copiado da tela, sem exportar arquivo) ----------
+// Formato: depois do cabeçalho, cada registro aparece como uma linha por
+// coluna (DT Ocorr, Loja, Pedido, NF, Cliente, Transp, Contato, Telefone,
+// Ocorrência, Status), intercaladas com muitas linhas em branco (lixo do
+// copiar/colar da tela). O telefone pode vir em mais de uma linha.
+function parseOcorrenciasTexto(texto) {
+  const linhas = texto.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const REGEX_DATA = /^\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}$/;
+  const REGEX_TELEFONE = /^\(\d{2,3}\)[\d-]+$/;
+
+  const registros = [];
+  let i = 0;
+  while (i < linhas.length) {
+    if (!REGEX_DATA.test(linhas[i])) { i++; continue; }
+    const dtOcorr = linhas[i++];
+    const loja = linhas[i++] || '';
+    const pedido = linhas[i++] || '';
+    const nf = linhas[i++] || '';
+    const cliente = linhas[i++] || '';
+    const transportadora = linhas[i++] || '';
+    const contato = linhas[i++] || '';
+    const telefones = [];
+    while (i < linhas.length && REGEX_TELEFONE.test(linhas[i])) {
+      telefones.push(linhas[i++]);
+    }
+    const ocorrencia = linhas[i++] || '';
+    const status = linhas[i++] || '';
+    registros.push({ dtOcorr, loja, pedido, nf, cliente, transportadora, contato, telefone: telefones.join(' / '), ocorrencia, status });
+  }
+  return registros;
+}
+
+const COLUNAS_TRATATIVAS = ['Pedido', 'NF', 'Cliente', 'Transportadora', 'Data Ocorrência', 'Ocorrência', 'Status', 'Telefone'];
+
+function processarOcorrenciasTexto() {
+  const texto = document.getElementById('colarOcorrenciasTexto').value;
+  if (!texto || !texto.trim()) { alert('Cole o texto do relatório de ocorrências primeiro.'); return; }
+
+  const registros = parseOcorrenciasTexto(texto);
+  if (registros.length === 0) {
+    alert('Não consegui reconhecer nenhuma ocorrência nesse texto. Confira se o texto colado inclui as datas (DT Ocorr) de cada linha.');
+    return;
+  }
+
+  registros.sort((a, b) => a.pedido.localeCompare(b.pedido) || a.dtOcorr.localeCompare(b.dtOcorr));
+
+  mostrarModalCarregando(`Tratativas por pedido (${registros.length} ocorrências)`, COLUNAS_TRATATIVAS);
+  renderModalLinhas(registros.map(r => [
+    r.pedido, r.nf, r.cliente, r.transportadora, r.dtOcorr, r.ocorrencia, r.status, r.telefone
+  ]), COLUNAS_TRATATIVAS.length);
 }
 
 // ---------- Envio em lotes ----------
