@@ -38,6 +38,23 @@
   th, td { padding: 8px 12px; text-align: left; font-size: 0.88rem; border-bottom: 1px solid var(--borda); }
   th { background: var(--azul-claro); }
   #refreshBtn { margin-top: 14px; }
+  .kpi.clicavel { cursor: pointer; }
+  .kpi.clicavel:hover { box-shadow: 0 0 0 2px var(--azul-claro); }
+  .num-link { color: var(--azul); text-decoration: underline; cursor: pointer; }
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    align-items: center; justify-content: center; z-index: 100; padding: 20px;
+  }
+  .modal {
+    background: #fff; border-radius: 10px; max-width: 960px; width: 100%;
+    max-height: 85vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--borda); }
+  .modal-header h3 { margin: 0; font-size: 1.05rem; }
+  .modal-close { background: none; color: var(--cinza); font-size: 1.4rem; padding: 0 6px; }
+  .modal-body { padding: 0 20px 20px; overflow-y: auto; }
+  .modal-body table { margin-top: 12px; }
+  .modal-body th { position: sticky; top: 0; }
 </style>
 </head>
 <body>
@@ -80,6 +97,24 @@
     <button id="refreshBtn" onclick="carregarIndicadores()">Atualizar indicadores</button>
   </div>
 </main>
+
+<div class="modal-overlay" id="modalOverlay" onclick="fecharModalSeClicouFora(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitulo">Pedidos</h3>
+      <button class="modal-close" onclick="fecharModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <table id="modalTabela">
+        <thead><tr>
+          <th>Pedido</th><th>NF</th><th>Cliente</th><th>Cidade</th><th>Loja</th>
+          <th>Data Coleta</th><th>Prev Etg</th><th>Atraso (dias)</th>
+        </tr></thead>
+        <tbody id="modalTabelaBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
 
 <script>
 // >>> Cole aqui a URL do seu App da Web do Apps Script (termina em /exec) <<<
@@ -253,13 +288,17 @@ function renderKpis(dados) {
   const corPerf = perf >= 90 ? 'var(--verde)' : (perf >= 80 ? '#c77b00' : 'var(--vermelho)');
   const kpis = [
     { valor: dados.tabDinamica.totalPedidos, rotulo: 'Pedidos (Tabela Dinâmica)' },
-    { valor: dados.pedidosNaoRecebidos.total, rotulo: 'Pedidos não recebidos' },
-    { valor: dados.pedidosNaoRecebidos.totalEmAtraso, rotulo: 'Em atraso' },
+    { valor: dados.pedidosNaoRecebidos.total, rotulo: 'Pedidos não recebidos',
+      onclick: `verPedidos('TODAS', false, 'Todos os pedidos não recebidos')` },
+    { valor: dados.pedidosNaoRecebidos.totalEmAtraso, rotulo: 'Em atraso',
+      onclick: `verPedidos('TODAS', true, 'Todos os pedidos em atraso')` },
     { valor: perf.toFixed(1) + '%', rotulo: 'Performance geral', cor: corPerf }
   ];
-  document.getElementById('kpis').innerHTML = kpis.map(k =>
-    `<div class="kpi"><div class="valor"${k.cor ? ` style="color:${k.cor}"` : ''}>${k.valor}</div><div class="rotulo">${k.rotulo}</div></div>`
-  ).join('');
+  document.getElementById('kpis').innerHTML = kpis.map(k => {
+    const clicavel = k.onclick ? ' clicavel' : '';
+    const onclickAttr = k.onclick ? ` onclick="${k.onclick}"` : '';
+    return `<div class="kpi${clicavel}"${onclickAttr}><div class="valor"${k.cor ? ` style="color:${k.cor}"` : ''}>${k.valor}</div><div class="rotulo">${k.rotulo}</div></div>`;
+  }).join('');
 }
 
 function renderMeta(status) {
@@ -283,14 +322,43 @@ function renderTabelaTransportadoras(porTransportadora) {
     const cor = v.performance >= 90 ? 'var(--verde)' : (v.performance >= 80 ? '#c77b00' : 'var(--vermelho)');
     return `<tr>
       <td>${nome}</td>
-      <td>${v.qtd}</td>
-      <td>${v.emAtraso}</td>
+      <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false)">${v.qtd}</a></td>
+      <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', true)">${v.emAtraso}</a></td>
       <td>${v.percentualAtraso.toFixed(1)}%</td>
       <td>${v.atrasoMedioDias.toFixed(1)}</td>
       <td style="color:${cor};font-weight:600">${v.performance.toFixed(1)}%</td>
     </tr>`;
   }).join('');
 }
+
+// ---------- Modal de detalhamento de pedidos ----------
+async function verPedidos(transportadora, apenasAtraso, titulo) {
+  document.getElementById('modalTitulo').textContent = titulo;
+  document.getElementById('modalTabelaBody').innerHTML = '<tr><td colspan="8">Carregando...</td></tr>';
+  document.getElementById('modalOverlay').style.display = 'flex';
+  try {
+    const params = new URLSearchParams({ action: 'getPedidosDetalhe', transportadora, apenasAtraso: apenasAtraso ? '1' : '0' });
+    const pedidos = await fetch(`${API_URL}?${params}`).then(r => r.json());
+    if (!pedidos.length) {
+      document.getElementById('modalTabelaBody').innerHTML = '<tr><td colspan="8">Nenhum pedido encontrado.</td></tr>';
+      return;
+    }
+    document.getElementById('modalTabelaBody').innerHTML = pedidos.map(p => `<tr>
+      <td>${p.pedido || ''}</td><td>${p.nf || ''}</td><td>${p.cliente || ''}</td><td>${p.cidade || ''}</td>
+      <td>${p.loja || ''}</td><td>${p.dataColeta || ''}</td><td>${p.prevEtg || ''}</td><td>${p.atraso || ''}</td>
+    </tr>`).join('');
+  } catch (err) {
+    document.getElementById('modalTabelaBody').innerHTML = '<tr><td colspan="8">Erro ao carregar pedidos.</td></tr>';
+  }
+}
+
+function verPedidosPorNome(nomeEncoded, apenasAtraso) {
+  const nome = decodeURIComponent(nomeEncoded);
+  verPedidos(nome, apenasAtraso, (apenasAtraso ? 'Pedidos em atraso — ' : 'Pedidos não recebidos — ') + nome);
+}
+
+function fecharModal() { document.getElementById('modalOverlay').style.display = 'none'; }
+function fecharModalSeClicouFora(e) { if (e.target.id === 'modalOverlay') fecharModal(); }
 
 carregarIndicadores();
 </script>
