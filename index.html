@@ -118,8 +118,8 @@
   </div>
 
   <div class="indicadores">
-    <h2>Colar Ocorrências (texto)</h2>
-    <p class="desc">Cole aqui o texto do relatório de ocorrências copiado direto da tela do sistema (sem precisar exportar arquivo). Isso só monta a tabela na hora, na tela — não salva nada na planilha.</p>
+    <h2>Colar Tratativas de Ocorrências (texto)</h2>
+    <p class="desc">Cole aqui o texto das tratativas de ocorrências copiado direto da tela do sistema (com as mensagens de cada pedido). Isso só monta a tabela na hora, na tela — não salva nada na planilha.</p>
     <textarea id="colarOcorrenciasTexto" rows="8" style="width:100%;font-family:inherit;font-size:0.9rem;padding:10px;border:1px solid var(--borda);border-radius:8px;"></textarea>
     <button onclick="processarOcorrenciasTexto()" style="margin-top:10px">Processar texto</button>
   </div>
@@ -310,45 +310,88 @@ function parseOcorrenciasAoa(aoa) {
     ]);
 }
 
-// ---------- Colar Ocorrências como texto (copiado da tela, sem exportar arquivo) ----------
-// Formato: depois do cabeçalho, cada registro aparece como uma linha por
-// coluna (DT Ocorr, Loja, Pedido, NF, Cliente, Transp, Contato, Telefone,
-// Ocorrência, Status), intercaladas com muitas linhas em branco (lixo do
-// copiar/colar da tela). O telefone pode vir em mais de uma linha.
-function parseOcorrenciasTexto(texto) {
-  const linhas = texto.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+// ---------- Colar Tratativas de Ocorrências como texto (copiado da tela) ----------
+// Formato: o texto é tabulado (colado direto de uma tabela). Cada ocorrência
+// começa numa linha com a data em DT Ocorr (col 0) e os dados do pedido nas
+// colunas seguintes. Logo abaixo vem uma seção "MENSAGENS" com uma linha por
+// mensagem (data / autor / texto), podendo ter linhas de continuação (texto
+// mais longo que quebrou em várias linhas na célula original).
+function parseTratativasTexto(texto) {
   const REGEX_DATA = /^\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}$/;
   const REGEX_TELEFONE = /^\(\d{2,3}\)[\d-]+$/;
 
+  const linhas = texto.split('\n');
   const registros = [];
-  let i = 0;
-  while (i < linhas.length) {
-    if (!REGEX_DATA.test(linhas[i])) { i++; continue; }
-    const dtOcorr = linhas[i++];
-    const loja = linhas[i++] || '';
-    const pedido = linhas[i++] || '';
-    const nf = linhas[i++] || '';
-    const cliente = linhas[i++] || '';
-    const transportadora = linhas[i++] || '';
-    const contato = linhas[i++] || '';
-    const telefones = [];
-    while (i < linhas.length && REGEX_TELEFONE.test(linhas[i])) {
-      telefones.push(linhas[i++]);
+  let atual = null;
+  let secao = null; // 'mensagens' | null
+
+  for (const linhaBruta of linhas) {
+    const cells = linhaBruta.replace(/\r$/, '').split('\t').map(c => c.trim());
+    const c0 = cells[0] || '';
+    const c1 = cells[1] || '';
+
+    // Nova ocorrência (início de um pedido)
+    if (REGEX_DATA.test(c0)) {
+      atual = {
+        dtOcorr: c0,
+        loja: cells[1] || '',
+        pedido: cells[4] || '',
+        nf: cells[5] || '',
+        cliente: cells[6] || '',
+        transportadora: cells[7] || '',
+        contato: cells[8] || '',
+        telefone: cells[9] || '',
+        ocorrencia: cells[10] || '',
+        status: cells[11] || '',
+        mensagens: []
+      };
+      registros.push(atual);
+      secao = null;
+      continue;
     }
-    const ocorrencia = linhas[i++] || '';
-    const status = linhas[i++] || '';
-    registros.push({ dtOcorr, loja, pedido, nf, cliente, transportadora, contato, telefone: telefones.join(' / '), ocorrencia, status });
+
+    if (!atual) continue; // ainda não achamos a primeira ocorrência
+
+    if (c1 === 'MENSAGENS') { secao = 'mensagens'; continue; }
+    if (c1 === 'NOVA MENSAGEM') { secao = null; continue; }
+    if (c1 === 'TIPO DE OCORRÊNCIA' || c1 === 'SOLUÇÃO') { secao = null; continue; }
+
+    if (secao === 'mensagens') {
+      const dt = cells[1] || '';
+      const autor = cells[2] || '';
+      const texto2 = cells[3] || '';
+      if (REGEX_DATA.test(dt)) {
+        atual.mensagens.push({ data: dt, autor, texto: texto2 });
+      } else if (texto2 && atual.mensagens.length > 0) {
+        // continuação do texto da última mensagem
+        atual.mensagens[atual.mensagens.length - 1].texto += ' ' + texto2;
+      }
+      continue;
+    }
+
+    // Telefone extra numa linha própria (logo após o cabeçalho da ocorrência)
+    const naoVazias = cells.map(c => c.trim()).filter(c => c.length > 0);
+    if (naoVazias.length === 1 && REGEX_TELEFONE.test(naoVazias[0])) {
+      atual.telefone = atual.telefone ? atual.telefone + ' / ' + naoVazias[0] : naoVazias[0];
+    }
   }
+
   return registros;
 }
 
-const COLUNAS_TRATATIVAS = ['Pedido', 'NF', 'Cliente', 'Transportadora', 'Data Ocorrência', 'Ocorrência', 'Status', 'Telefone'];
+function ultimaMensagemFormatada(registro) {
+  if (!registro.mensagens || registro.mensagens.length === 0) return '';
+  const m = registro.mensagens[registro.mensagens.length - 1];
+  return `${m.data} — ${m.autor}: ${m.texto}`;
+}
+
+const COLUNAS_TRATATIVAS = ['Pedido', 'NF', 'Cliente', 'Transportadora', 'Ocorrência', 'Status', 'Última Mensagem'];
 
 function processarOcorrenciasTexto() {
   const texto = document.getElementById('colarOcorrenciasTexto').value;
-  if (!texto || !texto.trim()) { alert('Cole o texto do relatório de ocorrências primeiro.'); return; }
+  if (!texto || !texto.trim()) { alert('Cole o texto das tratativas de ocorrências primeiro.'); return; }
 
-  const registros = parseOcorrenciasTexto(texto);
+  const registros = parseTratativasTexto(texto);
   if (registros.length === 0) {
     alert('Não consegui reconhecer nenhuma ocorrência nesse texto. Confira se o texto colado inclui as datas (DT Ocorr) de cada linha.');
     return;
@@ -358,7 +401,7 @@ function processarOcorrenciasTexto() {
 
   mostrarModalCarregando(`Tratativas por pedido (${registros.length} ocorrências)`, COLUNAS_TRATATIVAS);
   renderModalLinhas(registros.map(r => [
-    r.pedido, r.nf, r.cliente, r.transportadora, r.dtOcorr, r.ocorrencia, r.status, r.telefone
+    r.pedido, r.nf, r.cliente, r.transportadora, r.ocorrencia, r.status, ultimaMensagemFormatada(r)
   ]), COLUNAS_TRATATIVAS.length);
 }
 
