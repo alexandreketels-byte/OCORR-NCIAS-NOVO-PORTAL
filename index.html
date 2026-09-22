@@ -65,7 +65,7 @@
   <div class="grid">
     <div class="card">
       <h2>Importar Tabela Dinâmica</h2>
-      <p class="desc">Arquivo .csv exportado do sistema (Data, Status Entrega, NF, Pedido, Cliente, Transportadora, valores, etc.)</p>
+      <p class="desc">Arquivo .csv exportado do sistema. A importação preserva o histórico: pedidos novos são adicionados e pedidos já existentes têm apenas Status Entrega e Receb Cliente atualizados.</p>
       <input type="file" id="fileTabDinamica" accept=".csv">
       <button id="btnTabDinamica" onclick="importarTabDinamica()">Importar</button>
       <div class="progress-wrap" id="progressTabDinamica"><div class="progress-bar" id="progressBarTabDinamica"></div></div>
@@ -240,23 +240,34 @@ async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBar
   wrap.style.display = 'block';
 
   const totalBatches = Math.max(1, Math.ceil(rows.length / BATCH_SIZE));
+  let totalNovos = 0;
+  let totalAtualizados = 0;
+
   for (let i = 0; i < totalBatches; i++) {
     const batch = rows.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
     const isLast = i === totalBatches - 1;
     setStatus(statusId, `Enviando lote ${i + 1} de ${totalBatches} (${batch.length} linhas)...`, '');
     try {
-      await fetch(API_URL, {
+      const resp = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' }, // evita preflight CORS no Apps Script
         body: JSON.stringify({ action, rows: batch, batchIndex: i, isLast })
       });
+      const result = await resp.json();
+      if (typeof result.novos === 'number') totalNovos += result.novos;
+      if (typeof result.atualizados === 'number') totalAtualizados += result.atualizados;
     } catch (err) {
       setStatus(statusId, 'Erro no envio: ' + err.message, 'erro');
       return;
     }
     bar.style.width = Math.round(((i + 1) / totalBatches) * 100) + '%';
   }
-  setStatus(statusId, `Importação concluída: ${rows.length} linhas.`, 'ok');
+
+  if (action === 'importTabDinamica') {
+    setStatus(statusId, `Importação concluída: ${totalNovos} pedidos novos, ${totalAtualizados} atualizados.`, 'ok');
+  } else {
+    setStatus(statusId, `Importação concluída: ${rows.length} linhas.`, 'ok');
+  }
 }
 
 function setStatus(id, msg, cls) {
@@ -288,6 +299,8 @@ function renderKpis(dados) {
   const corPerf = perf >= 90 ? 'var(--verde)' : (perf >= 80 ? '#c77b00' : 'var(--vermelho)');
   const kpis = [
     { valor: dados.tabDinamica.totalPedidos, rotulo: 'Pedidos (Tabela Dinâmica)' },
+    { valor: dados.tabDinamica.totalRecebidosCliente, rotulo: 'Recebidos pelo cliente',
+      onclick: `verPedidosRecebidos()` },
     { valor: dados.pedidosNaoRecebidos.total, rotulo: 'Pedidos não recebidos',
       onclick: `verPedidos('TODAS', false, 'Todos os pedidos não recebidos')` },
     { valor: dados.pedidosNaoRecebidos.totalEmAtraso, rotulo: 'Em atraso',
@@ -331,30 +344,59 @@ function renderTabelaTransportadoras(porTransportadora) {
   }).join('');
 }
 
-// ---------- Modal de detalhamento de pedidos ----------
-async function verPedidos(transportadora, apenasAtraso, titulo) {
+function fmtData(v) {
+  if (!v) return '';
+  // Datas voltam da planilha como string ISO (ex: 2026-01-09T00:00:00.000Z)
+  if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) {
+    return new Date(v).toLocaleDateString('pt-BR');
+  }
+  return v;
+}
+
+// ---------- Modal de detalhamento (genérico) ----------
+function mostrarModalCarregando(titulo, colunas) {
   document.getElementById('modalTitulo').textContent = titulo;
-  document.getElementById('modalTabelaBody').innerHTML = '<tr><td colspan="8">Carregando...</td></tr>';
+  document.querySelector('#modalTabela thead tr').innerHTML = colunas.map(c => `<th>${c}</th>`).join('');
+  document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${colunas.length}">Carregando...</td></tr>`;
   document.getElementById('modalOverlay').style.display = 'flex';
+}
+
+function renderModalLinhas(linhas, numColunas) {
+  document.getElementById('modalTabelaBody').innerHTML = linhas.length
+    ? linhas.map(l => `<tr>${l.map(v => `<td>${v === undefined || v === null ? '' : v}</td>`).join('')}</tr>`).join('')
+    : `<tr><td colspan="${numColunas}">Nenhum registro encontrado.</td></tr>`;
+}
+
+const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)'];
+
+async function verPedidos(transportadora, apenasAtraso, titulo) {
+  mostrarModalCarregando(titulo, COLUNAS_PEDIDOS_NAO_RECEBIDOS);
   try {
     const params = new URLSearchParams({ action: 'getPedidosDetalhe', transportadora, apenasAtraso: apenasAtraso ? '1' : '0' });
     const pedidos = await fetch(`${API_URL}?${params}`).then(r => r.json());
-    if (!pedidos.length) {
-      document.getElementById('modalTabelaBody').innerHTML = '<tr><td colspan="8">Nenhum pedido encontrado.</td></tr>';
-      return;
-    }
-    document.getElementById('modalTabelaBody').innerHTML = pedidos.map(p => `<tr>
-      <td>${p.pedido || ''}</td><td>${p.nf || ''}</td><td>${p.cliente || ''}</td><td>${p.cidade || ''}</td>
-      <td>${p.loja || ''}</td><td>${p.dataColeta || ''}</td><td>${p.prevEtg || ''}</td><td>${p.atraso || ''}</td>
-    </tr>`).join('');
+    renderModalLinhas(pedidos.map(p => [
+      p.pedido, p.nf, p.cliente, p.cidade, p.loja, fmtData(p.dataColeta), fmtData(p.prevEtg), p.atraso
+    ]), COLUNAS_PEDIDOS_NAO_RECEBIDOS.length);
   } catch (err) {
-    document.getElementById('modalTabelaBody').innerHTML = '<tr><td colspan="8">Erro ao carregar pedidos.</td></tr>';
+    document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_PEDIDOS_NAO_RECEBIDOS.length}">Erro ao carregar pedidos.</td></tr>`;
   }
 }
 
 function verPedidosPorNome(nomeEncoded, apenasAtraso) {
   const nome = decodeURIComponent(nomeEncoded);
   verPedidos(nome, apenasAtraso, (apenasAtraso ? 'Pedidos em atraso — ' : 'Pedidos não recebidos — ') + nome);
+}
+
+const COLUNAS_RECEBIDOS = ['Data', 'Pedido', 'Transportadora'];
+
+async function verPedidosRecebidos() {
+  mostrarModalCarregando('Pedidos recebidos pelo cliente', COLUNAS_RECEBIDOS);
+  try {
+    const dados = await fetch(`${API_URL}?action=getPedidosRecebidosDetalhe`).then(r => r.json());
+    renderModalLinhas(dados.map(d => [fmtData(d.data), d.pedido, d.transportadora]), COLUNAS_RECEBIDOS.length);
+  } catch (err) {
+    document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_RECEBIDOS.length}">Erro ao carregar pedidos.</td></tr>`;
+  }
 }
 
 function fecharModal() { document.getElementById('modalOverlay').style.display = 'none'; }
