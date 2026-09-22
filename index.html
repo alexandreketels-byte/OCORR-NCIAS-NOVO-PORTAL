@@ -122,11 +122,25 @@
 
   <div class="indicadores">
     <h2>Colar Tratativas de Ocorrências (texto)</h2>
-    <p class="desc">Cole aqui o texto das tratativas de ocorrências copiado direto da tela do sistema (com as mensagens de cada pedido). Isso só monta a tabela na hora, na tela — não salva nada na planilha.</p>
+    <p class="desc">Cole aqui o texto das tratativas de ocorrências copiado direto da tela do sistema (com as mensagens de cada pedido). Fica salvo neste navegador até você processar um texto novo — não é enviado nem salvo na planilha.</p>
     <textarea id="colarOcorrenciasTexto" rows="8" style="width:100%;font-family:inherit;font-size:0.9rem;padding:10px;border:1px solid var(--borda);border-radius:8px;"></textarea>
     <button onclick="processarOcorrenciasTexto()" style="margin-top:10px">Processar texto</button>
+
+    <div id="tratativasArea" style="display:none;margin-top:16px">
+      <div class="modal-filtros" style="padding:0 0 10px">
+        <input type="text" id="tratativasBusca" placeholder="Buscar em todas as colunas..." oninput="aplicarFiltrosTratativas()">
+        <div id="tratativasFiltrosSelects" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+      </div>
+      <div style="overflow-x:auto">
+        <table id="tratativasTabela" style="width:100%">
+          <thead><tr id="tratativasThead"></tr></thead>
+          <tbody id="tratativasTabelaBody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </main>
+
 
 <div class="modal-overlay" id="modalOverlay" onclick="fecharModalSeClicouFora(event)">
   <div class="modal">
@@ -391,25 +405,143 @@ function ultimaMensagem(registro) {
   return registro.mensagens[registro.mensagens.length - 1];
 }
 
-const COLUNAS_TRATATIVAS = ['Pedido', 'NF', 'Cliente', 'Transportadora', 'Ocorrência', 'Status', 'Data Últ. Msg', 'Autor Últ. Msg', 'Mensagem'];
+const COLUNAS_TRATATIVAS = [
+  'Pedido', 'NF', 'Cliente', 'Transportadora', 'Ocorrência', 'Status',
+  'Previsão', 'Entregue?', 'Data Entrega', 'Data Últ. Msg', 'Autor Últ. Msg', 'Mensagem'
+];
+const COLUNAS_TRATATIVAS_FILTRAVEIS = ['Transportadora', 'Status', 'Ocorrência', 'Entregue?'];
+const CHAVE_LOCALSTORAGE_TRATATIVAS = 'dis_tratativas_texto_v1';
 
-function processarOcorrenciasTexto() {
-  const texto = document.getElementById('colarOcorrenciasTexto').value;
+let tratativasDadosAtuais = [];
+let tratativasFiltrosSelecionados = {};
+let tratativasOrdenacao = { indice: null, direcao: 1 };
+
+async function processarOcorrenciasTexto(textoForcado) {
+  const texto = textoForcado !== undefined ? textoForcado : document.getElementById('colarOcorrenciasTexto').value;
   if (!texto || !texto.trim()) { alert('Cole o texto das tratativas de ocorrências primeiro.'); return; }
 
   const registros = parseTratativasTexto(texto);
   if (registros.length === 0) {
-    alert('Não consegui reconhecer nenhuma ocorrência nesse texto. Confira se o texto colado inclui as datas (DT Ocorr) de cada linha.');
+    if (textoForcado === undefined) alert('Não consegui reconhecer nenhuma ocorrência nesse texto. Confira se o texto colado inclui as datas (DT Ocorr) de cada linha.');
     return;
+  }
+
+  // PROCV contra a Tabela Dinâmica: previsão de entrega e se já foi entregue
+  let lookup = {};
+  if (API_URL && API_URL.indexOf('COLE_AQUI') !== 0) {
+    try {
+      lookup = await fetch(`${API_URL}?action=getTabDinamicaLookup`).then(r => r.json());
+    } catch (err) { /* segue sem o PROCV se a API falhar */ }
   }
 
   registros.sort((a, b) => a.pedido.localeCompare(b.pedido) || a.dtOcorr.localeCompare(b.dtOcorr));
 
-  mostrarModalCarregando(`Tratativas por pedido (${registros.length} ocorrências)`, COLUNAS_TRATATIVAS);
-  renderModalLinhas(registros.map(r => {
+  tratativasDadosAtuais = registros.map(r => {
     const m = ultimaMensagem(r);
-    return [r.pedido, r.nf, r.cliente, r.transportadora, r.ocorrencia, r.status, m.data, m.autor, m.texto];
-  }));
+    const info = lookup[r.pedido] || {};
+    return [
+      r.pedido, r.nf, r.cliente, r.transportadora, r.ocorrencia, r.status,
+      fmtData(info.previsao || ''), info.recebCliente ? 'Sim' : 'Não', fmtData(info.recebCliente || ''),
+      m.data, m.autor, m.texto
+    ];
+  });
+
+  localStorage.setItem(CHAVE_LOCALSTORAGE_TRATATIVAS, texto);
+  document.getElementById('colarOcorrenciasTexto').value = texto;
+  document.getElementById('tratativasArea').style.display = 'block';
+
+  tratativasOrdenacao = { indice: null, direcao: 1 };
+  montarCabecalhoTratativas();
+  montarFiltrosTratativas();
+  aplicarFiltrosTratativas();
+}
+
+function montarCabecalhoTratativas() {
+  const thead = document.getElementById('tratativasThead');
+  thead.innerHTML = COLUNAS_TRATATIVAS.map((c, idx) => `<th style="cursor:pointer;user-select:none" onclick="ordenarTratativas(${idx})">${c}${indicadorOrdenacao(tratativasOrdenacao, idx)}</th>`).join('');
+}
+
+function indicadorOrdenacao(estado, idx) {
+  if (estado.indice !== idx) return '';
+  return estado.direcao === 1 ? ' ▲' : ' ▼';
+}
+
+function ordenarTratativas(idx) {
+  if (tratativasOrdenacao.indice === idx) {
+    tratativasOrdenacao.direcao *= -1;
+  } else {
+    tratativasOrdenacao = { indice: idx, direcao: 1 };
+  }
+  montarCabecalhoTratativas();
+  aplicarFiltrosTratativas();
+}
+
+function montarFiltrosTratativas() {
+  const container = document.getElementById('tratativasFiltrosSelects');
+  container.innerHTML = '';
+  tratativasFiltrosSelecionados = {};
+
+  COLUNAS_TRATATIVAS.forEach((nome, idx) => {
+    if (COLUNAS_TRATATIVAS_FILTRAVEIS.indexOf(nome) === -1) return;
+    const valores = Array.from(new Set(
+      tratativasDadosAtuais.map(l => l[idx]).filter(v => v !== undefined && v !== null && v !== '')
+    )).sort();
+    if (valores.length === 0) return;
+
+    tratativasFiltrosSelecionados[idx] = '';
+    const select = document.createElement('select');
+    select.innerHTML = `<option value="">${nome} (todos)</option>` +
+      valores.map(v => `<option value="${v}">${v}</option>`).join('');
+    select.onchange = () => { tratativasFiltrosSelecionados[idx] = select.value; aplicarFiltrosTratativas(); };
+    container.appendChild(select);
+  });
+}
+
+function ordenarValor(v) {
+  if (v === undefined || v === null || v === '') return null;
+  const n = Number(String(v).replace(',', '.'));
+  return isNaN(n) ? String(v).toLowerCase() : n;
+}
+
+function aplicarFiltrosTratativas() {
+  const busca = (document.getElementById('tratativasBusca').value || '').toLowerCase().trim();
+  let linhas = tratativasDadosAtuais;
+
+  Object.keys(tratativasFiltrosSelecionados).forEach(idxStr => {
+    const idx = Number(idxStr);
+    const valor = tratativasFiltrosSelecionados[idx];
+    if (valor) linhas = linhas.filter(l => String(l[idx] ?? '') === valor);
+  });
+
+  if (busca) {
+    linhas = linhas.filter(l => l.some(v => String(v ?? '').toLowerCase().includes(busca)));
+  }
+
+  if (tratativasOrdenacao.indice !== null) {
+    const idx = tratativasOrdenacao.indice;
+    const dir = tratativasOrdenacao.direcao;
+    linhas = linhas.slice().sort((a, b) => {
+      const va = ordenarValor(a[idx]);
+      const vb = ordenarValor(b[idx]);
+      if (va === null && vb === null) return 0;
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+  }
+
+  const numColunas = COLUNAS_TRATATIVAS.length;
+  document.getElementById('tratativasTabelaBody').innerHTML = linhas.length
+    ? linhas.map(l => `<tr>${l.map(v => `<td>${v === undefined || v === null ? '' : v}</td>`).join('')}</tr>`).join('')
+    : `<tr><td colspan="${numColunas}">Nenhum registro encontrado.</td></tr>`;
+}
+
+// Restaura o texto salvo (se houver) assim que a página carrega
+function restaurarTratativasSalvas() {
+  const salvo = localStorage.getItem(CHAVE_LOCALSTORAGE_TRATATIVAS);
+  if (salvo) processarOcorrenciasTexto(salvo);
 }
 
 // ---------- Envio em lotes ----------
@@ -559,24 +691,42 @@ function fmtData(v) {
   return v;
 }
 
-// ---------- Modal de detalhamento (genérico, com busca e filtros) ----------
+// ---------- Modal de detalhamento (genérico, com busca, filtros e ordenação) ----------
 let modalColunasAtuais = [];
 let modalDadosAtuais = [];
 let modalFiltrosSelecionados = {};
+let modalOrdenacao = { indice: null, direcao: 1 };
 
 // Colunas que, quando presentes, ganham um dropdown de filtro automático
 const COLUNAS_FILTRAVEIS = ['Transportadora', 'Status', 'Ocorrência', 'Entregue?'];
 
 function mostrarModalCarregando(titulo, colunas) {
   document.getElementById('modalTitulo').textContent = titulo;
-  document.querySelector('#modalTabela thead tr').innerHTML = colunas.map(c => `<th>${c}</th>`).join('');
   document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${colunas.length}">Carregando...</td></tr>`;
   document.getElementById('modalBusca').value = '';
   document.getElementById('modalFiltrosSelects').innerHTML = '';
   modalColunasAtuais = colunas;
   modalDadosAtuais = [];
   modalFiltrosSelecionados = {};
+  modalOrdenacao = { indice: null, direcao: 1 };
+  montarCabecalhoModal();
   document.getElementById('modalOverlay').style.display = 'flex';
+}
+
+function montarCabecalhoModal() {
+  document.querySelector('#modalTabela thead tr').innerHTML = modalColunasAtuais
+    .map((c, idx) => `<th style="cursor:pointer;user-select:none" onclick="ordenarModal(${idx})">${c}${indicadorOrdenacao(modalOrdenacao, idx)}</th>`)
+    .join('');
+}
+
+function ordenarModal(idx) {
+  if (modalOrdenacao.indice === idx) {
+    modalOrdenacao.direcao *= -1;
+  } else {
+    modalOrdenacao = { indice: idx, direcao: 1 };
+  }
+  montarCabecalhoModal();
+  aplicarFiltrosModal();
 }
 
 function renderModalLinhas(linhas) {
@@ -618,6 +768,21 @@ function aplicarFiltrosModal() {
 
   if (busca) {
     linhas = linhas.filter(l => l.some(v => String(v ?? '').toLowerCase().includes(busca)));
+  }
+
+  if (modalOrdenacao.indice !== null) {
+    const idx = modalOrdenacao.indice;
+    const dir = modalOrdenacao.direcao;
+    linhas = linhas.slice().sort((a, b) => {
+      const va = ordenarValor(a[idx]);
+      const vb = ordenarValor(b[idx]);
+      if (va === null && vb === null) return 0;
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
   }
 
   const numColunas = modalColunasAtuais.length;
@@ -683,6 +848,7 @@ function fecharModal() { document.getElementById('modalOverlay').style.display =
 function fecharModalSeClicouFora(e) { if (e.target.id === 'modalOverlay') fecharModal(); }
 
 carregarIndicadores();
+restaurarTratativasSalvas();
 </script>
 </body>
 </html>
