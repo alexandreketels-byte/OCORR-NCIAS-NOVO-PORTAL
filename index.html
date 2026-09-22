@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portal de Indicadores</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root {
+    --azul: #1a5fb4; --azul-claro: #e8f0fb; --verde: #26a269; --vermelho: #c01c28;
+    --cinza: #5e5e5e; --fundo: #f5f6f8; --borda: #dcdfe4;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: Segoe UI, Arial, sans-serif; background: var(--fundo); margin: 0; color: #222; }
+  header { background: var(--azul); color: #fff; padding: 18px 24px; }
+  header h1 { margin: 0; font-size: 1.3rem; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: #fff; border: 1px solid var(--borda); border-radius: 10px; padding: 20px; }
+  .card h2 { margin-top: 0; font-size: 1.05rem; }
+  .card p.desc { color: var(--cinza); font-size: 0.9rem; }
+  input[type=file] { display: block; margin: 12px 0; }
+  button { background: var(--azul); color: #fff; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-size: 0.95rem; }
+  button:disabled { background: #9fb3cf; cursor: not-allowed; }
+  .progress-wrap { margin-top: 12px; height: 10px; background: var(--azul-claro); border-radius: 5px; overflow: hidden; display: none; }
+  .progress-bar { height: 100%; background: var(--azul); width: 0%; transition: width .2s; }
+  .status-line { font-size: 0.85rem; color: var(--cinza); margin-top: 8px; }
+  .status-line.ok { color: var(--verde); }
+  .status-line.erro { color: var(--vermelho); }
+  .meta { font-size: 0.8rem; color: var(--cinza); margin-top: 6px; }
+  .indicadores { margin-top: 28px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-top: 14px; }
+  .kpi { background: #fff; border: 1px solid var(--borda); border-radius: 10px; padding: 16px; text-align: center; }
+  .kpi .valor { font-size: 1.6rem; font-weight: 600; color: var(--azul); }
+  .kpi .rotulo { font-size: 0.8rem; color: var(--cinza); margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; background: #fff; border: 1px solid var(--borda); border-radius: 10px; overflow: hidden; }
+  th, td { padding: 8px 12px; text-align: left; font-size: 0.88rem; border-bottom: 1px solid var(--borda); }
+  th { background: var(--azul-claro); }
+  #refreshBtn { margin-top: 14px; }
+</style>
+</head>
+<body>
+
+<header><h1>Portal de Indicadores</h1></header>
+
+<main>
+  <div class="grid">
+    <div class="card">
+      <h2>Importar Tabela Dinâmica</h2>
+      <p class="desc">Arquivo .csv exportado do sistema (Data, Status Entrega, NF, Pedido, Cliente, Transportadora, valores, etc.)</p>
+      <input type="file" id="fileTabDinamica" accept=".csv">
+      <button id="btnTabDinamica" onclick="importarTabDinamica()">Importar</button>
+      <div class="progress-wrap" id="progressTabDinamica"><div class="progress-bar" id="progressBarTabDinamica"></div></div>
+      <div class="status-line" id="statusTabDinamica"></div>
+      <div class="meta" id="metaTabDinamica"></div>
+    </div>
+
+    <div class="card">
+      <h2>Importar Pedidos Não Recebidos</h2>
+      <p class="desc">Relatório exportado do sistema (Data Coleta, Prev Etg, Atraso, Pedido, NF, Cliente, agrupado por Transportadora).</p>
+      <input type="file" id="filePedidosNaoRecebidos" accept=".xls,.html">
+      <button id="btnPedidosNaoRecebidos" onclick="importarPedidosNaoRecebidos()">Importar</button>
+      <div class="progress-wrap" id="progressPedidos"><div class="progress-bar" id="progressBarPedidos"></div></div>
+      <div class="status-line" id="statusPedidos"></div>
+      <div class="meta" id="metaPedidos"></div>
+    </div>
+  </div>
+
+  <div class="indicadores">
+    <h2>Indicadores</h2>
+    <div class="kpis" id="kpis"><p>Carregando...</p></div>
+    <table id="tabelaTransportadoras" style="display:none">
+      <thead><tr><th>Transportadora</th><th>Pedidos não recebidos</th><th>Valor NF</th></tr></thead>
+      <tbody id="tabelaTransportadorasBody"></tbody>
+    </table>
+    <button id="refreshBtn" onclick="carregarIndicadores()">Atualizar indicadores</button>
+  </div>
+</main>
+
+<script>
+// >>> Cole aqui a URL do seu App da Web do Apps Script (termina em /exec) <<<
+const API_URL = 'https://script.google.com/macros/s/AKfycbyGvGN9dmCKHj4EHHWldpaZOJ8tvz8vpBqIgYTqGlbw93Cuw3h-Guf4gc8AUtlPB20jhw/exec';
+
+const BATCH_SIZE = 2000;
+
+function fmtMoeda(v) {
+  return (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function stripFormula(v) {
+  if (typeof v !== 'string') return v;
+  const m = v.match(/^="(.*)"$/);
+  return m ? m[1] : v;
+}
+
+function parseBRNumber(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return v;
+  const n = String(v).trim().replace(/\./g, '').replace(',', '.');
+  const parsed = parseFloat(n);
+  return isNaN(parsed) ? null : parsed;
+}
+
+const TAB_NUMERIC_COLS = [45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 56]; // 0-based indices: Cubagem..VL Pago Cartão
+const TAB_FORMULA_COLS = [2, 8]; // NF, Pedido Marketplace
+
+// ---------- Importação: Tabela Dinâmica (CSV) ----------
+function importarTabDinamica() {
+  const input = document.getElementById('fileTabDinamica');
+  const file = input.files[0];
+  if (!file) { alert('Selecione o arquivo CSV primeiro.'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
+
+  setStatus('statusTabDinamica', 'Lendo arquivo...', '');
+  toggleBtn('btnTabDinamica', true);
+
+  Papa.parse(file, {
+    encoding: 'ISO-8859-1',
+    delimiter: ';',
+    skipEmptyLines: true,
+    complete: async function(results) {
+      const rows = results.data.slice(1); // remove cabeçalho
+      const cleanRows = rows.map(r => {
+        const row = r.slice(0, 58); // ignora coluna vazia final
+        TAB_FORMULA_COLS.forEach(i => { row[i] = stripFormula(row[i]); });
+        TAB_NUMERIC_COLS.forEach(i => { row[i] = parseBRNumber(row[i]); });
+        return row;
+      });
+      await enviarEmLotes(cleanRows, 'importTabDinamica', 'statusTabDinamica', 'progressTabDinamica', 'progressBarTabDinamica');
+      toggleBtn('btnTabDinamica', false);
+      carregarIndicadores();
+    },
+    error: function(err) {
+      setStatus('statusTabDinamica', 'Erro ao ler CSV: ' + err.message, 'erro');
+      toggleBtn('btnTabDinamica', false);
+    }
+  });
+}
+
+// ---------- Importação: Pedidos Não Recebidos (HTML disfarçado de .xls) ----------
+function importarPedidosNaoRecebidos() {
+  const input = document.getElementById('filePedidosNaoRecebidos');
+  const file = input.files[0];
+  if (!file) { alert('Selecione o arquivo primeiro.'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
+
+  setStatus('statusPedidos', 'Lendo arquivo...', '');
+  toggleBtn('btnPedidosNaoRecebidos', true);
+
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    try {
+      const rows = parsePedidosNaoRecebidosHtml(e.target.result);
+      await enviarEmLotes(rows, 'importPedidosNaoRecebidos', 'statusPedidos', 'progressPedidos', 'progressBarPedidos');
+      toggleBtn('btnPedidosNaoRecebidos', false);
+      carregarIndicadores();
+    } catch (err) {
+      setStatus('statusPedidos', 'Erro ao ler arquivo: ' + err.message, 'erro');
+      toggleBtn('btnPedidosNaoRecebidos', false);
+    }
+  };
+  reader.readAsText(file, 'ISO-8859-1');
+}
+
+function parsePedidosNaoRecebidosHtml(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const rows = [];
+  let transportadoraAtual = '';
+  const trs = doc.querySelectorAll('table tr');
+
+  trs.forEach(tr => {
+    const tds = tr.querySelectorAll('td');
+    // Linha de grupo: "Transportadora: NOME" (uma única célula)
+    if (tds.length === 1) {
+      const texto = tds[0].textContent.trim();
+      const m = texto.match(/Transportadora:\s*(.*)/i);
+      if (m) transportadoraAtual = m[1].trim();
+      return;
+    }
+    // Linha de cabeçalho de colunas (contém "Data Coleta")
+    if (tds.length === 11 && tr.textContent.indexOf('Data Coleta') !== -1) return;
+    // Linha de dados
+    if (tds.length === 11) {
+      const vals = Array.from(tds).map(td => td.textContent.trim());
+      rows.push([
+        transportadoraAtual,
+        vals[0], vals[1], vals[2], vals[3], vals[4], vals[5],
+        parseBRNumber(vals[6]), parseBRNumber(vals[7]), parseBRNumber(vals[8]),
+        vals[9]
+        // vals[10] (Cliente) tratado abaixo
+      ].concat([vals[10]]));
+    }
+  });
+  return rows;
+}
+
+// ---------- Envio em lotes ----------
+async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBarId) {
+  const wrap = document.getElementById(progressWrapId);
+  const bar = document.getElementById(progressBarId);
+  wrap.style.display = 'block';
+
+  const totalBatches = Math.max(1, Math.ceil(rows.length / BATCH_SIZE));
+  for (let i = 0; i < totalBatches; i++) {
+    const batch = rows.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
+    const isLast = i === totalBatches - 1;
+    setStatus(statusId, `Enviando lote ${i + 1} de ${totalBatches} (${batch.length} linhas)...`, '');
+    try {
+      await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' }, // evita preflight CORS no Apps Script
+        body: JSON.stringify({ action, rows: batch, batchIndex: i, isLast })
+      });
+    } catch (err) {
+      setStatus(statusId, 'Erro no envio: ' + err.message, 'erro');
+      return;
+    }
+    bar.style.width = Math.round(((i + 1) / totalBatches) * 100) + '%';
+  }
+  setStatus(statusId, `Importação concluída: ${rows.length} linhas.`, 'ok');
+}
+
+function setStatus(id, msg, cls) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'status-line' + (cls ? ' ' + cls : '');
+}
+function toggleBtn(id, disabled) { document.getElementById(id).disabled = disabled; }
+
+// ---------- Indicadores ----------
+async function carregarIndicadores() {
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) return;
+  document.getElementById('kpis').innerHTML = '<p>Carregando...</p>';
+  try {
+    const [dados, status] = await Promise.all([
+      fetch(`${API_URL}?action=getIndicadores`).then(r => r.json()),
+      fetch(`${API_URL}?action=getStatus`).then(r => r.json())
+    ]);
+    renderKpis(dados);
+    renderMeta(status);
+    renderTabelaTransportadoras(dados.pedidosNaoRecebidos.porTransportadora);
+  } catch (err) {
+    document.getElementById('kpis').innerHTML = '<p>Erro ao carregar indicadores.</p>';
+  }
+}
+
+function renderKpis(dados) {
+  const kpis = [
+    { valor: dados.tabDinamica.totalPedidos, rotulo: 'Pedidos (Tabela Dinâmica)' },
+    { valor: fmtMoeda(dados.tabDinamica.valorTotalNf), rotulo: 'Valor Total NF' },
+    { valor: dados.pedidosNaoRecebidos.total, rotulo: 'Pedidos não recebidos' },
+    { valor: fmtMoeda(dados.pedidosNaoRecebidos.valorTotalNf), rotulo: 'Valor NF (não recebidos)' }
+  ];
+  document.getElementById('kpis').innerHTML = kpis.map(k =>
+    `<div class="kpi"><div class="valor">${k.valor}</div><div class="rotulo">${k.rotulo}</div></div>`
+  ).join('');
+}
+
+function renderMeta(status) {
+  if (status.TabDinamica) {
+    document.getElementById('metaTabDinamica').textContent =
+      `Última importação: ${new Date(status.TabDinamica.ultimaImportacao).toLocaleString('pt-BR')} (${status.TabDinamica.totalLinhas} linhas)`;
+  }
+  if (status.PedidosNaoRecebidos) {
+    document.getElementById('metaPedidos').textContent =
+      `Última importação: ${new Date(status.PedidosNaoRecebidos.ultimaImportacao).toLocaleString('pt-BR')} (${status.PedidosNaoRecebidos.totalLinhas} linhas)`;
+  }
+}
+
+function renderTabelaTransportadoras(porTransportadora) {
+  const tbody = document.getElementById('tabelaTransportadorasBody');
+  const linhas = Object.entries(porTransportadora || {}).sort((a, b) => b[1].qtd - a[1].qtd);
+  if (linhas.length === 0) { document.getElementById('tabelaTransportadoras').style.display = 'none'; return; }
+  document.getElementById('tabelaTransportadoras').style.display = 'table';
+  tbody.innerHTML = linhas.map(([nome, v]) =>
+    `<tr><td>${nome}</td><td>${v.qtd}</td><td>${fmtMoeda(v.valorNf)}</td></tr>`
+  ).join('');
+}
+
+carregarIndicadores();
+</script>
+</body>
+</html>
