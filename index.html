@@ -71,7 +71,10 @@
     <h2>Indicadores</h2>
     <div class="kpis" id="kpis"><p>Carregando...</p></div>
     <table id="tabelaTransportadoras" style="display:none">
-      <thead><tr><th>Transportadora</th><th>Pedidos não recebidos</th><th>Valor NF</th></tr></thead>
+      <thead><tr>
+        <th>Transportadora</th><th>Pedidos não recebidos</th><th>Em atraso</th>
+        <th>% atraso</th><th>Atraso médio (dias)</th><th>Performance</th><th>Valor NF</th>
+      </tr></thead>
       <tbody id="tabelaTransportadorasBody"></tbody>
     </table>
     <button id="refreshBtn" onclick="carregarIndicadores()">Atualizar indicadores</button>
@@ -185,7 +188,7 @@ function parsePedidosNaoRecebidosHtml(html) {
       const vals = Array.from(tds).map(td => td.textContent.trim());
       rows.push([
         transportadoraAtual,
-        vals[0], vals[1], vals[2], vals[3], vals[4], vals[5],
+        vals[0], vals[1], parseBRNumber(vals[2]), vals[3], vals[4], vals[5],
         parseBRNumber(vals[6]), parseBRNumber(vals[7]), parseBRNumber(vals[8]),
         vals[9]
         // vals[10] (Cliente) tratado abaixo
@@ -250,7 +253,9 @@ function renderKpis(dados) {
     { valor: dados.tabDinamica.totalPedidos, rotulo: 'Pedidos (Tabela Dinâmica)' },
     { valor: fmtMoeda(dados.tabDinamica.valorTotalNf), rotulo: 'Valor Total NF' },
     { valor: dados.pedidosNaoRecebidos.total, rotulo: 'Pedidos não recebidos' },
-    { valor: fmtMoeda(dados.pedidosNaoRecebidos.valorTotalNf), rotulo: 'Valor NF (não recebidos)' }
+    { valor: fmtMoeda(dados.pedidosNaoRecebidos.valorTotalNf), rotulo: 'Valor NF (não recebidos)' },
+    { valor: dados.pedidosNaoRecebidos.totalEmAtraso, rotulo: 'Em atraso' },
+    { valor: dados.pedidosNaoRecebidos.percentualAtrasoGeral.toFixed(1) + '%', rotulo: '% em atraso (geral)' }
   ];
   document.getElementById('kpis').innerHTML = kpis.map(k =>
     `<div class="kpi"><div class="valor">${k.valor}</div><div class="rotulo">${k.rotulo}</div></div>`
@@ -270,12 +275,22 @@ function renderMeta(status) {
 
 function renderTabelaTransportadoras(porTransportadora) {
   const tbody = document.getElementById('tabelaTransportadorasBody');
-  const linhas = Object.entries(porTransportadora || {}).sort((a, b) => b[1].qtd - a[1].qtd);
+  // Ordena pela pior performance primeiro (maior % de atraso)
+  const linhas = Object.entries(porTransportadora || {}).sort((a, b) => b[1].percentualAtraso - a[1].percentualAtraso);
   if (linhas.length === 0) { document.getElementById('tabelaTransportadoras').style.display = 'none'; return; }
   document.getElementById('tabelaTransportadoras').style.display = 'table';
-  tbody.innerHTML = linhas.map(([nome, v]) =>
-    `<tr><td>${nome}</td><td>${v.qtd}</td><td>${fmtMoeda(v.valorNf)}</td></tr>`
-  ).join('');
+  tbody.innerHTML = linhas.map(([nome, v]) => {
+    const cor = v.percentualAtraso >= 20 ? 'var(--vermelho)' : (v.percentualAtraso >= 5 ? '#c77b00' : 'var(--verde)');
+    return `<tr>
+      <td>${nome}</td>
+      <td>${v.qtd}</td>
+      <td>${v.emAtraso}</td>
+      <td style="color:${cor};font-weight:600">${v.percentualAtraso.toFixed(1)}%</td>
+      <td>${v.atrasoMedioDias.toFixed(1)}</td>
+      <td>${v.performance.toFixed(1)}%</td>
+      <td>${fmtMoeda(v.valorNf)}</td>
+    </tr>`;
+  }).join('');
 }
 
 carregarIndicadores();
