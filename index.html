@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Portal de Indicadores</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root {
     --azul: #1a5fb4; --azul-claro: #e8f0fb; --verde: #26a269; --vermelho: #c01c28;
@@ -82,6 +83,16 @@
       <div class="status-line" id="statusPedidos"></div>
       <div class="meta" id="metaPedidos"></div>
     </div>
+
+    <div class="card">
+      <h2>Importar Ocorrências</h2>
+      <p class="desc">Relatório de ocorrências exportado do sistema (.xlsx). Cada importação substitui os dados anteriores (foto do momento).</p>
+      <input type="file" id="fileOcorrencias" accept=".xlsx">
+      <button id="btnOcorrencias" onclick="importarOcorrencias()">Importar</button>
+      <div class="progress-wrap" id="progressOcorrencias"><div class="progress-bar" id="progressBarOcorrencias"></div></div>
+      <div class="status-line" id="statusOcorrencias"></div>
+      <div class="meta" id="metaOcorrencias"></div>
+    </div>
   </div>
 
   <div class="indicadores">
@@ -95,6 +106,15 @@
       <tbody id="tabelaTransportadorasBody"></tbody>
     </table>
     <button id="refreshBtn" onclick="carregarIndicadores()">Atualizar indicadores</button>
+  </div>
+
+  <div class="indicadores">
+    <h2>Ocorrências</h2>
+    <div class="kpis" id="kpisOcorrencias"><p>Carregando...</p></div>
+    <table id="tabelaOcorrencias" style="display:none">
+      <thead><tr><th>Transportadora</th><th>Ocorrências</th></tr></thead>
+      <tbody id="tabelaOcorrenciasBody"></tbody>
+    </table>
   </div>
 </main>
 
@@ -233,6 +253,56 @@ function parsePedidosNaoRecebidosHtml(html) {
   return rows;
 }
 
+// ---------- Importação: Ocorrências (XLSX) ----------
+function importarOcorrencias() {
+  const input = document.getElementById('fileOcorrencias');
+  const file = input.files[0];
+  if (!file) { alert('Selecione o arquivo XLSX primeiro.'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
+
+  setStatus('statusOcorrencias', 'Lendo arquivo...', '');
+  toggleBtn('btnOcorrencias', true);
+
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const planilha = wb.Sheets[wb.SheetNames[0]];
+      const aoa = XLSX.utils.sheet_to_json(planilha, { header: 1, raw: false, defval: '' });
+      const rows = parseOcorrenciasAoa(aoa);
+      await enviarEmLotes(rows, 'importOcorrencias', 'statusOcorrencias', 'progressOcorrencias', 'progressBarOcorrencias');
+      toggleBtn('btnOcorrencias', false);
+      carregarIndicadores();
+    } catch (err) {
+      setStatus('statusOcorrencias', 'Erro ao ler arquivo: ' + err.message, 'erro');
+      toggleBtn('btnOcorrencias', false);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// O relatório traz linhas de título/filtro antes do cabeçalho de verdade,
+// então localizamos a linha que contém "Pedido" e "Transportadora".
+function parseOcorrenciasAoa(aoa) {
+  const headerIndex = aoa.findIndex(r => r.includes('Pedido') && r.includes('Transportadora'));
+  if (headerIndex === -1) throw new Error('Cabeçalho não encontrado no arquivo.');
+  const header = aoa[headerIndex];
+  const col = nome => header.indexOf(nome);
+  const idx = {
+    loja: col('Loja'), cd: col('CD'), pedido: col('Pedido'), nf: col('NF'), cliente: col('Cliente'),
+    estado: col('Estado'), cidade: col('Cidade'), transportadora: col('Transportadora'),
+    contato: col('Contato'), telefone: col('Telefone'), ocorrencia: col('Ocorrência'),
+    tipoOcorrencia: col('Tipo de Ocorrência'), status: col('Status')
+  };
+
+  return aoa.slice(headerIndex + 1)
+    .filter(r => r[idx.pedido])
+    .map(r => [
+      r[idx.loja], r[idx.cd], r[idx.pedido], r[idx.nf], r[idx.cliente], r[idx.estado], r[idx.cidade],
+      r[idx.transportadora], r[idx.contato], r[idx.telefone], r[idx.ocorrencia], r[idx.tipoOcorrencia], r[idx.status]
+    ]);
+}
+
 // ---------- Envio em lotes ----------
 async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBarId) {
   const wrap = document.getElementById(progressWrapId);
@@ -289,6 +359,8 @@ async function carregarIndicadores() {
     renderKpis(dados);
     renderMeta(status);
     renderTabelaTransportadoras(dados.pedidosNaoRecebidos.porTransportadora);
+    renderKpisOcorrencias(dados);
+    renderTabelaOcorrencias(dados.ocorrencias.porTransportadora);
   } catch (err) {
     document.getElementById('kpis').innerHTML = '<p>Erro ao carregar indicadores.</p>';
   }
@@ -323,6 +395,10 @@ function renderMeta(status) {
     document.getElementById('metaPedidos').textContent =
       `Última importação: ${new Date(status.PedidosNaoRecebidos.ultimaImportacao).toLocaleString('pt-BR')} (${status.PedidosNaoRecebidos.totalLinhas} linhas)`;
   }
+  if (status.Ocorrencias) {
+    document.getElementById('metaOcorrencias').textContent =
+      `Última importação: ${new Date(status.Ocorrencias.ultimaImportacao).toLocaleString('pt-BR')} (${status.Ocorrencias.totalLinhas} linhas)`;
+  }
 }
 
 function renderTabelaTransportadoras(porTransportadora) {
@@ -342,6 +418,27 @@ function renderTabelaTransportadoras(porTransportadora) {
       <td style="color:${cor};font-weight:600">${v.performance.toFixed(1)}%</td>
     </tr>`;
   }).join('');
+}
+
+function renderKpisOcorrencias(dados) {
+  const kpis = [
+    { valor: dados.ocorrencias.total, rotulo: 'Total de ocorrências',
+      onclick: `verOcorrencias('TODAS', 'Todas as ocorrências')` }
+  ];
+  document.getElementById('kpisOcorrencias').innerHTML = kpis.map(k =>
+    `<div class="kpi clicavel" onclick="${k.onclick}"><div class="valor">${k.valor}</div><div class="rotulo">${k.rotulo}</div></div>`
+  ).join('');
+}
+
+function renderTabelaOcorrencias(porTransportadora) {
+  const tbody = document.getElementById('tabelaOcorrenciasBody');
+  const linhas = Object.entries(porTransportadora || {}).sort((a, b) => b[1] - a[1]);
+  if (linhas.length === 0) { document.getElementById('tabelaOcorrencias').style.display = 'none'; return; }
+  document.getElementById('tabelaOcorrencias').style.display = 'table';
+  tbody.innerHTML = linhas.map(([nome, qtd]) => `<tr>
+    <td>${nome}</td>
+    <td><a class="num-link" onclick="verOcorrenciasPorNome('${encodeURIComponent(nome)}')">${qtd}</a></td>
+  </tr>`).join('');
 }
 
 function fmtData(v) {
@@ -397,6 +494,27 @@ async function verPedidosRecebidos() {
   } catch (err) {
     document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_RECEBIDOS.length}">Erro ao carregar pedidos.</td></tr>`;
   }
+}
+
+const COLUNAS_OCORRENCIAS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Ocorrência', 'Status', 'Previsão', 'Entregue?', 'Data Entrega'];
+
+async function verOcorrencias(transportadora, titulo) {
+  mostrarModalCarregando(titulo, COLUNAS_OCORRENCIAS);
+  try {
+    const params = new URLSearchParams({ action: 'getOcorrenciasDetalhe', transportadora });
+    const ocorrencias = await fetch(`${API_URL}?${params}`).then(r => r.json());
+    renderModalLinhas(ocorrencias.map(o => [
+      o.pedido, o.nf, o.cliente, o.cidade, o.loja, o.ocorrencia, o.status,
+      fmtData(o.previsao), o.entregue ? 'Sim' : 'Não', fmtData(o.dataEntrega)
+    ]), COLUNAS_OCORRENCIAS.length);
+  } catch (err) {
+    document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_OCORRENCIAS.length}">Erro ao carregar ocorrências.</td></tr>`;
+  }
+}
+
+function verOcorrenciasPorNome(nomeEncoded) {
+  const nome = decodeURIComponent(nomeEncoded);
+  verOcorrencias(nome, 'Ocorrências — ' + nome);
 }
 
 function fecharModal() { document.getElementById('modalOverlay').style.display = 'none'; }
