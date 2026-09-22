@@ -47,15 +47,18 @@
     align-items: center; justify-content: center; z-index: 100; padding: 20px;
   }
   .modal {
-    background: #fff; border-radius: 10px; max-width: 960px; width: 100%;
+    background: #fff; border-radius: 10px; max-width: 1100px; width: 100%;
     max-height: 85vh; display: flex; flex-direction: column; overflow: hidden;
   }
   .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--borda); }
   .modal-header h3 { margin: 0; font-size: 1.05rem; }
   .modal-close { background: none; color: var(--cinza); font-size: 1.4rem; padding: 0 6px; }
+  .modal-filtros { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px 0; }
+  .modal-filtros input[type=text] { flex: 1 1 220px; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 6px; font-size: 0.88rem; }
+  .modal-filtros select { padding: 8px 10px; border: 1px solid var(--borda); border-radius: 6px; font-size: 0.88rem; background: #fff; }
   .modal-body { padding: 0 20px 20px; overflow-y: auto; }
   .modal-body table { margin-top: 12px; }
-  .modal-body th { position: sticky; top: 0; }
+  .modal-body th { position: sticky; top: 0; background: var(--azul-claro); }
 </style>
 </head>
 <body>
@@ -130,6 +133,10 @@
     <div class="modal-header">
       <h3 id="modalTitulo">Pedidos</h3>
       <button class="modal-close" onclick="fecharModal()">&times;</button>
+    </div>
+    <div class="modal-filtros">
+      <input type="text" id="modalBusca" placeholder="Buscar em todas as colunas..." oninput="aplicarFiltrosModal()">
+      <div id="modalFiltrosSelects" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
     </div>
     <div class="modal-body">
       <table id="modalTabela">
@@ -379,13 +386,12 @@ function parseTratativasTexto(texto) {
   return registros;
 }
 
-function ultimaMensagemFormatada(registro) {
-  if (!registro.mensagens || registro.mensagens.length === 0) return '';
-  const m = registro.mensagens[registro.mensagens.length - 1];
-  return `${m.data} — ${m.autor}: ${m.texto}`;
+function ultimaMensagem(registro) {
+  if (!registro.mensagens || registro.mensagens.length === 0) return { data: '', autor: '', texto: '' };
+  return registro.mensagens[registro.mensagens.length - 1];
 }
 
-const COLUNAS_TRATATIVAS = ['Pedido', 'NF', 'Cliente', 'Transportadora', 'Ocorrência', 'Status', 'Última Mensagem'];
+const COLUNAS_TRATATIVAS = ['Pedido', 'NF', 'Cliente', 'Transportadora', 'Ocorrência', 'Status', 'Data Últ. Msg', 'Autor Últ. Msg', 'Mensagem'];
 
 function processarOcorrenciasTexto() {
   const texto = document.getElementById('colarOcorrenciasTexto').value;
@@ -400,9 +406,10 @@ function processarOcorrenciasTexto() {
   registros.sort((a, b) => a.pedido.localeCompare(b.pedido) || a.dtOcorr.localeCompare(b.dtOcorr));
 
   mostrarModalCarregando(`Tratativas por pedido (${registros.length} ocorrências)`, COLUNAS_TRATATIVAS);
-  renderModalLinhas(registros.map(r => [
-    r.pedido, r.nf, r.cliente, r.transportadora, r.ocorrencia, r.status, ultimaMensagemFormatada(r)
-  ]), COLUNAS_TRATATIVAS.length);
+  renderModalLinhas(registros.map(r => {
+    const m = ultimaMensagem(r);
+    return [r.pedido, r.nf, r.cliente, r.transportadora, r.ocorrencia, r.status, m.data, m.autor, m.texto];
+  }));
 }
 
 // ---------- Envio em lotes ----------
@@ -552,15 +559,68 @@ function fmtData(v) {
   return v;
 }
 
-// ---------- Modal de detalhamento (genérico) ----------
+// ---------- Modal de detalhamento (genérico, com busca e filtros) ----------
+let modalColunasAtuais = [];
+let modalDadosAtuais = [];
+let modalFiltrosSelecionados = {};
+
+// Colunas que, quando presentes, ganham um dropdown de filtro automático
+const COLUNAS_FILTRAVEIS = ['Transportadora', 'Status', 'Ocorrência', 'Entregue?'];
+
 function mostrarModalCarregando(titulo, colunas) {
   document.getElementById('modalTitulo').textContent = titulo;
   document.querySelector('#modalTabela thead tr').innerHTML = colunas.map(c => `<th>${c}</th>`).join('');
   document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${colunas.length}">Carregando...</td></tr>`;
+  document.getElementById('modalBusca').value = '';
+  document.getElementById('modalFiltrosSelects').innerHTML = '';
+  modalColunasAtuais = colunas;
+  modalDadosAtuais = [];
+  modalFiltrosSelecionados = {};
   document.getElementById('modalOverlay').style.display = 'flex';
 }
 
-function renderModalLinhas(linhas, numColunas) {
+function renderModalLinhas(linhas) {
+  modalDadosAtuais = linhas;
+  montarFiltrosModal();
+  aplicarFiltrosModal();
+}
+
+function montarFiltrosModal() {
+  const container = document.getElementById('modalFiltrosSelects');
+  container.innerHTML = '';
+  modalFiltrosSelecionados = {};
+
+  modalColunasAtuais.forEach((nome, idx) => {
+    if (COLUNAS_FILTRAVEIS.indexOf(nome) === -1) return;
+    const valores = Array.from(new Set(
+      modalDadosAtuais.map(l => l[idx]).filter(v => v !== undefined && v !== null && v !== '')
+    )).sort();
+    if (valores.length === 0) return;
+
+    modalFiltrosSelecionados[idx] = '';
+    const select = document.createElement('select');
+    select.innerHTML = `<option value="">${nome} (todos)</option>` +
+      valores.map(v => `<option value="${v}">${v}</option>`).join('');
+    select.onchange = () => { modalFiltrosSelecionados[idx] = select.value; aplicarFiltrosModal(); };
+    container.appendChild(select);
+  });
+}
+
+function aplicarFiltrosModal() {
+  const busca = (document.getElementById('modalBusca').value || '').toLowerCase().trim();
+  let linhas = modalDadosAtuais;
+
+  Object.keys(modalFiltrosSelecionados).forEach(idxStr => {
+    const idx = Number(idxStr);
+    const valor = modalFiltrosSelecionados[idx];
+    if (valor) linhas = linhas.filter(l => String(l[idx] ?? '') === valor);
+  });
+
+  if (busca) {
+    linhas = linhas.filter(l => l.some(v => String(v ?? '').toLowerCase().includes(busca)));
+  }
+
+  const numColunas = modalColunasAtuais.length;
   document.getElementById('modalTabelaBody').innerHTML = linhas.length
     ? linhas.map(l => `<tr>${l.map(v => `<td>${v === undefined || v === null ? '' : v}</td>`).join('')}</tr>`).join('')
     : `<tr><td colspan="${numColunas}">Nenhum registro encontrado.</td></tr>`;
@@ -575,7 +635,7 @@ async function verPedidos(transportadora, apenasAtraso, titulo) {
     const pedidos = await fetch(`${API_URL}?${params}`).then(r => r.json());
     renderModalLinhas(pedidos.map(p => [
       p.pedido, p.nf, p.cliente, p.cidade, p.loja, fmtData(p.dataColeta), fmtData(p.prevEtg), p.atraso
-    ]), COLUNAS_PEDIDOS_NAO_RECEBIDOS.length);
+    ]));
   } catch (err) {
     document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_PEDIDOS_NAO_RECEBIDOS.length}">Erro ao carregar pedidos.</td></tr>`;
   }
@@ -592,7 +652,7 @@ async function verPedidosRecebidos() {
   mostrarModalCarregando('Pedidos recebidos pelo cliente', COLUNAS_RECEBIDOS);
   try {
     const dados = await fetch(`${API_URL}?action=getPedidosRecebidosDetalhe`).then(r => r.json());
-    renderModalLinhas(dados.map(d => [fmtData(d.data), d.pedido, d.transportadora]), COLUNAS_RECEBIDOS.length);
+    renderModalLinhas(dados.map(d => [fmtData(d.data), d.pedido, d.transportadora]));
   } catch (err) {
     document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_RECEBIDOS.length}">Erro ao carregar pedidos.</td></tr>`;
   }
@@ -608,7 +668,7 @@ async function verOcorrencias(transportadora, titulo) {
     renderModalLinhas(ocorrencias.map(o => [
       o.pedido, o.nf, o.cliente, o.cidade, o.loja, o.ocorrencia, o.status,
       fmtData(o.previsao), o.entregue ? 'Sim' : 'Não', fmtData(o.dataEntrega)
-    ]), COLUNAS_OCORRENCIAS.length);
+    ]));
   } catch (err) {
     document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_OCORRENCIAS.length}">Erro ao carregar ocorrências.</td></tr>`;
   }
