@@ -715,10 +715,6 @@ function renderMeta(status) {
     document.getElementById('metaPedidos').textContent =
       `Última importação: ${new Date(status.PedidosNaoRecebidos.ultimaImportacao).toLocaleString('pt-BR')} (${status.PedidosNaoRecebidos.totalLinhas} linhas)`;
   }
-  if (status.Ocorrencias) {
-    document.getElementById('metaOcorrencias').textContent =
-      `Última importação: ${new Date(status.Ocorrencias.ultimaImportacao).toLocaleString('pt-BR')} (${status.Ocorrencias.totalLinhas} linhas)`;
-  }
 }
 
 function renderTabelaTransportadoras(porTransportadora) {
