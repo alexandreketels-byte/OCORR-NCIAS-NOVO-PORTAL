@@ -659,17 +659,30 @@ async function carregarIndicadores() {
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) return;
   document.getElementById('kpis').innerHTML = '<p>Carregando...</p>';
   try {
-    const [dados, status] = await Promise.all([
-      fetch(`${API_URL}?action=getIndicadores`).then(r => r.json()),
-      fetch(`${API_URL}?action=getStatus`).then(r => r.json())
+    const [respIndicadores, respStatus] = await Promise.all([
+      fetch(`${API_URL}?action=getIndicadores`),
+      fetch(`${API_URL}?action=getStatus`)
     ]);
+    const textoIndicadores = await respIndicadores.text();
+    const textoStatus = await respStatus.text();
+    let dados, status;
+    try {
+      dados = JSON.parse(textoIndicadores);
+      status = JSON.parse(textoStatus);
+    } catch (erroParse) {
+      throw new Error('A resposta da API não veio em JSON (provavelmente um erro do Apps Script). Início da resposta: ' + textoIndicadores.slice(0, 300));
+    }
+    if (dados && dados.error) throw new Error('Erro retornado pela API: ' + dados.error);
+
     renderKpis(dados);
     renderMeta(status);
     renderTabelaTransportadoras(dados.pedidosNaoRecebidos.porTransportadora);
     renderKpisOcorrencias(dados);
     renderTabelaOcorrencias(dados.ocorrencias.porTransportadora);
   } catch (err) {
-    document.getElementById('kpis').innerHTML = '<p>Erro ao carregar indicadores.</p>';
+    console.error('Erro ao carregar indicadores:', err);
+    document.getElementById('kpis').innerHTML =
+      `<p>Erro ao carregar indicadores: ${err.message || err}</p>`;
   }
 }
 
