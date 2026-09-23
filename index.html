@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Portal de Indicadores</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root {
     /* Tema escuro (padrão) */
@@ -102,16 +101,6 @@
       <div class="status-line" id="statusPedidos"></div>
       <div class="meta" id="metaPedidos"></div>
     </div>
-
-    <div class="card">
-      <h2>Importar Ocorrências</h2>
-      <p class="desc">Relatório de ocorrências exportado do sistema (.xlsx). Cada importação substitui os dados anteriores (foto do momento).</p>
-      <input type="file" id="fileOcorrencias" accept=".xlsx">
-      <button id="btnOcorrencias" onclick="importarOcorrencias()">Importar</button>
-      <div class="progress-wrap" id="progressOcorrencias"><div class="progress-bar" id="progressBarOcorrencias"></div></div>
-      <div class="status-line" id="statusOcorrencias"></div>
-      <div class="meta" id="metaOcorrencias"></div>
-    </div>
   </div>
 
   <div class="indicadores">
@@ -129,6 +118,7 @@
 
   <div class="indicadores">
     <h2>Ocorrências</h2>
+    <p class="desc">Calculado a partir do que estiver colado em "Tratativas de Ocorrências" mais abaixo. Clique num número para filtrar a tabela por aquela transportadora.</p>
     <div class="kpis" id="kpisOcorrencias"><p>Carregando...</p></div>
     <table id="tabelaOcorrencias" style="display:none">
       <thead><tr><th>Transportadora</th><th>Ocorrências</th></tr></thead>
@@ -147,6 +137,10 @@
       <div class="modal-filtros" style="padding:0 0 10px">
         <input type="text" id="tratativasBusca" placeholder="Buscar em todas as colunas..." oninput="aplicarFiltrosTratativas()">
         <div id="tratativasFiltrosSelects" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+        <div style="position:relative">
+          <button onclick="toggleColunasPanel()" type="button">Colunas ▾</button>
+          <div id="tratativasColunasPanel" style="display:none;position:absolute;right:0;z-index:20;background:var(--card-bg);border:1px solid var(--borda);border-radius:8px;padding:10px 14px;margin-top:6px;max-height:320px;overflow-y:auto;min-width:220px;box-shadow:0 6px 18px rgba(0,0,0,0.35)"></div>
+        </div>
       </div>
       <div style="overflow-x:auto">
         <table id="tratativasTabela" style="width:100%">
@@ -298,56 +292,6 @@ function parsePedidosNaoRecebidosHtml(html) {
   return rows;
 }
 
-// ---------- Importação: Ocorrências (XLSX) ----------
-function importarOcorrencias() {
-  const input = document.getElementById('fileOcorrencias');
-  const file = input.files[0];
-  if (!file) { alert('Selecione o arquivo XLSX primeiro.'); return; }
-  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
-
-  setStatus('statusOcorrencias', 'Lendo arquivo...', '');
-  toggleBtn('btnOcorrencias', true);
-
-  const reader = new FileReader();
-  reader.onload = async function(e) {
-    try {
-      const wb = XLSX.read(e.target.result, { type: 'array' });
-      const planilha = wb.Sheets[wb.SheetNames[0]];
-      const aoa = XLSX.utils.sheet_to_json(planilha, { header: 1, raw: false, defval: '' });
-      const rows = parseOcorrenciasAoa(aoa);
-      await enviarEmLotes(rows, 'importOcorrencias', 'statusOcorrencias', 'progressOcorrencias', 'progressBarOcorrencias');
-      toggleBtn('btnOcorrencias', false);
-      carregarIndicadores();
-    } catch (err) {
-      setStatus('statusOcorrencias', 'Erro ao ler arquivo: ' + err.message, 'erro');
-      toggleBtn('btnOcorrencias', false);
-    }
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-// O relatório traz linhas de título/filtro antes do cabeçalho de verdade,
-// então localizamos a linha que contém "Pedido" e "Transportadora".
-function parseOcorrenciasAoa(aoa) {
-  const headerIndex = aoa.findIndex(r => r.includes('Pedido') && r.includes('Transportadora'));
-  if (headerIndex === -1) throw new Error('Cabeçalho não encontrado no arquivo.');
-  const header = aoa[headerIndex];
-  const col = nome => header.indexOf(nome);
-  const idx = {
-    loja: col('Loja'), cd: col('CD'), pedido: col('Pedido'), nf: col('NF'), cliente: col('Cliente'),
-    estado: col('Estado'), cidade: col('Cidade'), transportadora: col('Transportadora'),
-    contato: col('Contato'), telefone: col('Telefone'), ocorrencia: col('Ocorrência'),
-    tipoOcorrencia: col('Tipo de Ocorrência'), status: col('Status')
-  };
-
-  return aoa.slice(headerIndex + 1)
-    .filter(r => r[idx.pedido])
-    .map(r => [
-      r[idx.loja], r[idx.cd], r[idx.pedido], r[idx.nf], r[idx.cliente], r[idx.estado], r[idx.cidade],
-      r[idx.transportadora], r[idx.contato], r[idx.telefone], r[idx.ocorrencia], r[idx.tipoOcorrencia], r[idx.status]
-    ]);
-}
-
 // ---------- Colar Tratativas de Ocorrências como texto (copiado da tela) ----------
 // Formato: o texto é tabulado (colado direto de uma tabela). Cada ocorrência
 // começa numa linha com a data em DT Ocorr (col 0) e os dados do pedido nas
@@ -423,15 +367,49 @@ function ultimaMensagem(registro) {
 }
 
 const COLUNAS_TRATATIVAS = [
-  'Pedido', 'NF', 'Cliente', 'Transportadora', 'Ocorrência', 'Status',
+  'Pedido', 'NF', 'Cliente', 'Transportadora', 'Loja', 'Vendedor', 'Ocorrência', 'Status',
   'Previsão', 'Entregue?', 'Data Entrega', 'Data Últ. Msg', 'Autor Últ. Msg', 'Mensagem'
 ];
-const COLUNAS_TRATATIVAS_FILTRAVEIS = ['Transportadora', 'Status', 'Ocorrência', 'Entregue?'];
+const COLUNAS_TRATATIVAS_FILTRAVEIS = ['Transportadora', 'Loja', 'Status', 'Ocorrência', 'Entregue?'];
 const CHAVE_LOCALSTORAGE_TRATATIVAS = 'dis_tratativas_texto_v1';
+const CHAVE_LOCALSTORAGE_TRATATIVAS_COLS = 'dis_tratativas_colunas_v1';
 
 let tratativasDadosAtuais = [];
 let tratativasFiltrosSelecionados = {};
 let tratativasOrdenacao = { indice: null, direcao: 1 };
+let tratativasColunasVisiveis = {};
+
+function inicializarColunasVisiveis() {
+  let salvo = {};
+  try { salvo = JSON.parse(localStorage.getItem(CHAVE_LOCALSTORAGE_TRATATIVAS_COLS) || '{}'); } catch (e) { salvo = {}; }
+  tratativasColunasVisiveis = {};
+  COLUNAS_TRATATIVAS.forEach(c => { tratativasColunasVisiveis[c] = salvo.hasOwnProperty(c) ? salvo[c] : true; });
+}
+
+function indicesColunasVisiveis() {
+  return COLUNAS_TRATATIVAS.map((c, i) => i).filter(i => tratativasColunasVisiveis[COLUNAS_TRATATIVAS[i]]);
+}
+
+function montarPainelColunas() {
+  const painel = document.getElementById('tratativasColunasPanel');
+  painel.innerHTML = COLUNAS_TRATATIVAS.map(c => `
+    <label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:0.85rem;cursor:pointer;white-space:nowrap">
+      <input type="checkbox" ${tratativasColunasVisiveis[c] ? 'checked' : ''} onchange="alternarColunaTratativas('${c}', this.checked)">
+      ${c}
+    </label>`).join('');
+}
+
+function alternarColunaTratativas(nome, visivel) {
+  tratativasColunasVisiveis[nome] = visivel;
+  localStorage.setItem(CHAVE_LOCALSTORAGE_TRATATIVAS_COLS, JSON.stringify(tratativasColunasVisiveis));
+  montarCabecalhoTratativas();
+  aplicarFiltrosTratativas();
+}
+
+function toggleColunasPanel() {
+  const painel = document.getElementById('tratativasColunasPanel');
+  painel.style.display = painel.style.display === 'none' ? 'block' : 'none';
+}
 
 async function processarOcorrenciasTexto(textoForcado) {
   const texto = textoForcado !== undefined ? textoForcado : document.getElementById('colarOcorrenciasTexto').value;
@@ -443,7 +421,7 @@ async function processarOcorrenciasTexto(textoForcado) {
     return;
   }
 
-  // PROCV contra a Tabela Dinâmica: previsão de entrega e se já foi entregue
+  // PROCV contra a Tabela Dinâmica: previsão, data de entrega, loja e vendedor
   let lookup = {};
   if (API_URL && API_URL.indexOf('COLE_AQUI') !== 0) {
     try {
@@ -457,9 +435,9 @@ async function processarOcorrenciasTexto(textoForcado) {
     const m = ultimaMensagem(r);
     const info = lookup[r.pedido] || {};
     return [
-      r.pedido, r.nf, r.cliente, r.transportadora, r.ocorrencia, r.status,
-      fmtData(info.previsao || ''), info.recebCliente ? 'Sim' : 'Não', fmtData(info.recebCliente || ''),
-      m.data, m.autor, m.texto
+      r.pedido, r.nf, r.cliente, r.transportadora, info.loja || '', info.vendedor || '',
+      r.ocorrencia, r.status, fmtData(info.previsao || ''), info.recebCliente ? 'Sim' : 'Não',
+      fmtData(info.recebCliente || ''), m.data, m.autor, m.texto
     ];
   });
 
@@ -470,9 +448,11 @@ async function processarOcorrenciasTexto(textoForcado) {
   tratativasOrdenacao = { indice: null, direcao: 1 };
   montarCabecalhoTratativas();
   montarFiltrosTratativas();
+  montarPainelColunas();
   aplicarFiltrosTratativas();
 
   await salvarTratativasNaPlanilha(tratativasDadosAtuais);
+  renderKpisOcorrenciasDeTratativas();
 }
 
 async function salvarTratativasNaPlanilha(linhas) {
@@ -494,9 +474,23 @@ async function salvarTratativasNaPlanilha(linhas) {
   }
 }
 
+// Recalcula o card "Ocorrências" (KPI + tabela por transportadora) direto dos
+// dados já carregados nas Tratativas, sem precisar chamar a API de novo.
+function renderKpisOcorrenciasDeTratativas() {
+  const idxTransp = COLUNAS_TRATATIVAS.indexOf('Transportadora');
+  const porTransportadora = {};
+  tratativasDadosAtuais.forEach(l => {
+    const t = l[idxTransp] || '(sem transportadora)';
+    porTransportadora[t] = (porTransportadora[t] || 0) + 1;
+  });
+  renderKpisOcorrencias({ ocorrencias: { total: tratativasDadosAtuais.length, porTransportadora } });
+  renderTabelaOcorrencias(porTransportadora);
+}
+
 function montarCabecalhoTratativas() {
   const thead = document.getElementById('tratativasThead');
-  thead.innerHTML = COLUNAS_TRATATIVAS.map((c, idx) => `<th style="cursor:pointer;user-select:none" onclick="ordenarTratativas(${idx})">${c}${indicadorOrdenacao(tratativasOrdenacao, idx)}</th>`).join('');
+  const indices = indicesColunasVisiveis();
+  thead.innerHTML = indices.map(idx => `<th style="cursor:pointer;user-select:none" onclick="ordenarTratativas(${idx})">${COLUNAS_TRATATIVAS[idx]}${indicadorOrdenacao(tratativasOrdenacao, idx)}</th>`).join('');
 }
 
 function indicadorOrdenacao(estado, idx) {
@@ -528,11 +522,26 @@ function montarFiltrosTratativas() {
 
     tratativasFiltrosSelecionados[idx] = '';
     const select = document.createElement('select');
+    select.dataset.coluna = nome;
     select.innerHTML = `<option value="">${nome} (todos)</option>` +
       valores.map(v => `<option value="${v}">${v}</option>`).join('');
     select.onchange = () => { tratativasFiltrosSelecionados[idx] = select.value; aplicarFiltrosTratativas(); };
     container.appendChild(select);
   });
+}
+
+// Usado pelo card "Ocorrências" acima: ao clicar num número, filtra a tabela
+// de Tratativas por aquela transportadora e rola a tela até ela.
+function filtrarTratativasPorTransportadora(nomeEncoded) {
+  const nome = nomeEncoded === 'TODAS' ? '' : decodeURIComponent(nomeEncoded);
+  const select = document.querySelector('#tratativasFiltrosSelects select[data-coluna="Transportadora"]');
+  if (select) {
+    select.value = nome;
+    const idx = COLUNAS_TRATATIVAS.indexOf('Transportadora');
+    tratativasFiltrosSelecionados[idx] = nome;
+    aplicarFiltrosTratativas();
+  }
+  document.getElementById('tratativasArea').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function ordenarValor(v) {
@@ -570,16 +579,17 @@ function aplicarFiltrosTratativas() {
     });
   }
 
-  const numColunas = COLUNAS_TRATATIVAS.length;
+  const indices = indicesColunasVisiveis();
   document.getElementById('tratativasTabelaBody').innerHTML = linhas.length
-    ? linhas.map(l => `<tr>${l.map(v => `<td>${v === undefined || v === null ? '' : v}</td>`).join('')}</tr>`).join('')
-    : `<tr><td colspan="${numColunas}">Nenhum registro encontrado.</td></tr>`;
+    ? linhas.map(l => `<tr>${indices.map(idx => `<td>${l[idx] === undefined || l[idx] === null ? '' : l[idx]}</td>`).join('')}</tr>`).join('')
+    : `<tr><td colspan="${indices.length}">Nenhum registro encontrado.</td></tr>`;
 }
 
 // Ao carregar a página, busca as tratativas já salvas na planilha (visíveis
 // para qualquer pessoa). Só usa o que está salvo neste navegador como reserva,
 // para o caso da API ainda não estar configurada.
 async function restaurarTratativasSalvas() {
+  inicializarColunasVisiveis();
   if (API_URL && API_URL.indexOf('COLE_AQUI') !== 0) {
     try {
       const linhas = await fetch(`${API_URL}?action=getTratativasDetalhe`).then(r => r.json());
@@ -589,7 +599,9 @@ async function restaurarTratativasSalvas() {
         tratativasOrdenacao = { indice: null, direcao: 1 };
         montarCabecalhoTratativas();
         montarFiltrosTratativas();
+        montarPainelColunas();
         aplicarFiltrosTratativas();
+        renderKpisOcorrenciasDeTratativas();
         return;
       }
     } catch (err) { /* segue pro fallback local abaixo */ }
@@ -718,7 +730,7 @@ function renderTabelaTransportadoras(porTransportadora) {
 function renderKpisOcorrencias(dados) {
   const kpis = [
     { valor: dados.ocorrencias.total, rotulo: 'Total de ocorrências',
-      onclick: `verOcorrencias('TODAS', 'Todas as ocorrências')` }
+      onclick: `filtrarTratativasPorTransportadora('TODAS')` }
   ];
   document.getElementById('kpisOcorrencias').innerHTML = kpis.map(k =>
     `<div class="kpi clicavel" onclick="${k.onclick}"><div class="valor">${k.valor}</div><div class="rotulo">${k.rotulo}</div></div>`
@@ -732,7 +744,7 @@ function renderTabelaOcorrencias(porTransportadora) {
   document.getElementById('tabelaOcorrencias').style.display = 'table';
   tbody.innerHTML = linhas.map(([nome, qtd]) => `<tr>
     <td>${nome}</td>
-    <td><a class="num-link" onclick="verOcorrenciasPorNome('${encodeURIComponent(nome)}')">${qtd}</a></td>
+    <td><a class="num-link" onclick="filtrarTratativasPorTransportadora('${encodeURIComponent(nome)}')">${qtd}</a></td>
   </tr>`).join('');
 }
 
@@ -875,27 +887,6 @@ async function verPedidosRecebidos() {
   } catch (err) {
     document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_RECEBIDOS.length}">Erro ao carregar pedidos.</td></tr>`;
   }
-}
-
-const COLUNAS_OCORRENCIAS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Ocorrência', 'Status', 'Previsão', 'Entregue?', 'Data Entrega'];
-
-async function verOcorrencias(transportadora, titulo) {
-  mostrarModalCarregando(titulo, COLUNAS_OCORRENCIAS);
-  try {
-    const params = new URLSearchParams({ action: 'getOcorrenciasDetalhe', transportadora });
-    const ocorrencias = await fetch(`${API_URL}?${params}`).then(r => r.json());
-    renderModalLinhas(ocorrencias.map(o => [
-      o.pedido, o.nf, o.cliente, o.cidade, o.loja, o.ocorrencia, o.status,
-      fmtData(o.previsao), o.entregue ? 'Sim' : 'Não', fmtData(o.dataEntrega)
-    ]));
-  } catch (err) {
-    document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_OCORRENCIAS.length}">Erro ao carregar ocorrências.</td></tr>`;
-  }
-}
-
-function verOcorrenciasPorNome(nomeEncoded) {
-  const nome = decodeURIComponent(nomeEncoded);
-  verOcorrencias(nome, 'Ocorrências — ' + nome);
 }
 
 function fecharModal() { document.getElementById('modalOverlay').style.display = 'none'; }
