@@ -125,6 +125,7 @@
     <p class="desc">Cole aqui o texto das tratativas de ocorrências copiado direto da tela do sistema (com as mensagens de cada pedido). Fica salvo neste navegador até você processar um texto novo — não é enviado nem salvo na planilha.</p>
     <textarea id="colarOcorrenciasTexto" rows="8" style="width:100%;font-family:inherit;font-size:0.9rem;padding:10px;border:1px solid var(--borda);border-radius:8px;"></textarea>
     <button onclick="processarOcorrenciasTexto()" style="margin-top:10px">Processar texto</button>
+    <div class="status-line" id="statusTratativas"></div>
 
     <div id="tratativasArea" style="display:none;margin-top:16px">
       <div class="modal-filtros" style="padding:0 0 10px">
@@ -454,6 +455,27 @@ async function processarOcorrenciasTexto(textoForcado) {
   montarCabecalhoTratativas();
   montarFiltrosTratativas();
   aplicarFiltrosTratativas();
+
+  await salvarTratativasNaPlanilha(tratativasDadosAtuais);
+}
+
+async function salvarTratativasNaPlanilha(linhas) {
+  const statusEl = document.getElementById('statusTratativas');
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) {
+    if (statusEl) { statusEl.textContent = 'API não configurada — ficou salvo só neste navegador.'; statusEl.className = 'status-line'; }
+    return;
+  }
+  if (statusEl) { statusEl.textContent = 'Salvando para que outras pessoas também vejam...'; statusEl.className = 'status-line'; }
+  try {
+    await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'importTratativas', rows: linhas, batchIndex: 0, isLast: true })
+    });
+    if (statusEl) { statusEl.textContent = 'Salvo — qualquer pessoa que abrir o site agora vê essa tabela.'; statusEl.className = 'status-line ok'; }
+  } catch (err) {
+    if (statusEl) { statusEl.textContent = 'Não consegui salvar para a equipe (ficou só neste navegador).'; statusEl.className = 'status-line erro'; }
+  }
 }
 
 function montarCabecalhoTratativas() {
@@ -538,8 +560,24 @@ function aplicarFiltrosTratativas() {
     : `<tr><td colspan="${numColunas}">Nenhum registro encontrado.</td></tr>`;
 }
 
-// Restaura o texto salvo (se houver) assim que a página carrega
-function restaurarTratativasSalvas() {
+// Ao carregar a página, busca as tratativas já salvas na planilha (visíveis
+// para qualquer pessoa). Só usa o que está salvo neste navegador como reserva,
+// para o caso da API ainda não estar configurada.
+async function restaurarTratativasSalvas() {
+  if (API_URL && API_URL.indexOf('COLE_AQUI') !== 0) {
+    try {
+      const linhas = await fetch(`${API_URL}?action=getTratativasDetalhe`).then(r => r.json());
+      if (linhas && linhas.length > 0) {
+        tratativasDadosAtuais = linhas.map(l => l.map(v => fmtData(v)));
+        document.getElementById('tratativasArea').style.display = 'block';
+        tratativasOrdenacao = { indice: null, direcao: 1 };
+        montarCabecalhoTratativas();
+        montarFiltrosTratativas();
+        aplicarFiltrosTratativas();
+        return;
+      }
+    } catch (err) { /* segue pro fallback local abaixo */ }
+  }
   const salvo = localStorage.getItem(CHAVE_LOCALSTORAGE_TRATATIVAS);
   if (salvo) processarOcorrenciasTexto(salvo);
 }
