@@ -8,22 +8,32 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root {
-    --azul: #1a5fb4; --azul-claro: #e8f0fb; --verde: #26a269; --vermelho: #c01c28;
-    --cinza: #5e5e5e; --fundo: #f5f6f8; --borda: #dcdfe4;
+    /* Tema escuro (padrão) */
+    --azul: #4c8dff; --azul-claro: rgba(76,141,255,0.16); --verde: #3fb950;
+    --laranja: #d29922; --vermelho: #f85149; --cinza: #9aa4b2;
+    --fundo: #0d1117; --card-bg: #161b22; --borda: #30363d; --texto: #e6edf3;
+    --linha-hover: rgba(255,255,255,0.04); --linha-par: rgba(255,255,255,0.02);
+  }
+  :root[data-theme="light"] {
+    --azul: #1a5fb4; --azul-claro: #e8f0fb; --verde: #26a269;
+    --laranja: #c77b00; --vermelho: #c01c28; --cinza: #5e5e5e;
+    --fundo: #f5f6f8; --card-bg: #ffffff; --borda: #dcdfe4; --texto: #1f2328;
+    --linha-hover: rgba(0,0,0,0.03); --linha-par: rgba(0,0,0,0.015);
   }
   * { box-sizing: border-box; }
-  body { font-family: Segoe UI, Arial, sans-serif; background: var(--fundo); margin: 0; color: #222; }
-  header { background: var(--azul); color: #fff; padding: 18px 24px; }
+  body { font-family: Segoe UI, Arial, sans-serif; background: var(--fundo); margin: 0; color: var(--texto); }
+  header { background: var(--azul); color: #fff; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; }
   header h1 { margin: 0; font-size: 1.3rem; }
-  main { max-width: 1100px; margin: 0 auto; padding: 24px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
-  .card { background: #fff; border: 1px solid var(--borda); border-radius: 10px; padding: 20px; }
+  #temaBtn { background: rgba(255,255,255,0.18); color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+  #temaBtn:hover { background: rgba(255,255,255,0.3); }
+  main { max-width: 1800px; margin: 0 auto; padding: 28px 32px 60px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+  .card { background: var(--card-bg); border: 1px solid var(--borda); border-radius: 10px; padding: 20px; }
   .card h2 { margin-top: 0; font-size: 1.05rem; }
   .card p.desc { color: var(--cinza); font-size: 0.9rem; }
-  input[type=file] { display: block; margin: 12px 0; }
+  input[type=file] { display: block; margin: 12px 0; color: var(--texto); }
   button { background: var(--azul); color: #fff; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-size: 0.95rem; }
-  button:disabled { background: #9fb3cf; cursor: not-allowed; }
+  button:disabled { background: var(--cinza); cursor: not-allowed; }
   .progress-wrap { margin-top: 12px; height: 10px; background: var(--azul-claro); border-radius: 5px; overflow: hidden; display: none; }
   .progress-bar { height: 100%; background: var(--azul); width: 0%; transition: width .2s; }
   .status-line { font-size: 0.85rem; color: var(--cinza); margin-top: 8px; }
@@ -31,31 +41,33 @@
   .status-line.erro { color: var(--vermelho); }
   .meta { font-size: 0.8rem; color: var(--cinza); margin-top: 6px; }
   .indicadores { margin-top: 28px; }
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-top: 14px; }
-  .kpi { background: #fff; border: 1px solid var(--borda); border-radius: 10px; padding: 16px; text-align: center; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 14px; }
+  .kpi { background: var(--card-bg); border: 1px solid var(--borda); border-radius: 10px; padding: 16px; text-align: center; }
   .kpi .valor { font-size: 1.6rem; font-weight: 600; color: var(--azul); }
   .kpi .rotulo { font-size: 0.8rem; color: var(--cinza); margin-top: 4px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 14px; background: #fff; border: 1px solid var(--borda); border-radius: 10px; overflow: hidden; }
-  th, td { padding: 8px 12px; text-align: left; font-size: 0.88rem; border-bottom: 1px solid var(--borda); }
-  th { background: var(--azul-claro); }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; background: var(--card-bg); border: 1px solid var(--borda); border-radius: 10px; overflow: hidden; }
+  th, td { padding: 9px 14px; text-align: left; font-size: 0.88rem; border: 1px solid var(--borda); }
+  th { background: var(--azul-claro); font-weight: 600; }
+  tbody tr:nth-child(even) { background: var(--linha-par); }
+  tbody tr:hover { background: var(--linha-hover); }
   #refreshBtn { margin-top: 14px; }
   .kpi.clicavel { cursor: pointer; }
   .kpi.clicavel:hover { box-shadow: 0 0 0 2px var(--azul-claro); }
   .num-link { color: var(--azul); text-decoration: underline; cursor: pointer; }
   .modal-overlay {
-    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
     align-items: center; justify-content: center; z-index: 100; padding: 20px;
   }
   .modal {
-    background: #fff; border-radius: 10px; max-width: 1100px; width: 100%;
-    max-height: 85vh; display: flex; flex-direction: column; overflow: hidden;
+    background: var(--card-bg); border: 1px solid var(--borda); border-radius: 10px; max-width: 1500px; width: 100%;
+    max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;
   }
   .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--borda); }
   .modal-header h3 { margin: 0; font-size: 1.05rem; }
   .modal-close { background: none; color: var(--cinza); font-size: 1.4rem; padding: 0 6px; }
   .modal-filtros { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px 0; }
-  .modal-filtros input[type=text] { flex: 1 1 220px; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 6px; font-size: 0.88rem; }
-  .modal-filtros select { padding: 8px 10px; border: 1px solid var(--borda); border-radius: 6px; font-size: 0.88rem; background: #fff; }
+  .modal-filtros input[type=text] { flex: 1 1 220px; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 6px; font-size: 0.88rem; background: var(--fundo); color: var(--texto); }
+  .modal-filtros select { padding: 8px 10px; border: 1px solid var(--borda); border-radius: 6px; font-size: 0.88rem; background: var(--fundo); color: var(--texto); }
   .modal-body { padding: 0 20px 20px; overflow-y: auto; }
   .modal-body table { margin-top: 12px; }
   .modal-body th { position: sticky; top: 0; background: var(--azul-claro); }
@@ -63,7 +75,11 @@
 </head>
 <body>
 
-<header><h1>Portal de Indicadores</h1></header>
+
+<header>
+  <h1>Portal de Indicadores</h1>
+  <button id="temaBtn" onclick="alternarTema()">☀️ Tema claro</button>
+</header>
 
 <main>
   <div class="grid">
@@ -647,7 +663,7 @@ async function carregarIndicadores() {
 
 function renderKpis(dados) {
   const perf = dados.pedidosNaoRecebidos.performanceGeral;
-  const corPerf = perf >= 90 ? 'var(--verde)' : (perf >= 80 ? '#c77b00' : 'var(--vermelho)');
+  const corPerf = perf >= 90 ? 'var(--verde)' : (perf >= 80 ? 'var(--laranja)' : 'var(--vermelho)');
   const kpis = [
     { valor: dados.tabDinamica.totalPedidos, rotulo: 'Pedidos (Tabela Dinâmica)' },
     { valor: dados.tabDinamica.totalRecebidosCliente, rotulo: 'Recebidos pelo cliente',
@@ -687,7 +703,7 @@ function renderTabelaTransportadoras(porTransportadora) {
   if (linhas.length === 0) { document.getElementById('tabelaTransportadoras').style.display = 'none'; return; }
   document.getElementById('tabelaTransportadoras').style.display = 'table';
   tbody.innerHTML = linhas.map(([nome, v]) => {
-    const cor = v.performance >= 90 ? 'var(--verde)' : (v.performance >= 80 ? '#c77b00' : 'var(--vermelho)');
+    const cor = v.performance >= 90 ? 'var(--verde)' : (v.performance >= 80 ? 'var(--laranja)' : 'var(--vermelho)');
     return `<tr>
       <td>${nome}</td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false)">${v.qtd}</a></td>
@@ -884,6 +900,28 @@ function verOcorrenciasPorNome(nomeEncoded) {
 
 function fecharModal() { document.getElementById('modalOverlay').style.display = 'none'; }
 function fecharModalSeClicouFora(e) { if (e.target.id === 'modalOverlay') fecharModal(); }
+
+// ---------- Tema claro/escuro ----------
+const CHAVE_LOCALSTORAGE_TEMA = 'dis_tema_v1';
+
+function aplicarTema(tema) {
+  if (tema === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+    document.getElementById('temaBtn').textContent = '🌙 Tema escuro';
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    document.getElementById('temaBtn').textContent = '☀️ Tema claro';
+  }
+}
+
+function alternarTema() {
+  const atual = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  const novo = atual === 'light' ? 'dark' : 'light';
+  localStorage.setItem(CHAVE_LOCALSTORAGE_TEMA, novo);
+  aplicarTema(novo);
+}
+
+aplicarTema(localStorage.getItem(CHAVE_LOCALSTORAGE_TEMA) || 'dark');
 
 carregarIndicadores();
 restaurarTratativasSalvas();
