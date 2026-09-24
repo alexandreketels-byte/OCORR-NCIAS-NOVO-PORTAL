@@ -115,7 +115,7 @@
     <table id="tabelaTransportadoras" style="display:none">
       <thead><tr>
         <th>Transportadora</th><th>Pedidos não recebidos</th><th>Em atraso</th>
-        <th>% atraso</th><th>Atraso médio (dias)</th><th>Performance</th>
+        <th>Performance</th>
       </tr></thead>
       <tbody id="tabelaTransportadorasBody"></tbody>
     </table>
@@ -755,9 +755,6 @@ function renderKpis(dados) {
   const perf = dados.pedidosNaoRecebidos.performanceGeral;
   const corPerf = perf >= 90 ? 'var(--verde)' : (perf >= 80 ? 'var(--laranja)' : 'var(--vermelho)');
   const kpis = [
-    { valor: dados.tabDinamica.totalPedidos, rotulo: 'Pedidos (Tabela Dinâmica)' },
-    { valor: dados.tabDinamica.totalRecebidosCliente, rotulo: 'Recebidos pelo cliente',
-      onclick: `verPedidosRecebidos()` },
     { valor: dados.pedidosNaoRecebidos.total, rotulo: 'Pedidos não recebidos',
       onclick: `verPedidos('TODAS', false, 'Todos os pedidos não recebidos')` },
     { valor: dados.pedidosNaoRecebidos.totalEmAtraso, rotulo: 'Em atraso',
@@ -794,8 +791,6 @@ function renderTabelaTransportadoras(porTransportadora) {
       <td>${nome}</td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false)">${v.qtd}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', true)">${v.emAtraso}</a></td>
-      <td>${v.percentualAtraso.toFixed(1)}%</td>
-      <td>${v.atrasoMedioDias.toFixed(1)}</td>
       <td style="color:${cor};font-weight:600">${v.performance.toFixed(1)}%</td>
     </tr>`;
   }).join('');
@@ -933,16 +928,51 @@ function aplicarFiltrosModal() {
 
 const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)'];
 
+let ultimoFiltroPedidos = null;
+
 async function verPedidos(transportadora, apenasAtraso, titulo) {
+  ultimoFiltroPedidos = { transportadora, apenasAtraso, titulo };
   mostrarModalCarregando(titulo, COLUNAS_PEDIDOS_NAO_RECEBIDOS);
   try {
     const params = new URLSearchParams({ action: 'getPedidosDetalhe', transportadora, apenasAtraso: apenasAtraso ? '1' : '0' });
     const pedidos = await fetch(`${API_URL}?${params}`).then(r => r.json());
     renderModalLinhas(pedidos.map(p => [
-      p.pedido, p.nf, p.cliente, p.cidade, p.loja, fmtData(p.dataColeta), fmtData(p.prevEtg), p.atraso
+      p.pedido, p.nf, p.cliente, p.cidade, p.loja, fmtData(p.dataColeta),
+      celulaPrevisaoEditavel(p.pedido, fmtData(p.prevEtg)), p.atraso
     ]));
   } catch (err) {
     document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_PEDIDOS_NAO_RECEBIDOS.length}">Erro ao carregar pedidos.</td></tr>`;
+  }
+}
+
+// Monta a célula de Prev Etg como texto + lápis clicável para editar.
+// O valor retornado já é HTML (o modal genérico não escapa o conteúdo).
+function celulaPrevisaoEditavel(pedido, prevEtgFormatada) {
+  const pedidoAttr = String(pedido).replace(/"/g, '&quot;');
+  const texto = prevEtgFormatada || 'Indefinido';
+  return `${texto} <a class="num-link" title="Editar previsão" onclick="editarPrevisao('${pedidoAttr}')">✏️</a>`;
+}
+
+async function editarPrevisao(pedido) {
+  const entrada = prompt(`Nova previsão de entrega para o pedido ${pedido}\n(formato dd/mm/aaaa — deixe em branco para marcar como Indefinido):`);
+  if (entrada === null) return; // cancelou
+  const novaPrevisao = entrada.trim() === '' ? 'Indefinido' : entrada.trim();
+
+  try {
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'editarPrevisaoPedido', pedido, novaPrevisao })
+    }).then(r => r.json());
+
+    if (!resp.ok) { alert('Não consegui salvar: ' + (resp.error || 'erro desconhecido')); return; }
+
+    // Reabre a mesma lista que estava aberta, já com a previsão atualizada
+    if (ultimoFiltroPedidos) {
+      verPedidos(ultimoFiltroPedidos.transportadora, ultimoFiltroPedidos.apenasAtraso, ultimoFiltroPedidos.titulo);
+    }
+  } catch (err) {
+    alert('Erro ao salvar a previsão: ' + err.message);
   }
 }
 
