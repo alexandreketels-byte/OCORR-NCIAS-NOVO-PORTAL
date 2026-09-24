@@ -138,7 +138,7 @@
     <table id="tabelaTransportadoras" style="display:none">
       <thead><tr>
         <th>Transportadora</th><th>Pedidos não recebidos</th><th>Em atraso</th><th>Indefinidos</th>
-        <th>Entregues (GFW)</th><th>Entregues (RTE)</th><th>Performance</th>
+        <th>Entregues</th><th>Performance</th>
       </tr></thead>
       <tbody id="tabelaTransportadorasBody"></tbody>
     </table>
@@ -1001,8 +1001,7 @@ function renderTabelaTransportadoras(porTransportadora) {
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false)">${v.qtd}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', true, false)">${v.emAtraso}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, true)">${v.indefinidos}</a></td>
-      <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, false, true)">${v.entreguesGFW}</a></td>
-      <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, false, false, true)">${v.entreguesRTE}</a></td>
+      <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, false, true)">${v.entregues}</a></td>
       <td style="color:${cor};font-weight:600">${v.performance.toFixed(1)}%</td>
     </tr>`;
   }).join('');
@@ -1010,9 +1009,9 @@ function renderTabelaTransportadoras(porTransportadora) {
 
 function baixarIndicadoresExcel() {
   if (!dadosTabelaTransportadoras.length) { alert('Não há dados para baixar.'); return; }
-  const colunas = ['Transportadora', 'Pedidos não recebidos', 'Em atraso', 'Indefinidos', 'Entregues (GFW)', 'Entregues (RTE)', 'Performance'];
+  const colunas = ['Transportadora', 'Pedidos não recebidos', 'Em atraso', 'Indefinidos', 'Entregues', 'Performance'];
   const linhas = dadosTabelaTransportadoras.map(([nome, v]) =>
-    [nome, v.qtd, v.emAtraso, v.indefinidos, v.entreguesGFW, v.entreguesRTE, v.performance.toFixed(1) + '%']);
+    [nome, v.qtd, v.emAtraso, v.indefinidos, v.entregues, v.performance.toFixed(1) + '%']);
   exportarCSV(colunas, linhas, 'Indicadores por Transportadora');
 }
 
@@ -1194,16 +1193,15 @@ const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loj
 
 let ultimoFiltroPedidos = null;
 
-async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregueGFW, apenasEntregueRTE) {
-  ultimoFiltroPedidos = { transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregueGFW, apenasEntregueRTE };
+async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregue) {
+  ultimoFiltroPedidos = { transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregue };
   mostrarModalCarregando(titulo, COLUNAS_PEDIDOS_NAO_RECEBIDOS);
   try {
     const params = new URLSearchParams({
       action: 'getPedidosDetalhe', transportadora,
       apenasAtraso: apenasAtraso ? '1' : '0',
       apenasIndefinido: apenasIndefinido ? '1' : '0',
-      apenasEntregueGFW: apenasEntregueGFW ? '1' : '0',
-      apenasEntregueRTE: apenasEntregueRTE ? '1' : '0'
+      apenasEntregue: apenasEntregue ? '1' : '0'
     });
     const pedidos = await fetch(`${API_URL}?${params}`).then(r => r.json());
     renderModalLinhas(pedidos.map(p => [
@@ -1241,21 +1239,20 @@ async function editarPrevisao(pedido) {
 
     // Reabre a mesma lista que estava aberta, já com a previsão atualizada
     if (ultimoFiltroPedidos) {
-      verPedidos(ultimoFiltroPedidos.transportadora, ultimoFiltroPedidos.apenasAtraso, ultimoFiltroPedidos.titulo, ultimoFiltroPedidos.apenasIndefinido, ultimoFiltroPedidos.apenasEntregueGFW, ultimoFiltroPedidos.apenasEntregueRTE);
+      verPedidos(ultimoFiltroPedidos.transportadora, ultimoFiltroPedidos.apenasAtraso, ultimoFiltroPedidos.titulo, ultimoFiltroPedidos.apenasIndefinido, ultimoFiltroPedidos.apenasEntregue);
     }
   } catch (err) {
     alert('Erro ao salvar a previsão: ' + err.message);
   }
 }
 
-function verPedidosPorNome(nomeEncoded, apenasAtraso, apenasIndefinido, apenasEntregueGFW, apenasEntregueRTE) {
+function verPedidosPorNome(nomeEncoded, apenasAtraso, apenasIndefinido, apenasEntregue) {
   const nome = decodeURIComponent(nomeEncoded);
-  const titulo = apenasEntregueRTE ? 'Pedidos já entregues (baixa RTE) — ' + nome
-    : apenasEntregueGFW ? 'Pedidos já entregues (baixa GFW) — ' + nome
+  const titulo = apenasEntregue ? 'Pedidos já entregues — ' + nome
     : apenasIndefinido ? 'Pedidos com previsão indefinida — ' + nome
     : apenasAtraso ? 'Pedidos em atraso — ' + nome
     : 'Pedidos não recebidos — ' + nome;
-  verPedidos(nome, !!apenasAtraso, titulo, !!apenasIndefinido, !!apenasEntregueGFW, !!apenasEntregueRTE);
+  verPedidos(nome, !!apenasAtraso, titulo, !!apenasIndefinido, !!apenasEntregue);
 }
 
 const COLUNAS_RECEBIDOS = ['Data', 'Pedido', 'Transportadora'];
