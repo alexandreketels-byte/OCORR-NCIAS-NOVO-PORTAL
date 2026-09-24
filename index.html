@@ -146,7 +146,7 @@
     <h2>Colar Tratativas de Ocorrências (texto)</h2>
     <p class="desc">Cole aqui o texto das tratativas de ocorrências copiado direto da tela do sistema (com as mensagens de cada pedido). Fica salvo neste navegador até você processar um texto novo — não é enviado nem salvo na planilha.</p>
     <textarea id="colarOcorrenciasTexto" rows="8" style="width:100%;font-family:inherit;font-size:0.9rem;padding:10px;border:1px solid var(--borda);border-radius:8px;"></textarea>
-    <button onclick="processarOcorrenciasTexto()" style="margin-top:10px">Processar texto</button>
+    <button id="btnProcessarTratativas" onclick="processarOcorrenciasTexto()" style="margin-top:10px">Processar texto</button>
     <div class="status-line" id="statusTratativas"></div>
 
     <div id="tratativasArea" style="display:none;margin-top:16px">
@@ -473,38 +473,46 @@ async function processarOcorrenciasTexto(textoForcado) {
     return;
   }
 
-  // PROCV contra a Tabela Dinâmica: previsão, data de entrega, loja e vendedor
-  let lookup = {};
-  if (API_URL && API_URL.indexOf('COLE_AQUI') !== 0) {
-    try {
-      lookup = await fetch(`${API_URL}?action=getTabDinamicaLookup`).then(r => r.json());
-    } catch (err) { /* segue sem o PROCV se a API falhar */ }
+  const btn = document.getElementById('btnProcessarTratativas');
+  const textoOriginalBtn = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Processando...'; }
+
+  try {
+    // PROCV contra a Tabela Dinâmica: previsão, data de entrega, loja e vendedor
+    let lookup = {};
+    if (API_URL && API_URL.indexOf('COLE_AQUI') !== 0) {
+      try {
+        lookup = await fetch(`${API_URL}?action=getTabDinamicaLookup`).then(r => r.json());
+      } catch (err) { /* segue sem o PROCV se a API falhar */ }
+    }
+
+    registros.sort((a, b) => a.pedido.localeCompare(b.pedido) || a.dtOcorr.localeCompare(b.dtOcorr));
+
+    tratativasDadosAtuais = registros.map(r => {
+      const m = ultimaMensagem(r);
+      const info = lookup[r.pedido] || {};
+      return [
+        r.pedido, r.nf, r.cliente, r.transportadora, info.loja || '', info.vendedor || '',
+        r.ocorrencia, r.status, fmtData(info.previsao || ''), info.recebCliente ? 'Sim' : 'Não',
+        fmtData(info.recebCliente || ''), m.data, m.autor, m.texto
+      ];
+    });
+
+    localStorage.setItem(CHAVE_LOCALSTORAGE_TRATATIVAS, texto);
+    document.getElementById('colarOcorrenciasTexto').value = texto;
+    document.getElementById('tratativasArea').style.display = 'block';
+
+    tratativasOrdenacao = { indice: null, direcao: 1 };
+    montarCabecalhoTratativas();
+    montarFiltrosTratativas();
+    montarPainelColunas();
+    aplicarFiltrosTratativas();
+
+    await salvarTratativasNaPlanilha(tratativasDadosAtuais);
+    renderKpisOcorrenciasDeTratativas();
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = textoOriginalBtn; }
   }
-
-  registros.sort((a, b) => a.pedido.localeCompare(b.pedido) || a.dtOcorr.localeCompare(b.dtOcorr));
-
-  tratativasDadosAtuais = registros.map(r => {
-    const m = ultimaMensagem(r);
-    const info = lookup[r.pedido] || {};
-    return [
-      r.pedido, r.nf, r.cliente, r.transportadora, info.loja || '', info.vendedor || '',
-      r.ocorrencia, r.status, fmtData(info.previsao || ''), info.recebCliente ? 'Sim' : 'Não',
-      fmtData(info.recebCliente || ''), m.data, m.autor, m.texto
-    ];
-  });
-
-  localStorage.setItem(CHAVE_LOCALSTORAGE_TRATATIVAS, texto);
-  document.getElementById('colarOcorrenciasTexto').value = texto;
-  document.getElementById('tratativasArea').style.display = 'block';
-
-  tratativasOrdenacao = { indice: null, direcao: 1 };
-  montarCabecalhoTratativas();
-  montarFiltrosTratativas();
-  montarPainelColunas();
-  aplicarFiltrosTratativas();
-
-  await salvarTratativasNaPlanilha(tratativasDadosAtuais);
-  renderKpisOcorrenciasDeTratativas();
 }
 
 async function salvarTratativasNaPlanilha(linhas) {
@@ -598,8 +606,20 @@ function filtrarTratativasPorTransportadora(nomeEncoded) {
 
 function ordenarValor(v) {
   if (v === undefined || v === null || v === '') return null;
-  const n = Number(String(v).replace(',', '.'));
-  return isNaN(n) ? String(v).toLowerCase() : n;
+  // Remove eventual HTML embutido na célula (ex: o lápis de editar da Prev Etg)
+  const texto = String(v).replace(/<[^>]*>/g, '').trim();
+  if (texto === '') return null;
+
+  // Datas no formato dd/mm/aaaa (com ou sem hora) viram timestamp pra ordenar de verdade,
+  // em vez de comparar como texto (que bagunça: "01/12" vem antes de "15/01" por engano)
+  const dataMatch = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?$/);
+  if (dataMatch) {
+    const [, dd, mm, yyyy, hh, min] = dataMatch;
+    return new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh || 0), Number(min || 0)).getTime();
+  }
+
+  const n = Number(texto.replace(',', '.'));
+  return isNaN(n) ? texto.toLowerCase() : n;
 }
 
 // ---------- Destaques visuais da tabela de Tratativas ----------
