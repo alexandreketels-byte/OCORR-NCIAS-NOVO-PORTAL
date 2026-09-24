@@ -114,7 +114,7 @@
     <div class="kpis" id="kpis"><p>Carregando...</p></div>
     <table id="tabelaTransportadoras" style="display:none">
       <thead><tr>
-        <th>Transportadora</th><th>Pedidos não recebidos</th><th>Em atraso</th>
+        <th>Transportadora</th><th>Pedidos não recebidos</th><th>Em atraso</th><th>Indefinidos</th>
         <th>Performance</th>
       </tr></thead>
       <tbody id="tabelaTransportadorasBody"></tbody>
@@ -790,7 +790,8 @@ function renderTabelaTransportadoras(porTransportadora) {
     return `<tr>
       <td>${nome}</td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false)">${v.qtd}</a></td>
-      <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', true)">${v.emAtraso}</a></td>
+      <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', true, false)">${v.emAtraso}</a></td>
+      <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, true)">${v.indefinidos}</a></td>
       <td style="color:${cor};font-weight:600">${v.performance.toFixed(1)}%</td>
     </tr>`;
   }).join('');
@@ -930,11 +931,15 @@ const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loj
 
 let ultimoFiltroPedidos = null;
 
-async function verPedidos(transportadora, apenasAtraso, titulo) {
-  ultimoFiltroPedidos = { transportadora, apenasAtraso, titulo };
+async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido) {
+  ultimoFiltroPedidos = { transportadora, apenasAtraso, titulo, apenasIndefinido };
   mostrarModalCarregando(titulo, COLUNAS_PEDIDOS_NAO_RECEBIDOS);
   try {
-    const params = new URLSearchParams({ action: 'getPedidosDetalhe', transportadora, apenasAtraso: apenasAtraso ? '1' : '0' });
+    const params = new URLSearchParams({
+      action: 'getPedidosDetalhe', transportadora,
+      apenasAtraso: apenasAtraso ? '1' : '0',
+      apenasIndefinido: apenasIndefinido ? '1' : '0'
+    });
     const pedidos = await fetch(`${API_URL}?${params}`).then(r => r.json());
     renderModalLinhas(pedidos.map(p => [
       p.pedido, p.nf, p.cliente, p.cidade, p.loja, fmtData(p.dataColeta),
@@ -969,16 +974,19 @@ async function editarPrevisao(pedido) {
 
     // Reabre a mesma lista que estava aberta, já com a previsão atualizada
     if (ultimoFiltroPedidos) {
-      verPedidos(ultimoFiltroPedidos.transportadora, ultimoFiltroPedidos.apenasAtraso, ultimoFiltroPedidos.titulo);
+      verPedidos(ultimoFiltroPedidos.transportadora, ultimoFiltroPedidos.apenasAtraso, ultimoFiltroPedidos.titulo, ultimoFiltroPedidos.apenasIndefinido);
     }
   } catch (err) {
     alert('Erro ao salvar a previsão: ' + err.message);
   }
 }
 
-function verPedidosPorNome(nomeEncoded, apenasAtraso) {
+function verPedidosPorNome(nomeEncoded, apenasAtraso, apenasIndefinido) {
   const nome = decodeURIComponent(nomeEncoded);
-  verPedidos(nome, apenasAtraso, (apenasAtraso ? 'Pedidos em atraso — ' : 'Pedidos não recebidos — ') + nome);
+  const titulo = apenasIndefinido ? 'Pedidos com previsão indefinida — ' + nome
+    : apenasAtraso ? 'Pedidos em atraso — ' + nome
+    : 'Pedidos não recebidos — ' + nome;
+  verPedidos(nome, !!apenasAtraso, titulo, !!apenasIndefinido);
 }
 
 const COLUNAS_RECEBIDOS = ['Data', 'Pedido', 'Transportadora'];
