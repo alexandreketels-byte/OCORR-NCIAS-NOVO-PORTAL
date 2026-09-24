@@ -1189,7 +1189,7 @@ function baixarModalExcel() {
   exportarCSV(modalColunasAtuais, modalLinhasFiltradas, document.getElementById('modalTitulo').textContent);
 }
 
-const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)', 'Entregue (GFW)', 'Data Entrega (GFW)', 'Entregue (RTE)', 'Data Entrega (RTE)'];
+const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)', 'Entregue (GFW)', 'Data Entrega (GFW)', 'Entregue (RTE)', 'Data Entrega (RTE)', 'Última Ocorrência'];
 
 let ultimoFiltroPedidos = null;
 
@@ -1208,7 +1208,8 @@ async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido
       p.pedido, p.nf, p.cliente, p.cidade, p.loja, fmtData(p.dataColeta),
       celulaPrevisaoEditavel(p.pedido, fmtData(p.prevEtg)), p.atraso,
       p.entregueGFW ? 'Sim' : 'Não', fmtData(p.dataEntregaGFW),
-      p.entregueRTE ? 'Sim' : 'Não', fmtData(p.dataEntregaRTE)
+      p.entregueRTE ? 'Sim' : 'Não', fmtData(p.dataEntregaRTE),
+      p.ultimaOcorrencia || ''
     ]));
   } catch (err) {
     document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_PEDIDOS_NAO_RECEBIDOS.length}">Erro ao carregar pedidos.</td></tr>`;
