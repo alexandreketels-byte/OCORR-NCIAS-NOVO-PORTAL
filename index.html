@@ -107,6 +107,16 @@
       <div class="status-line" id="statusPedidos"></div>
       <div class="meta" id="metaPedidos"></div>
     </div>
+
+    <div class="card">
+      <h2>Importar Baixa de Entrega GFW</h2>
+      <p class="desc">Arquivo .csv de notas fiscais da transportadora GFW. Cruza pelo número da NF com Pedidos Não Recebidos pra saber quais já foram entregues. Cada importação substitui os dados anteriores (foto do momento).</p>
+      <input type="file" id="fileBaixaGFW" accept=".csv">
+      <button id="btnBaixaGFW" onclick="importarBaixaGFW()">Importar</button>
+      <div class="progress-wrap" id="progressBaixaGFW"><div class="progress-bar" id="progressBarBaixaGFW"></div></div>
+      <div class="status-line" id="statusBaixaGFW"></div>
+      <div class="meta" id="metaBaixaGFW"></div>
+    </div>
   </div>
 
   <div class="indicadores">
@@ -114,7 +124,7 @@
     <div class="kpis" id="kpis"><p>Carregando...</p></div>
     <table id="tabelaTransportadoras" style="display:none">
       <thead><tr>
-        <th>Transportadora</th><th>Pedidos não recebidos</th><th>Em atraso</th><th>Indefinidos</th>
+        <th>Transportadora</th><th>Pedidos não recebidos</th><th>Em atraso</th><th>Indefinidos</th><th>Entregues</th>
         <th>Performance</th>
       </tr></thead>
       <tbody id="tabelaTransportadorasBody"></tbody>
@@ -296,6 +306,42 @@ function parsePedidosNaoRecebidosHtml(html) {
     }
   });
   return rows;
+}
+
+// ---------- Importação: Baixa de Entrega GFW (CSV) ----------
+function importarBaixaGFW() {
+  const input = document.getElementById('fileBaixaGFW');
+  const file = input.files[0];
+  if (!file) { alert('Selecione o arquivo CSV primeiro.'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
+
+  setStatus('statusBaixaGFW', 'Lendo arquivo...', '');
+  toggleBtn('btnBaixaGFW', true);
+
+  Papa.parse(file, {
+    encoding: 'UTF-8',
+    delimiter: ';',
+    header: true,
+    skipEmptyLines: true,
+    complete: async function(results) {
+      const rows = results.data
+        .filter(r => r['Nota'])
+        .map(r => [
+          r['Nota'], r['Emissão'], r['Status'], r['Evento'], r['Prev. Entrega'],
+          r['Dt. Agendamento'], r['Entrega'], r['CNPJ/CPF Remetente'], r['Nome Remetente'],
+          r['Cidade Remetente'], r['UF Remetente'], r['CNPJ/CPF Destinatário'],
+          r['Nome Destinatário'], r['Cidade Destinatário'], r['UF Destinatário'],
+          r['Recebedor'], r['Quantidade Volume'], r['Valor da Mercadoria (R$)']
+        ]);
+      await enviarEmLotes(rows, 'importBaixaEntregaGFW', 'statusBaixaGFW', 'progressBaixaGFW', 'progressBarBaixaGFW');
+      toggleBtn('btnBaixaGFW', false);
+      carregarIndicadores();
+    },
+    error: function(err) {
+      setStatus('statusBaixaGFW', 'Erro ao ler CSV: ' + err.message, 'erro');
+      toggleBtn('btnBaixaGFW', false);
+    }
+  });
 }
 
 // ---------- Colar Tratativas de Ocorrências como texto (copiado da tela) ----------
@@ -777,6 +823,10 @@ function renderMeta(status) {
     document.getElementById('metaPedidos').textContent =
       `Última importação: ${new Date(status.PedidosNaoRecebidos.ultimaImportacao).toLocaleString('pt-BR')} (${status.PedidosNaoRecebidos.totalLinhas} linhas)`;
   }
+  if (status.BaixaEntregaGFW) {
+    document.getElementById('metaBaixaGFW').textContent =
+      `Última importação: ${new Date(status.BaixaEntregaGFW.ultimaImportacao).toLocaleString('pt-BR')} (${status.BaixaEntregaGFW.totalLinhas} linhas)`;
+  }
 }
 
 function renderTabelaTransportadoras(porTransportadora) {
@@ -792,6 +842,7 @@ function renderTabelaTransportadoras(porTransportadora) {
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false)">${v.qtd}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', true, false)">${v.emAtraso}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, true)">${v.indefinidos}</a></td>
+      <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, false, true)">${v.entreguesGFW}</a></td>
       <td style="color:${cor};font-weight:600">${v.performance.toFixed(1)}%</td>
     </tr>`;
   }).join('');
@@ -931,14 +982,15 @@ const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loj
 
 let ultimoFiltroPedidos = null;
 
-async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido) {
-  ultimoFiltroPedidos = { transportadora, apenasAtraso, titulo, apenasIndefinido };
+async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregueGFW) {
+  ultimoFiltroPedidos = { transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregueGFW };
   mostrarModalCarregando(titulo, COLUNAS_PEDIDOS_NAO_RECEBIDOS);
   try {
     const params = new URLSearchParams({
       action: 'getPedidosDetalhe', transportadora,
       apenasAtraso: apenasAtraso ? '1' : '0',
-      apenasIndefinido: apenasIndefinido ? '1' : '0'
+      apenasIndefinido: apenasIndefinido ? '1' : '0',
+      apenasEntregueGFW: apenasEntregueGFW ? '1' : '0'
     });
     const pedidos = await fetch(`${API_URL}?${params}`).then(r => r.json());
     renderModalLinhas(pedidos.map(p => [
@@ -974,19 +1026,20 @@ async function editarPrevisao(pedido) {
 
     // Reabre a mesma lista que estava aberta, já com a previsão atualizada
     if (ultimoFiltroPedidos) {
-      verPedidos(ultimoFiltroPedidos.transportadora, ultimoFiltroPedidos.apenasAtraso, ultimoFiltroPedidos.titulo, ultimoFiltroPedidos.apenasIndefinido);
+      verPedidos(ultimoFiltroPedidos.transportadora, ultimoFiltroPedidos.apenasAtraso, ultimoFiltroPedidos.titulo, ultimoFiltroPedidos.apenasIndefinido, ultimoFiltroPedidos.apenasEntregueGFW);
     }
   } catch (err) {
     alert('Erro ao salvar a previsão: ' + err.message);
   }
 }
 
-function verPedidosPorNome(nomeEncoded, apenasAtraso, apenasIndefinido) {
+function verPedidosPorNome(nomeEncoded, apenasAtraso, apenasIndefinido, apenasEntregueGFW) {
   const nome = decodeURIComponent(nomeEncoded);
-  const titulo = apenasIndefinido ? 'Pedidos com previsão indefinida — ' + nome
+  const titulo = apenasEntregueGFW ? 'Pedidos já entregues (baixa GFW) — ' + nome
+    : apenasIndefinido ? 'Pedidos com previsão indefinida — ' + nome
     : apenasAtraso ? 'Pedidos em atraso — ' + nome
     : 'Pedidos não recebidos — ' + nome;
-  verPedidos(nome, !!apenasAtraso, titulo, !!apenasIndefinido);
+  verPedidos(nome, !!apenasAtraso, titulo, !!apenasIndefinido, !!apenasEntregueGFW);
 }
 
 const COLUNAS_RECEBIDOS = ['Data', 'Pedido', 'Transportadora'];
