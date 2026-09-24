@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Portal de Indicadores</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root {
     /* Tema escuro (padrão) */
@@ -144,22 +143,8 @@
   </div>
 
   <div class="indicadores">
-    <h2>Tratativas de Ocorrências</h2>
-    <p class="desc">Três formas de trazer os dados: importe o arquivo Excel gerado por "Colar sem formatação", cole direto da tela do sistema na área abaixo (tenta preservar a estrutura de colunas, como o Excel faz), ou cole como texto simples. Fica salvo até você processar de novo.</p>
-
-    <div style="margin-bottom:14px">
-      <label style="font-size:0.85rem;color:var(--cinza);display:block;margin-bottom:6px">Opção 1 — Importar arquivo Excel (.xlsx)</label>
-      <input type="file" id="fileTratativasExcel" accept=".xlsx">
-      <button id="btnProcessarTratativasArquivo" onclick="processarTratativasArquivo()" style="margin-left:8px">Importar arquivo</button>
-    </div>
-
-    <label style="font-size:0.85rem;color:var(--cinza);display:block;margin-bottom:6px">Opção 2 — Colar direto (como se fosse uma planilha)</label>
-    <div id="areaColarPlanilha" contenteditable="true"
-      style="min-height:70px;border:2px dashed var(--borda);border-radius:8px;padding:14px;color:var(--cinza);font-size:0.85rem;margin-bottom:14px;outline:none">
-      Clique aqui dentro e cole (Ctrl+V) direto da tela do sistema — sem precisar passar pelo Excel.
-    </div>
-
-    <label style="font-size:0.85rem;color:var(--cinza);display:block;margin-bottom:6px">Opção 3 — Colar texto simples</label>
+    <h2>Colar Tratativas de Ocorrências (texto)</h2>
+    <p class="desc">Cole aqui o texto das tratativas de ocorrências copiado direto da tela do sistema (com as mensagens de cada pedido). Fica salvo neste navegador até você processar um texto novo — não é enviado nem salvo na planilha.</p>
     <textarea id="colarOcorrenciasTexto" rows="8" style="width:100%;font-family:inherit;font-size:0.9rem;padding:10px;border:1px solid var(--borda);border-radius:8px;"></textarea>
     <button id="btnProcessarTratativas" onclick="processarOcorrenciasTexto()" style="margin-top:10px">Processar texto</button>
     <div class="status-line" id="statusTratativas"></div>
@@ -475,74 +460,6 @@ function parseTratativasTextoResumido(texto) {
   return registros;
 }
 
-// Formato 3: arquivo Excel gerado por "Colar sem formatação" a partir do
-// relatório detalhado. Mesma lógica do formato tabulado, mas lendo células
-// (algumas já vêm como objeto Date, já que o Excel reconhece as datas).
-function fmtDataHoraExcel(v) {
-  if (!(v instanceof Date)) return v;
-  const p = n => String(n).padStart(2, '0');
-  return `${p(v.getDate())}/${p(v.getMonth() + 1)}/${v.getFullYear()} ${p(v.getHours())}:${p(v.getMinutes())}`;
-}
-
-function parseTratativasAoa(aoa) {
-  const REGEX_TELEFONE = /^\(\d{2,3}\)[\d-]+$/;
-  const registros = [];
-  let atual = null;
-  let secao = null;
-
-  const cel = (row, i) => (row[i] === undefined || row[i] === null) ? '' : row[i];
-  const celTxt = (row, i) => String(cel(row, i)).trim();
-
-  for (const row of aoa) {
-    const c0 = cel(row, 0);
-    const c1Raw = row[1];
-    const c1 = (c1Raw === undefined || c1Raw === null) ? '' : String(c1Raw).trim();
-
-    if (c0 instanceof Date) {
-      atual = {
-        dtOcorr: fmtDataHoraExcel(c0),
-        loja: celTxt(row, 1),
-        pedido: celTxt(row, 4),
-        nf: celTxt(row, 5),
-        cliente: celTxt(row, 6),
-        transportadora: celTxt(row, 7),
-        contato: celTxt(row, 8),
-        telefone: celTxt(row, 9),
-        ocorrencia: celTxt(row, 10),
-        status: celTxt(row, 11),
-        mensagens: []
-      };
-      registros.push(atual);
-      secao = null;
-      continue;
-    }
-
-    if (!atual) continue;
-
-    if (c1 === 'MENSAGENS') { secao = 'mensagens'; continue; }
-    if (c1 === 'NOVA MENSAGEM') { secao = null; continue; }
-    if (c1 === 'TIPO DE OCORRÊNCIA' || c1 === 'SOLUÇÃO') { secao = null; continue; }
-
-    if (secao === 'mensagens') {
-      const dtCel = row[1];
-      const autor = celTxt(row, 2);
-      const texto2 = celTxt(row, 3);
-      if (dtCel instanceof Date) {
-        atual.mensagens.push({ data: fmtDataHoraExcel(dtCel), autor, texto: texto2 });
-      } else if (texto2 && atual.mensagens.length > 0) {
-        atual.mensagens[atual.mensagens.length - 1].texto += ' ' + texto2;
-      }
-      continue;
-    }
-
-    const naoVazias = row.map(v => v === undefined || v === null ? '' : String(v).trim()).filter(v => v.length > 0);
-    if (naoVazias.length === 1 && REGEX_TELEFONE.test(naoVazias[0])) {
-      atual.telefone = atual.telefone ? atual.telefone + ' / ' + naoVazias[0] : naoVazias[0];
-    }
-  }
-  return registros;
-}
-
 function ultimaMensagem(registro) {
   if (!registro.mensagens || registro.mensagens.length === 0) return { data: '', autor: '', texto: '' };
   return registro.mensagens[registro.mensagens.length - 1];
@@ -593,72 +510,6 @@ function toggleColunasPanel() {
   painel.style.display = painel.style.display === 'none' ? 'block' : 'none';
 }
 
-// ---------- Colar "como planilha": lê a estrutura de tabela do clipboard ----------
-// Uma caixa de texto comum só recebe o texto puro do que foi colado (perde a
-// estrutura de colunas). Interceptando o evento "paste" conseguimos ler a
-// versão HTML do que foi copiado (o mesmo dado que o Excel usa pra remontar
-// as colunas no "Colar sem formatação"), e convertemos isso pra texto
-// tabulado — o mesmo formato que o parser já sabe ler.
-function tabelaParaLinhas(tabela, linhas) {
-  // .rows só enumera as linhas DIRETAS desta tabela — não as de tabelas
-  // aninhadas dentro de alguma célula, então cada linha só é visitada uma vez.
-  Array.from(tabela.rows).forEach(tr => {
-    const celulas = Array.from(tr.cells).map(td => {
-      // remove qualquer tabela aninhada da célula antes de ler o texto,
-      // pra não misturar o texto da célula com o da tabela filha
-      const clone = td.cloneNode(true);
-      clone.querySelectorAll('table').forEach(t => t.remove());
-      return clone.textContent.replace(/\s+/g, ' ').trim();
-    });
-    linhas.push(celulas.join('\t'));
-
-    // agora desce manualmente pras tabelas aninhadas encontradas nesta
-    // linha, cada uma processada exatamente uma vez, na ordem em que aparecem
-    Array.from(tr.cells).forEach(td => {
-      Array.from(td.querySelectorAll(':scope > table')).forEach(nested => {
-        tabelaParaLinhas(nested, linhas);
-      });
-    });
-  });
-}
-
-function htmlParaTextoTabulado(html) {
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  // só as tabelas de "topo" (não aninhadas dentro de outra tabela) —
-  // as aninhadas são tratadas via recursão dentro de tabelaParaLinhas
-  const tabelasTopo = Array.from(doc.querySelectorAll('table')).filter(
-    t => !t.parentElement || !t.parentElement.closest('table')
-  );
-  if (tabelasTopo.length === 0) return null; // não veio como tabela
-
-  const linhas = [];
-  tabelasTopo.forEach(t => tabelaParaLinhas(t, linhas));
-  return linhas.join('\n');
-}
-
-function configurarAreaColarPlanilha() {
-  const area = document.getElementById('areaColarPlanilha');
-  if (!area) return;
-  const placeholder = area.textContent;
-
-  area.addEventListener('focus', () => {
-    if (area.textContent.trim() === placeholder.trim()) area.textContent = '';
-  });
-
-  area.addEventListener('paste', function(e) {
-    e.preventDefault();
-    const html = (e.clipboardData || window.clipboardData).getData('text/html');
-    const textoPlano = (e.clipboardData || window.clipboardData).getData('text/plain');
-    const textoTabulado = html ? htmlParaTextoTabulado(html) : null;
-    const textoFinal = textoTabulado || textoPlano;
-
-    area.textContent = 'Processando o que foi colado...';
-    processarOcorrenciasTexto(textoFinal).finally(() => {
-      area.textContent = placeholder;
-    });
-  });
-}
-
 async function processarOcorrenciasTexto(textoForcado) {
   const texto = textoForcado !== undefined ? textoForcado : document.getElementById('colarOcorrenciasTexto').value;
   if (!texto || !texto.trim()) { alert('Cole o texto das tratativas de ocorrências primeiro.'); return; }
@@ -673,35 +524,6 @@ async function processarOcorrenciasTexto(textoForcado) {
     localStorage.setItem(CHAVE_LOCALSTORAGE_TRATATIVAS, texto);
     document.getElementById('colarOcorrenciasTexto').value = texto;
   });
-}
-
-async function processarTratativasArquivo() {
-  const input = document.getElementById('fileTratativasExcel');
-  const file = input.files[0];
-  if (!file) { alert('Selecione o arquivo Excel primeiro.'); return; }
-
-  const btn = document.getElementById('btnProcessarTratativasArquivo');
-  const textoOriginalBtn = btn ? btn.textContent : '';
-  if (btn) { btn.disabled = true; btn.textContent = 'Lendo arquivo...'; }
-
-  try {
-    const buffer = await file.arrayBuffer();
-    const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
-    const planilha = wb.Sheets[wb.SheetNames[0]];
-    const aoa = XLSX.utils.sheet_to_json(planilha, { header: 1, raw: true, defval: '' });
-
-    const registros = parseTratativasAoa(aoa);
-    if (registros.length === 0) {
-      alert('Não consegui reconhecer nenhuma ocorrência nesse arquivo. Confira se ele tem a coluna DT Ocorr preenchida.');
-      return;
-    }
-
-    await finalizarProcessamentoTratativas(registros, 'btnProcessarTratativasArquivo');
-  } catch (err) {
-    alert('Erro ao ler o arquivo: ' + err.message);
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = textoOriginalBtn; }
-  }
 }
 
 // Passos comuns depois de ter os "registros" (venham de texto colado ou de
@@ -1333,7 +1155,6 @@ function alternarTema() {
 
 aplicarTema(localStorage.getItem(CHAVE_LOCALSTORAGE_TEMA) || 'dark');
 
-configurarAreaColarPlanilha();
 carregarIndicadores();
 restaurarTratativasSalvas();
 </script>
