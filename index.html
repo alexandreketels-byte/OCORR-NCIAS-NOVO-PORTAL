@@ -150,12 +150,18 @@
     <div class="status-line" id="statusTratativas"></div>
 
     <div id="tratativasArea" style="display:none;margin-top:16px">
-      <div class="modal-filtros" style="padding:0 0 10px">
-        <input type="text" id="tratativasBusca" placeholder="Buscar em todas as colunas..." oninput="aplicarFiltrosTratativas()">
-        <div id="tratativasFiltrosSelects" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
-        <div style="position:relative">
-          <button onclick="toggleColunasPanel()" type="button">Colunas ▾</button>
-          <div id="tratativasColunasPanel" style="display:none;position:absolute;right:0;z-index:20;background:var(--card-bg);border:1px solid var(--borda);border-radius:8px;padding:10px 14px;margin-top:6px;max-height:320px;overflow-y:auto;min-width:220px;box-shadow:0 6px 18px rgba(0,0,0,0.35)"></div>
+      <div class="modal-filtros" style="padding:0 0 10px;justify-content:space-between;align-items:center">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:1">
+          <input type="text" id="tratativasBusca" placeholder="Buscar em todas as colunas..." oninput="aplicarFiltrosTratativas()">
+          <div id="tratativasFiltrosSelects" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+          <span id="tratativasContador" style="color:var(--cinza);font-size:0.85rem;white-space:nowrap"></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button type="button" onclick="baixarTratativasExcel()">⬇ Baixar Excel</button>
+          <div style="position:relative">
+            <button onclick="toggleColunasPanel()" type="button">Colunas ▾</button>
+            <div id="tratativasColunasPanel" style="display:none;position:absolute;right:0;z-index:20;background:var(--card-bg);border:1px solid var(--borda);border-radius:8px;padding:10px 14px;margin-top:6px;max-height:320px;overflow-y:auto;min-width:220px;box-shadow:0 6px 18px rgba(0,0,0,0.35)"></div>
+          </div>
         </div>
       </div>
       <div style="overflow-x:auto">
@@ -172,8 +178,14 @@
 <div class="modal-overlay" id="modalOverlay" onclick="fecharModalSeClicouFora(event)">
   <div class="modal">
     <div class="modal-header">
-      <h3 id="modalTitulo">Pedidos</h3>
-      <button class="modal-close" onclick="fecharModal()">&times;</button>
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <h3 id="modalTitulo">Pedidos</h3>
+        <span id="modalContador" style="color:var(--cinza);font-size:0.85rem"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button type="button" onclick="baixarModalExcel()">⬇ Baixar Excel</button>
+        <button class="modal-close" onclick="fecharModal()">&times;</button>
+      </div>
     </div>
     <div class="modal-filtros">
       <input type="text" id="modalBusca" placeholder="Buscar em todas as colunas..." oninput="aplicarFiltrosModal()">
@@ -474,6 +486,7 @@ const CHAVE_LOCALSTORAGE_TRATATIVAS = 'dis_tratativas_texto_v1';
 const CHAVE_LOCALSTORAGE_TRATATIVAS_COLS = 'dis_tratativas_colunas_v1';
 
 let tratativasDadosAtuais = [];
+let tratativasLinhasFiltradas = [];
 let tratativasFiltrosSelecionados = {};
 let tratativasOrdenacao = { indice: null, direcao: 1 };
 let tratativasColunasVisiveis = {};
@@ -748,6 +761,12 @@ function aplicarFiltrosTratativas() {
   const idxAutor = COLUNAS_TRATATIVAS.indexOf('Autor Últ. Msg');
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
 
+  tratativasLinhasFiltradas = linhas;
+  document.getElementById('tratativasContador').textContent =
+    linhas.length === tratativasDadosAtuais.length
+      ? `${linhas.length} registro${linhas.length === 1 ? '' : 's'}`
+      : `${linhas.length} de ${tratativasDadosAtuais.length} registros`;
+
   document.getElementById('tratativasTabelaBody').innerHTML = linhas.length
     ? linhas.map(l => {
         const dataPrevisao = parseDataBR(l[idxPrevisao]);
@@ -769,6 +788,14 @@ function aplicarFiltrosTratativas() {
         return `<tr${linhaHoje ? ' class="linha-destaque"' : ''}>${celulas}</tr>`;
       }).join('')
     : `<tr><td colspan="${indices.length}">Nenhum registro encontrado.</td></tr>`;
+}
+
+function baixarTratativasExcel() {
+  if (!tratativasLinhasFiltradas.length) { alert('Não há registros para baixar.'); return; }
+  const indices = indicesColunasVisiveis();
+  const colunas = indices.map(idx => COLUNAS_TRATATIVAS[idx]);
+  const linhas = tratativasLinhasFiltradas.map(l => indices.map(idx => l[idx]));
+  exportarCSV(colunas, linhas, 'Tratativas de Ocorrencias');
 }
 
 // Ao carregar a página, busca as tratativas já salvas na planilha (visíveis
@@ -904,10 +931,13 @@ function renderMeta(status) {
   }
 }
 
+let dadosTabelaTransportadoras = [];
+
 function renderTabelaTransportadoras(porTransportadora) {
   const tbody = document.getElementById('tabelaTransportadorasBody');
   // Ordena pela pior performance primeiro
   const linhas = Object.entries(porTransportadora || {}).sort((a, b) => a[1].performance - b[1].performance);
+  dadosTabelaTransportadoras = linhas;
   if (linhas.length === 0) { document.getElementById('tabelaTransportadoras').style.display = 'none'; return; }
   document.getElementById('tabelaTransportadoras').style.display = 'table';
   tbody.innerHTML = linhas.map(([nome, v]) => {
@@ -923,6 +953,14 @@ function renderTabelaTransportadoras(porTransportadora) {
   }).join('');
 }
 
+function baixarIndicadoresExcel() {
+  if (!dadosTabelaTransportadoras.length) { alert('Não há dados para baixar.'); return; }
+  const colunas = ['Transportadora', 'Pedidos não recebidos', 'Em atraso', 'Indefinidos', 'Entregues', 'Performance'];
+  const linhas = dadosTabelaTransportadoras.map(([nome, v]) =>
+    [nome, v.qtd, v.emAtraso, v.indefinidos, v.entreguesGFW, v.performance.toFixed(1) + '%']);
+  exportarCSV(colunas, linhas, 'Indicadores por Transportadora');
+}
+
 function renderKpisOcorrencias(dados) {
   const kpis = [
     { valor: dados.ocorrencias.total, rotulo: 'Total de ocorrências',
@@ -933,15 +971,23 @@ function renderKpisOcorrencias(dados) {
   ).join('');
 }
 
+let dadosTabelaOcorrencias = [];
+
 function renderTabelaOcorrencias(porTransportadora) {
   const tbody = document.getElementById('tabelaOcorrenciasBody');
   const linhas = Object.entries(porTransportadora || {}).sort((a, b) => b[1] - a[1]);
+  dadosTabelaOcorrencias = linhas;
   if (linhas.length === 0) { document.getElementById('tabelaOcorrencias').style.display = 'none'; return; }
   document.getElementById('tabelaOcorrencias').style.display = 'table';
   tbody.innerHTML = linhas.map(([nome, qtd]) => `<tr>
     <td>${nome}</td>
     <td><a class="num-link" onclick="filtrarTratativasPorTransportadora('${encodeURIComponent(nome)}')">${qtd}</a></td>
   </tr>`).join('');
+}
+
+function baixarOcorrenciasResumoExcel() {
+  if (!dadosTabelaOcorrencias.length) { alert('Não há dados para baixar.'); return; }
+  exportarCSV(['Transportadora', 'Ocorrências'], dadosTabelaOcorrencias, 'Ocorrencias por Transportadora');
 }
 
 function fmtData(v) {
@@ -953,9 +999,32 @@ function fmtData(v) {
   return v;
 }
 
+// ---------- Exportar Excel (CSV com separador ";" — abre certinho no Excel BR) ----------
+function exportarCSV(colunas, linhas, nomeArquivo) {
+  const limpar = v => {
+    if (v === undefined || v === null) return '""';
+    // remove HTML embutido (ex: o lápis de editar da Prev Etg) antes de exportar
+    const texto = String(v).replace(/<[^>]*>/g, '').trim();
+    return '"' + texto.replace(/"/g, '""') + '"';
+  };
+  const linhasCSV = [colunas.map(limpar).join(';')]
+    .concat(linhas.map(l => colunas.map((_, idx) => limpar(l[idx])).join(';')));
+  const conteudo = '\uFEFF' + linhasCSV.join('\r\n'); // BOM pro Excel reconhecer acentos
+  const blob = new Blob([conteudo], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nomeArquivo.replace(/[^\w\-]+/g, '_') + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ---------- Modal de detalhamento (genérico, com busca, filtros e ordenação) ----------
 let modalColunasAtuais = [];
 let modalDadosAtuais = [];
+let modalLinhasFiltradas = [];
 let modalFiltrosSelecionados = {};
 let modalOrdenacao = { indice: null, direcao: 1 };
 
@@ -964,11 +1033,13 @@ const COLUNAS_FILTRAVEIS = ['Transportadora', 'Status', 'Ocorrência', 'Entregue
 
 function mostrarModalCarregando(titulo, colunas) {
   document.getElementById('modalTitulo').textContent = titulo;
+  document.getElementById('modalContador').textContent = '';
   document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${colunas.length}">Carregando...</td></tr>`;
   document.getElementById('modalBusca').value = '';
   document.getElementById('modalFiltrosSelects').innerHTML = '';
   modalColunasAtuais = colunas;
   modalDadosAtuais = [];
+  modalLinhasFiltradas = [];
   modalFiltrosSelecionados = {};
   modalOrdenacao = { indice: null, direcao: 1 };
   montarCabecalhoModal();
@@ -1047,10 +1118,21 @@ function aplicarFiltrosModal() {
     });
   }
 
+  modalLinhasFiltradas = linhas;
+  document.getElementById('modalContador').textContent =
+    linhas.length === modalDadosAtuais.length
+      ? `${linhas.length} registro${linhas.length === 1 ? '' : 's'}`
+      : `${linhas.length} de ${modalDadosAtuais.length} registros`;
+
   const numColunas = modalColunasAtuais.length;
   document.getElementById('modalTabelaBody').innerHTML = linhas.length
     ? linhas.map(l => `<tr>${l.map(v => `<td>${v === undefined || v === null ? '' : v}</td>`).join('')}</tr>`).join('')
     : `<tr><td colspan="${numColunas}">Nenhum registro encontrado.</td></tr>`;
+}
+
+function baixarModalExcel() {
+  if (!modalLinhasFiltradas.length) { alert('Não há registros para baixar.'); return; }
+  exportarCSV(modalColunasAtuais, modalLinhasFiltradas, document.getElementById('modalTitulo').textContent);
 }
 
 const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)', 'Entregue (GFW)', 'Data Entrega'];
