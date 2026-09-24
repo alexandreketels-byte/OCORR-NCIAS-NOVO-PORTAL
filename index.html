@@ -885,7 +885,7 @@ let modalFiltrosSelecionados = {};
 let modalOrdenacao = { indice: null, direcao: 1 };
 
 // Colunas que, quando presentes, ganham um dropdown de filtro automático
-const COLUNAS_FILTRAVEIS = ['Transportadora', 'Status', 'Ocorrência', 'Entregue?'];
+const COLUNAS_FILTRAVEIS = ['Transportadora', 'Status', 'Ocorrência', 'Entregue?', 'Entregue (GFW)'];
 
 function mostrarModalCarregando(titulo, colunas) {
   document.getElementById('modalTitulo').textContent = titulo;
@@ -978,7 +978,7 @@ function aplicarFiltrosModal() {
     : `<tr><td colspan="${numColunas}">Nenhum registro encontrado.</td></tr>`;
 }
 
-const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)'];
+const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)', 'Entregue (GFW)', 'Data Entrega'];
 
 let ultimoFiltroPedidos = null;
 
@@ -995,7 +995,8 @@ async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido
     const pedidos = await fetch(`${API_URL}?${params}`).then(r => r.json());
     renderModalLinhas(pedidos.map(p => [
       p.pedido, p.nf, p.cliente, p.cidade, p.loja, fmtData(p.dataColeta),
-      celulaPrevisaoEditavel(p.pedido, fmtData(p.prevEtg)), p.atraso
+      celulaPrevisaoEditavel(p.pedido, fmtData(p.prevEtg)), p.atraso,
+      p.entregueGFW ? 'Sim' : 'Não', fmtData(p.dataEntregaGFW)
     ]));
   } catch (err) {
     document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_PEDIDOS_NAO_RECEBIDOS.length}">Erro ao carregar pedidos.</td></tr>`;
