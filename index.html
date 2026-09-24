@@ -344,13 +344,26 @@ function importarBaixaGFW() {
   });
 }
 
-// ---------- Colar Tratativas de Ocorrências como texto (copiado da tela) ----------
-// Formato: o texto é tabulado (colado direto de uma tabela). Cada ocorrência
+// ---------- Colar Tratativas/Ocorrências como texto (copiado da tela) ----------
+// O sistema tem dois relatórios diferentes que podem ser colados aqui:
+// 1) O relatório DETALHADO (tabulado, com uma seção "MENSAGENS" por pedido) —
+//    usado quando você quer ver as tratativas.
+// 2) O relatório RESUMIDO de ocorrências (uma linha por campo, sem mensagens)
+//    — não tem tratativas porque esse relatório nunca as inclui.
+// Detectamos automaticamente qual é: se o texto tem alguma tabulação (\t),
+// tratamos como o formato 1; senão, como o formato 2.
+function parseTratativasTexto(texto) {
+  return texto.indexOf('\t') !== -1
+    ? parseTratativasTextoTabulado(texto)
+    : parseTratativasTextoResumido(texto);
+}
+
+// Formato 1: tabulado, com uma seção "MENSAGENS" por pedido. Cada ocorrência
 // começa numa linha com a data em DT Ocorr (col 0) e os dados do pedido nas
 // colunas seguintes. Logo abaixo vem uma seção "MENSAGENS" com uma linha por
 // mensagem (data / autor / texto), podendo ter linhas de continuação (texto
 // mais longo que quebrou em várias linhas na célula original).
-function parseTratativasTexto(texto) {
+function parseTratativasTextoTabulado(texto) {
   const REGEX_DATA = /^\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}$/;
   const REGEX_TELEFONE = /^\(\d{2,3}\)[\d-]+$/;
 
@@ -410,6 +423,40 @@ function parseTratativasTexto(texto) {
     }
   }
 
+  return registros;
+}
+
+// Formato 2: relatório resumido — cada registro aparece como uma linha por
+// coluna (DT Ocorr, Loja, Pedido, NF, Cliente, Transp, Contato, Telefone,
+// Ocorrência, Status), intercaladas com muitas linhas em branco (o próprio
+// relatório é assim, sem mensagens). O telefone pode vir em mais de uma linha.
+function parseTratativasTextoResumido(texto) {
+  const REGEX_DATA = /^\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}$/;
+  const REGEX_TELEFONE = /^\(\d{2,3}\)[\d-]+$/;
+
+  const linhas = texto.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const registros = [];
+  let i = 0;
+  while (i < linhas.length) {
+    if (!REGEX_DATA.test(linhas[i])) { i++; continue; }
+    const dtOcorr = linhas[i++];
+    const loja = linhas[i++] || '';
+    const pedido = linhas[i++] || '';
+    const nf = linhas[i++] || '';
+    const cliente = linhas[i++] || '';
+    const transportadora = linhas[i++] || '';
+    const contato = linhas[i++] || '';
+    const telefones = [];
+    while (i < linhas.length && REGEX_TELEFONE.test(linhas[i])) {
+      telefones.push(linhas[i++]);
+    }
+    const ocorrencia = linhas[i++] || '';
+    const status = linhas[i++] || '';
+    registros.push({
+      dtOcorr, loja, pedido, nf, cliente, transportadora, contato,
+      telefone: telefones.join(' / '), ocorrencia, status, mensagens: []
+    });
+  }
   return registros;
 }
 
