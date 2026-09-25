@@ -667,7 +667,7 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
       return [
         r.pedido, r.nf, r.cliente, r.transportadora, info.loja || '', info.vendedor || '',
         r.ocorrencia, r.status,
-        infoEmRota.emRota ? '<span style="color:var(--verde);font-weight:700">Em Rota</span>' : (infoEmRota.dataRomaneio || ''),
+        infoEmRota.emRota ? 'Em Rota' : (infoEmRota.dataRomaneio || ''),
         fmtData(info.previsao || ''), info.recebCliente ? 'Sim' : 'Não',
         fmtData(info.recebCliente || ''), m.data, m.autor, m.texto
       ];
@@ -865,6 +865,7 @@ function aplicarFiltrosTratativas() {
   const idxDataEntrega = COLUNAS_TRATATIVAS.indexOf('Data Entrega');
   const idxDataUltMsg = COLUNAS_TRATATIVAS.indexOf('Data Últ. Msg');
   const idxAutor = COLUNAS_TRATATIVAS.indexOf('Autor Últ. Msg');
+  const idxEmRota = COLUNAS_TRATATIVAS.indexOf('Em Rota');
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
 
   tratativasLinhasFiltradas = linhas;
@@ -884,6 +885,7 @@ function aplicarFiltrosTratativas() {
           let estilo = '';
           if (idx === idxPrevisao && previsaoAtrasada) estilo = 'color:var(--vermelho);font-weight:600';
           else if (idx === idxDataEntrega && valor) estilo = 'color:var(--verde);font-weight:600';
+          else if (idx === idxEmRota && valor === 'Em Rota') estilo = 'color:var(--verde);font-weight:700';
           else if (idx === idxAutor) {
             const cor = corAutor(valor);
             if (cor) estilo = `color:${cor};font-weight:600`;
