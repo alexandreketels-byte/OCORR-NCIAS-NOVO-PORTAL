@@ -579,7 +579,7 @@ function ultimaMensagem(registro) {
 
 const COLUNAS_TRATATIVAS = [
   'Pedido', 'NF', 'Cliente', 'Transportadora', 'Loja', 'Vendedor', 'Ocorrência', 'Status',
-  'Previsão', 'Entregue?', 'Data Entrega', 'Data Últ. Msg', 'Autor Últ. Msg', 'Mensagem'
+  'Em Rota', 'Previsão', 'Entregue?', 'Data Entrega', 'Data Últ. Msg', 'Autor Últ. Msg', 'Mensagem'
 ];
 const COLUNAS_TRATATIVAS_FILTRAVEIS = ['Transportadora', 'Loja', 'Status', 'Ocorrência', 'Entregue?'];
 const CHAVE_LOCALSTORAGE_TRATATIVAS = 'dis_tratativas_texto_v1';
@@ -648,10 +648,13 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
   if (btn) { btn.disabled = true; btn.textContent = 'Processando...'; }
 
   try {
-    let lookup = {};
+    let lookup = {}, lookupEmRota = {};
     if (API_URL && API_URL.indexOf('COLE_AQUI') !== 0) {
       try {
-        lookup = await fetch(`${API_URL}?action=getTabDinamicaLookup`).then(r => r.json());
+        [lookup, lookupEmRota] = await Promise.all([
+          fetch(`${API_URL}?action=getTabDinamicaLookup`).then(r => r.json()),
+          fetch(`${API_URL}?action=getEmRotaGFWLookup`).then(r => r.json())
+        ]);
       } catch (err) { /* segue sem o PROCV se a API falhar */ }
     }
 
@@ -660,9 +663,12 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
     tratativasDadosAtuais = registros.map(r => {
       const m = ultimaMensagem(r);
       const info = lookup[r.pedido] || {};
+      const infoEmRota = lookupEmRota[normalizarChaveNF(r.nf)] || {};
       return [
         r.pedido, r.nf, r.cliente, r.transportadora, info.loja || '', info.vendedor || '',
-        r.ocorrencia, r.status, fmtData(info.previsao || ''), info.recebCliente ? 'Sim' : 'Não',
+        r.ocorrencia, r.status,
+        infoEmRota.emRota ? '<span style="color:var(--verde);font-weight:700">Em Rota</span>' : (infoEmRota.dataRomaneio || ''),
+        fmtData(info.previsao || ''), info.recebCliente ? 'Sim' : 'Não',
         fmtData(info.recebCliente || ''), m.data, m.autor, m.texto
       ];
     });
@@ -1114,6 +1120,12 @@ function fmtData(v) {
     return new Date(v).toLocaleDateString('pt-BR');
   }
   return v;
+}
+
+// Mesma normalização usada no backend (Code.gs) pra bater a NF como chave
+// de cruzamento, ignorando pontuação/zeros à esquerda formatados diferente.
+function normalizarChaveNF(v) {
+  return String(v || '').trim().replace(/\D/g, '');
 }
 
 // ---------- Exportar Excel (CSV com separador ";" — abre certinho no Excel BR) ----------
