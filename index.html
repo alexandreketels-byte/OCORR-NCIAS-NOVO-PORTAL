@@ -108,7 +108,7 @@
     <div class="card">
       <h2>Importar Tabela Dinâmica</h2>
       <p class="desc">Arquivo .csv exportado do sistema. A importação preserva o histórico: pedidos novos são adicionados e pedidos já existentes têm apenas Status Entrega e Receb Cliente atualizados.</p>
-      <input type="file" id="fileTabDinamica" accept=".csv">
+      <input type="file" id="fileTabDinamica">
       <button id="btnTabDinamica" onclick="importarTabDinamica()">Importar</button>
       <div class="progress-wrap" id="progressTabDinamica"><div class="progress-bar" id="progressBarTabDinamica"></div></div>
       <div class="status-line" id="statusTabDinamica"></div>
@@ -118,7 +118,7 @@
     <div class="card">
       <h2>Importar Pedidos Não Recebidos</h2>
       <p class="desc">Relatório exportado do sistema (Data Coleta, Prev Etg, Atraso, Pedido, NF, Cliente, agrupado por Transportadora).</p>
-      <input type="file" id="filePedidosNaoRecebidos" accept=".xls,.html">
+      <input type="file" id="filePedidosNaoRecebidos">
       <button id="btnPedidosNaoRecebidos" onclick="importarPedidosNaoRecebidos()">Importar</button>
       <div class="progress-wrap" id="progressPedidos"><div class="progress-bar" id="progressBarPedidos"></div></div>
       <div class="status-line" id="statusPedidos"></div>
@@ -128,7 +128,7 @@
     <div class="card">
       <h2>Importar Baixa de Entrega GFW</h2>
       <p class="desc">Arquivo .csv de notas fiscais da transportadora GFW. Cruza pelo número da NF com Pedidos Não Recebidos pra saber quais já foram entregues. Cada importação substitui os dados anteriores (foto do momento).</p>
-      <input type="file" id="fileBaixaGFW" accept=".csv">
+      <input type="file" id="fileBaixaGFW">
       <button id="btnBaixaGFW" onclick="importarBaixaGFW()">Importar</button>
       <div class="progress-wrap" id="progressBaixaGFW"><div class="progress-bar" id="progressBarBaixaGFW"></div></div>
       <div class="status-line" id="statusBaixaGFW"></div>
@@ -138,7 +138,7 @@
     <div class="card">
       <h2>Importar Baixa de Entrega RTE</h2>
       <p class="desc">Arquivo .csv ou .xlsx de rastreio da Rodonaves (RTE). Cruza pelo número da NF com Pedidos Não Recebidos pra saber quais já foram entregues, igual à Baixa GFW. Cada importação substitui os dados anteriores (foto do momento).</p>
-      <input type="file" id="fileBaixaRTE" accept=".csv,.xlsx">
+      <input type="file" id="fileBaixaRTE">
       <button id="btnBaixaRTE" onclick="importarBaixaRTE()">Importar</button>
       <div class="progress-wrap" id="progressBaixaRTE"><div class="progress-bar" id="progressBarBaixaRTE"></div></div>
       <div class="status-line" id="statusBaixaRTE"></div>
@@ -148,7 +148,7 @@
     <div class="card">
       <h2>Importar Em Rota GFW</h2>
       <p class="desc">Arquivo .xlsx (relatório REL141) com os pedidos que já saíram para entrega (têm romaneio de emissão) mas ainda não foram baixados como entregues. Cruza pelo número da NF com Pedidos Não Recebidos. Cada importação substitui os dados anteriores (foto do momento).</p>
-      <input type="file" id="fileEmRotaGFW" accept=".xlsx">
+      <input type="file" id="fileEmRotaGFW">
       <button id="btnEmRotaGFW" onclick="importarEmRotaGFW()">Importar</button>
       <div class="progress-wrap" id="progressEmRotaGFW"><div class="progress-bar" id="progressBarEmRotaGFW"></div></div>
       <div class="status-line" id="statusEmRotaGFW"></div>
@@ -366,6 +366,7 @@ function importarTabDinamica() {
   const input = document.getElementById('fileTabDinamica');
   const file = input.files[0];
   if (!file) { alert('Selecione o arquivo CSV primeiro.'); return; }
+  if (/\.xlsx?$/i.test(file.name || '')) { alert('Este importador só lê arquivo .csv. O arquivo selecionado parece ser um Excel — exporte/salve como .csv e tente de novo.'); return; }
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
 
   setStatus('statusTabDinamica', 'Lendo arquivo...', '');
@@ -456,6 +457,7 @@ function importarBaixaGFW() {
   const input = document.getElementById('fileBaixaGFW');
   const file = input.files[0];
   if (!file) { alert('Selecione o arquivo CSV primeiro.'); return; }
+  if (/\.xlsx?$/i.test(file.name || '')) { alert('Este importador só lê arquivo .csv. O arquivo selecionado parece ser um Excel — exporte/salve como .csv e tente de novo.'); return; }
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
 
   setStatus('statusBaixaGFW', 'Lendo arquivo...', '');
@@ -557,6 +559,7 @@ async function importarEmRotaGFW() {
   const input = document.getElementById('fileEmRotaGFW');
   const file = input.files[0];
   if (!file) { alert('Selecione o arquivo .xlsx primeiro.'); return; }
+  if (/\.csv$/i.test(file.name || '')) { alert('Este importador só lê arquivo .xlsx (Excel). O arquivo selecionado parece ser um CSV — exporte como .xlsx e tente de novo.'); return; }
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
 
   setStatus('statusEmRotaGFW', 'Lendo arquivo...', '');
