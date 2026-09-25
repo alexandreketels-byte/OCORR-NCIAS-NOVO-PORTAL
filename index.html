@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Portal de Indicadores</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root {
     /* Tema escuro (padrão) */
@@ -127,6 +128,16 @@
       <div class="status-line" id="statusBaixaRTE"></div>
       <div class="meta" id="metaBaixaRTE"></div>
     </div>
+
+    <div class="card">
+      <h2>Importar Em Rota GFW</h2>
+      <p class="desc">Arquivo .xlsx (relatório REL141) com os pedidos que já saíram para entrega (têm romaneio de emissão) mas ainda não foram baixados como entregues. Cruza pelo número da NF com Pedidos Não Recebidos. Cada importação substitui os dados anteriores (foto do momento).</p>
+      <input type="file" id="fileEmRotaGFW" accept=".xlsx">
+      <button id="btnEmRotaGFW" onclick="importarEmRotaGFW()">Importar</button>
+      <div class="progress-wrap" id="progressEmRotaGFW"><div class="progress-bar" id="progressBarEmRotaGFW"></div></div>
+      <div class="status-line" id="statusEmRotaGFW"></div>
+      <div class="meta" id="metaEmRotaGFW"></div>
+    </div>
   </div>
 
   <div class="indicadores">
@@ -138,7 +149,7 @@
     <table id="tabelaTransportadoras" style="display:none">
       <thead><tr>
         <th>Transportadora</th><th>Pedidos não recebidos</th><th>Em atraso</th><th>Indefinidos</th>
-        <th>Entregues</th><th>Performance</th>
+        <th>Em Rota</th><th>Entregues</th><th>Performance</th>
       </tr></thead>
       <tbody id="tabelaTransportadorasBody"></tbody>
     </table>
@@ -404,6 +415,45 @@ function importarBaixaRTE() {
       toggleBtn('btnBaixaRTE', false);
     }
   });
+}
+
+// ---------- Importação: Em Rota GFW (arquivo .xlsx, relatório REL141) ----------
+function fmtDataHoraCelEmRota(v) {
+  if (!(v instanceof Date)) return v;
+  const p = n => String(n).padStart(2, '0');
+  const dataFmt = `${p(v.getDate())}/${p(v.getMonth() + 1)}/${v.getFullYear()}`;
+  return (v.getHours() === 0 && v.getMinutes() === 0) ? dataFmt : `${dataFmt} ${p(v.getHours())}:${p(v.getMinutes())}`;
+}
+
+async function importarEmRotaGFW() {
+  const input = document.getElementById('fileEmRotaGFW');
+  const file = input.files[0];
+  if (!file) { alert('Selecione o arquivo .xlsx primeiro.'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
+
+  setStatus('statusEmRotaGFW', 'Lendo arquivo...', '');
+  toggleBtn('btnEmRotaGFW', true);
+
+  try {
+    const buffer = await file.arrayBuffer();
+    const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
+    const planilha = wb.Sheets[wb.SheetNames[0]];
+    const aoa = XLSX.utils.sheet_to_json(planilha, { header: 1, raw: true, defval: '' });
+
+    const rows = aoa.slice(1)
+      .filter(r => r[0])
+      .map(r => [
+        r[0], fmtDataHoraCelEmRota(r[1]), fmtDataHoraCelEmRota(r[2]), r[3], r[4],
+        fmtDataHoraCelEmRota(r[5]), fmtDataHoraCelEmRota(r[6]), fmtDataHoraCelEmRota(r[7]), r[8], r[9], r[10]
+      ]);
+
+    await enviarEmLotes(rows, 'importEmRotaGFW', 'statusEmRotaGFW', 'progressEmRotaGFW', 'progressBarEmRotaGFW');
+    carregarIndicadores();
+  } catch (err) {
+    setStatus('statusEmRotaGFW', 'Erro ao ler o arquivo: ' + err.message, 'erro');
+  } finally {
+    toggleBtn('btnEmRotaGFW', false);
+  }
 }
 
 // ---------- Colar Tratativas/Ocorrências como texto (copiado da tela) ----------
@@ -983,6 +1033,10 @@ function renderMeta(status) {
     document.getElementById('metaBaixaRTE').textContent =
       `Última importação: ${new Date(status.BaixaEntregaRTE.ultimaImportacao).toLocaleString('pt-BR')} (${status.BaixaEntregaRTE.totalLinhas} linhas)`;
   }
+  if (status.EmRotaGFW) {
+    document.getElementById('metaEmRotaGFW').textContent =
+      `Última importação: ${new Date(status.EmRotaGFW.ultimaImportacao).toLocaleString('pt-BR')} (${status.EmRotaGFW.totalLinhas} linhas)`;
+  }
 }
 
 let dadosTabelaTransportadoras = [];
@@ -1001,6 +1055,7 @@ function renderTabelaTransportadoras(porTransportadora) {
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false)">${v.qtd}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', true, false)">${v.emAtraso}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, true)">${v.indefinidos}</a></td>
+      <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, false, false, true)">${v.emRota}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, false, true)">${v.entregues}</a></td>
       <td style="color:${cor};font-weight:600">${v.performance.toFixed(1)}%</td>
     </tr>`;
@@ -1009,9 +1064,9 @@ function renderTabelaTransportadoras(porTransportadora) {
 
 function baixarIndicadoresExcel() {
   if (!dadosTabelaTransportadoras.length) { alert('Não há dados para baixar.'); return; }
-  const colunas = ['Transportadora', 'Pedidos não recebidos', 'Em atraso', 'Indefinidos', 'Entregues', 'Performance'];
+  const colunas = ['Transportadora', 'Pedidos não recebidos', 'Em atraso', 'Indefinidos', 'Em Rota', 'Entregues', 'Performance'];
   const linhas = dadosTabelaTransportadoras.map(([nome, v]) =>
-    [nome, v.qtd, v.emAtraso, v.indefinidos, v.entregues, v.performance.toFixed(1) + '%']);
+    [nome, v.qtd, v.emAtraso, v.indefinidos, v.emRota, v.entregues, v.performance.toFixed(1) + '%']);
   exportarCSV(colunas, linhas, 'Indicadores por Transportadora');
 }
 
@@ -1189,24 +1244,26 @@ function baixarModalExcel() {
   exportarCSV(modalColunasAtuais, modalLinhasFiltradas, document.getElementById('modalTitulo').textContent);
 }
 
-const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)', 'Entregue (GFW)', 'Data Entrega (GFW)', 'Entregue (RTE)', 'Data Entrega (RTE)', 'Última Ocorrência'];
+const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)', 'Em Rota', 'Entregue (GFW)', 'Data Entrega (GFW)', 'Entregue (RTE)', 'Data Entrega (RTE)', 'Última Mensagem'];
 
 let ultimoFiltroPedidos = null;
 
-async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregue) {
-  ultimoFiltroPedidos = { transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregue };
+async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregue, apenasEmRota) {
+  ultimoFiltroPedidos = { transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregue, apenasEmRota };
   mostrarModalCarregando(titulo, COLUNAS_PEDIDOS_NAO_RECEBIDOS);
   try {
     const params = new URLSearchParams({
       action: 'getPedidosDetalhe', transportadora,
       apenasAtraso: apenasAtraso ? '1' : '0',
       apenasIndefinido: apenasIndefinido ? '1' : '0',
-      apenasEntregue: apenasEntregue ? '1' : '0'
+      apenasEntregue: apenasEntregue ? '1' : '0',
+      apenasEmRota: apenasEmRota ? '1' : '0'
     });
     const pedidos = await fetch(`${API_URL}?${params}`).then(r => r.json());
     renderModalLinhas(pedidos.map(p => [
       p.pedido, p.nf, p.cliente, p.cidade, p.loja, fmtData(p.dataColeta),
       celulaPrevisaoEditavel(p.pedido, fmtData(p.prevEtg)), p.atraso,
+      p.emRota ? '<span style="color:var(--verde);font-weight:700">Sim</span>' : 'Não',
       p.entregueGFW ? 'Sim' : 'Não', fmtData(p.dataEntregaGFW),
       p.entregueRTE ? 'Sim' : 'Não', fmtData(p.dataEntregaRTE),
       p.ultimaOcorrencia || ''
@@ -1240,20 +1297,21 @@ async function editarPrevisao(pedido) {
 
     // Reabre a mesma lista que estava aberta, já com a previsão atualizada
     if (ultimoFiltroPedidos) {
-      verPedidos(ultimoFiltroPedidos.transportadora, ultimoFiltroPedidos.apenasAtraso, ultimoFiltroPedidos.titulo, ultimoFiltroPedidos.apenasIndefinido, ultimoFiltroPedidos.apenasEntregue);
+      verPedidos(ultimoFiltroPedidos.transportadora, ultimoFiltroPedidos.apenasAtraso, ultimoFiltroPedidos.titulo, ultimoFiltroPedidos.apenasIndefinido, ultimoFiltroPedidos.apenasEntregue, ultimoFiltroPedidos.apenasEmRota);
     }
   } catch (err) {
     alert('Erro ao salvar a previsão: ' + err.message);
   }
 }
 
-function verPedidosPorNome(nomeEncoded, apenasAtraso, apenasIndefinido, apenasEntregue) {
+function verPedidosPorNome(nomeEncoded, apenasAtraso, apenasIndefinido, apenasEntregue, apenasEmRota) {
   const nome = decodeURIComponent(nomeEncoded);
   const titulo = apenasEntregue ? 'Pedidos já entregues — ' + nome
+    : apenasEmRota ? 'Pedidos em rota — ' + nome
     : apenasIndefinido ? 'Pedidos com previsão indefinida — ' + nome
     : apenasAtraso ? 'Pedidos em atraso — ' + nome
     : 'Pedidos não recebidos — ' + nome;
-  verPedidos(nome, !!apenasAtraso, titulo, !!apenasIndefinido, !!apenasEntregue);
+  verPedidos(nome, !!apenasAtraso, titulo, !!apenasIndefinido, !!apenasEntregue, !!apenasEmRota);
 }
 
 const COLUNAS_RECEBIDOS = ['Data', 'Pedido', 'Transportadora'];
