@@ -81,10 +81,26 @@
 </head>
 <body>
 
+<div id="loginOverlay" style="position:fixed;inset:0;background:var(--fundo);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px">
+  <form id="loginForm" onsubmit="return tentarLogin(event)" style="background:var(--card-bg);border:1px solid var(--borda);border-radius:12px;padding:32px;max-width:340px;width:100%;text-align:center">
+    <h2 style="margin:0 0 6px">Portal de Indicadores</h2>
+    <p class="desc" style="margin:0 0 18px">Digite seu PIN de acesso.</p>
+    <input type="password" id="loginPin" inputmode="numeric" placeholder="PIN" autocomplete="off"
+      style="width:100%;padding:10px 12px;border:1px solid var(--borda);border-radius:8px;font-size:1rem;background:var(--fundo);color:var(--texto);text-align:center;letter-spacing:2px;box-sizing:border-box">
+    <button type="submit" id="loginBtn" style="width:100%;margin-top:14px">Entrar</button>
+    <div class="status-line erro" id="loginErro" style="min-height:1.2em;margin-top:10px"></div>
+  </form>
+</div>
+
+<div id="appContent" style="display:none">
 
 <header>
   <h1>Portal de Indicadores</h1>
-  <button id="temaBtn" onclick="alternarTema()">☀️ Tema claro</button>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span id="usuarioLogado" style="color:var(--cinza);font-size:0.9rem"></span>
+    <button id="logoutBtn" onclick="fazerLogout()" type="button">Sair</button>
+    <button id="temaBtn" onclick="alternarTema()">☀️ Tema claro</button>
+  </div>
 </header>
 
 <main>
@@ -230,11 +246,98 @@
   </div>
 </div>
 
+</div>
+
 <script>
 // >>> Cole aqui a URL do seu App da Web do Apps Script (termina em /exec) <<<
 const API_URL = 'https://script.google.com/macros/s/AKfycbyGvGN9dmCKHj4EHHWldpaZOJ8tvz8vpBqIgYTqGlbw93Cuw3h-Guf4gc8AUtlPB20jhw/exec';
 
 const BATCH_SIZE = 2000;
+
+// ---------- Acesso por PIN ----------
+// Intercepta toda chamada fetch() feita pra API_URL e injeta o PIN salvo
+// automaticamente (como parâmetro ?pin= no GET, ou campo "pin" no corpo do
+// POST) — assim nenhuma das dezenas de chamadas à API espalhadas pelo
+// código precisa ser alterada uma por uma.
+const CHAVE_LOCALSTORAGE_PIN = 'dis_pin_v1';
+const CHAVE_LOCALSTORAGE_NOME = 'dis_pin_nome_v1';
+
+const _fetchOriginal = window.fetch.bind(window);
+window.fetch = function(url, options) {
+  if (typeof url === 'string' && API_URL && url.indexOf(API_URL) === 0) {
+    const pin = localStorage.getItem(CHAVE_LOCALSTORAGE_PIN) || '';
+    if (options && options.method === 'POST' && typeof options.body === 'string') {
+      try {
+        const corpo = JSON.parse(options.body);
+        corpo.pin = pin;
+        options = Object.assign({}, options, { body: JSON.stringify(corpo) });
+      } catch (e) { /* corpo não é JSON — segue sem mexer */ }
+    } else {
+      url = url + (url.indexOf('?') === -1 ? '?' : '&') + 'pin=' + encodeURIComponent(pin);
+    }
+  }
+  return _fetchOriginal(url, options);
+};
+
+async function tentarLogin(event) {
+  if (event) event.preventDefault();
+  const pin = document.getElementById('loginPin').value.trim();
+  const erroEl = document.getElementById('loginErro');
+  const btn = document.getElementById('loginBtn');
+  erroEl.textContent = '';
+  if (!pin) { erroEl.textContent = 'Digite seu PIN.'; return false; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { erroEl.textContent = 'API não configurada.'; return false; }
+
+  btn.disabled = true; btn.textContent = 'Entrando...';
+  try {
+    const resp = await _fetchOriginal(`${API_URL}?action=login&pin=${encodeURIComponent(pin)}`).then(r => r.json());
+    if (resp && resp.ok) {
+      localStorage.setItem(CHAVE_LOCALSTORAGE_PIN, pin);
+      localStorage.setItem(CHAVE_LOCALSTORAGE_NOME, resp.nome || '');
+      entrarNoPortal(resp.nome || '');
+    } else {
+      erroEl.textContent = 'PIN incorreto.';
+    }
+  } catch (err) {
+    erroEl.textContent = 'Não consegui verificar o PIN agora. Tente de novo.';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
+  return false;
+}
+
+function entrarNoPortal(nome) {
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('appContent').style.display = '';
+  document.getElementById('usuarioLogado').textContent = nome ? `Olá, ${nome}` : '';
+  carregarIndicadores();
+  restaurarTratativasSalvas();
+}
+
+function fazerLogout() {
+  localStorage.removeItem(CHAVE_LOCALSTORAGE_PIN);
+  localStorage.removeItem(CHAVE_LOCALSTORAGE_NOME);
+  location.reload();
+}
+
+// Se já tem um PIN salvo neste navegador, confirma que ainda é válido
+// (pode ter sido removido da planilha de Usuarios) e entra direto sem
+// pedir de novo; senão mostra a tela de login.
+async function verificarLoginSalvo() {
+  const pinSalvo = localStorage.getItem(CHAVE_LOCALSTORAGE_PIN);
+  if (!pinSalvo || !API_URL || API_URL.indexOf('COLE_AQUI') === 0) return;
+  document.getElementById('loginPin').value = pinSalvo;
+  try {
+    const resp = await _fetchOriginal(`${API_URL}?action=login&pin=${encodeURIComponent(pinSalvo)}`).then(r => r.json());
+    if (resp && resp.ok) {
+      localStorage.setItem(CHAVE_LOCALSTORAGE_NOME, resp.nome || '');
+      entrarNoPortal(resp.nome || '');
+    } else {
+      localStorage.removeItem(CHAVE_LOCALSTORAGE_PIN);
+      localStorage.removeItem(CHAVE_LOCALSTORAGE_NOME);
+    }
+  } catch (err) { /* fica na tela de login, deixa a pessoa tentar manualmente */ }
+}
 
 function fmtMoeda(v) {
   return (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -1386,8 +1489,7 @@ function alternarTema() {
 
 aplicarTema(localStorage.getItem(CHAVE_LOCALSTORAGE_TEMA) || 'dark');
 
-carregarIndicadores();
-restaurarTratativasSalvas();
+verificarLoginSalvo();
 </script>
 </body>
 </html>
