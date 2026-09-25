@@ -968,7 +968,8 @@ function setStatus(id, msg, cls) {
 function toggleBtn(id, disabled) { document.getElementById(id).disabled = disabled; }
 
 // ---------- Indicadores ----------
-async function carregarIndicadores() {
+async function carregarIndicadores(tentativa) {
+  tentativa = tentativa || 1;
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) return;
   document.getElementById('kpis').innerHTML = '<p>Carregando...</p>';
   try {
@@ -983,7 +984,14 @@ async function carregarIndicadores() {
       dados = JSON.parse(textoIndicadores);
       status = JSON.parse(textoStatus);
     } catch (erroParse) {
-      throw new Error('A resposta da API não veio em JSON (provavelmente um erro do Apps Script). Início da resposta: ' + textoIndicadores.slice(0, 300));
+      // A resposta do Apps Script às vezes vem cortada no meio (comum logo
+      // depois de uma importação grande, com a planilha ainda ocupada).
+      // Tenta de novo automaticamente algumas vezes antes de desistir.
+      if (tentativa < 3) {
+        await new Promise(res => setTimeout(res, 1500 * tentativa));
+        return carregarIndicadores(tentativa + 1);
+      }
+      throw new Error('A resposta da API não veio em JSON, mesmo após tentar de novo (provavelmente um erro do Apps Script). Início da resposta: ' + textoIndicadores.slice(0, 300));
     }
     if (dados && dados.error) throw new Error('Erro retornado pela API: ' + dados.error);
 
@@ -995,7 +1003,7 @@ async function carregarIndicadores() {
   } catch (err) {
     console.error('Erro ao carregar indicadores:', err);
     document.getElementById('kpis').innerHTML =
-      `<p>Erro ao carregar indicadores: ${err.message || err}</p>`;
+      `<p>Erro ao carregar indicadores: ${err.message || err} <button type="button" onclick="carregarIndicadores()" style="margin-left:8px">Tentar de novo</button></p>`;
   }
 }
 
@@ -1263,7 +1271,7 @@ async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido
     renderModalLinhas(pedidos.map(p => [
       p.pedido, p.nf, p.cliente, p.cidade, p.loja, fmtData(p.dataColeta),
       celulaPrevisaoEditavel(p.pedido, fmtData(p.prevEtg)), p.atraso,
-      p.emRota ? '<span style="color:var(--verde);font-weight:700">Sim</span>' : 'Não',
+      p.emRota ? '<span style="color:var(--verde);font-weight:700">Em Rota</span>' : (p.dataRomaneio || ''),
       p.entregueGFW ? 'Sim' : 'Não', fmtData(p.dataEntregaGFW),
       p.entregueRTE ? 'Sim' : 'Não', fmtData(p.dataEntregaRTE),
       p.ultimaOcorrencia || ''
