@@ -200,6 +200,8 @@
           <span id="tratativasContador" style="color:var(--cinza);font-size:0.85rem;white-space:nowrap"></span>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
+          <button type="button" onclick="copiarColunaTratativas('Pedido', this)">📋 Copiar Pedidos</button>
+          <button type="button" onclick="copiarColunaTratativas('NF', this)">📋 Copiar NFs</button>
           <button type="button" onclick="baixarTratativasExcel()">⬇ Baixar Excel</button>
           <div style="position:relative">
             <button onclick="toggleColunasPanel()" type="button">Colunas ▾</button>
@@ -226,6 +228,8 @@
         <span id="modalContador" style="color:var(--cinza);font-size:0.85rem"></span>
       </div>
       <div style="display:flex;align-items:center;gap:10px">
+        <button type="button" onclick="copiarColunaModal('Pedido', this)">📋 Copiar Pedidos</button>
+        <button type="button" onclick="copiarColunaModal('NF', this)">📋 Copiar NFs</button>
         <button type="button" onclick="baixarModalExcel()">⬇ Baixar Excel</button>
         <button class="modal-close" onclick="fecharModal()">&times;</button>
       </div>
@@ -1241,6 +1245,37 @@ function fmtData(v) {
 // de cruzamento, ignorando pontuação/zeros à esquerda formatados diferente.
 function normalizarChaveNF(v) {
   return String(v || '').trim().replace(/\D/g, '');
+}
+
+// ---------- Copiar coluna (Pedido/NF) para a área de transferência ----------
+async function copiarParaClipboard(texto, botaoEl) {
+  if (!texto) { alert('Não há registros para copiar.'); return; }
+  try {
+    await navigator.clipboard.writeText(texto);
+  } catch (err) {
+    window.prompt('Não consegui copiar automaticamente. Copie manualmente (Ctrl+C):', texto);
+    return;
+  }
+  if (botaoEl) {
+    const original = botaoEl.textContent;
+    botaoEl.textContent = '✅ Copiado!';
+    botaoEl.disabled = true;
+    setTimeout(() => { botaoEl.textContent = original; botaoEl.disabled = false; }, 1500);
+  }
+}
+
+function copiarColunaModal(nomeColuna, botaoEl) {
+  const idx = modalColunasAtuais.indexOf(nomeColuna);
+  if (idx === -1) return;
+  const valores = modalLinhasFiltradas.map(l => l[idx]).filter(v => v !== undefined && v !== null && v !== '');
+  copiarParaClipboard(valores.join('\n'), botaoEl);
+}
+
+function copiarColunaTratativas(nomeColuna, botaoEl) {
+  const idx = COLUNAS_TRATATIVAS.indexOf(nomeColuna);
+  if (idx === -1) return;
+  const valores = tratativasLinhasFiltradas.map(l => l[idx]).filter(v => v !== undefined && v !== null && v !== '');
+  copiarParaClipboard(valores.join('\n'), botaoEl);
 }
 
 // ---------- Exportar Excel (CSV com separador ";" — abre certinho no Excel BR) ----------
