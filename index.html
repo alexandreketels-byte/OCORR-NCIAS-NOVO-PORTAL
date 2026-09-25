@@ -649,13 +649,14 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
 
   try {
     let lookup = {}, lookupEmRota = {};
+    let avisos = [];
     if (API_URL && API_URL.indexOf('COLE_AQUI') !== 0) {
-      try {
-        [lookup, lookupEmRota] = await Promise.all([
-          fetch(`${API_URL}?action=getTabDinamicaLookup`).then(r => r.json()),
-          fetch(`${API_URL}?action=getEmRotaGFWLookup`).then(r => r.json())
-        ]);
-      } catch (err) { /* segue sem o PROCV se a API falhar */ }
+      const [resLookup, resEmRota] = await Promise.all([
+        buscarJsonComRetry(`${API_URL}?action=getTabDinamicaLookup`),
+        buscarJsonComRetry(`${API_URL}?action=getEmRotaGFWLookup`)
+      ]);
+      if (resLookup.ok) lookup = resLookup.dados; else avisos.push('previsão/loja/vendedor (Tabela Dinâmica)');
+      if (resEmRota.ok) lookupEmRota = resEmRota.dados; else avisos.push('"Em Rota"');
     }
 
     registros.sort((a, b) => a.pedido.localeCompare(b.pedido) || a.dtOcorr.localeCompare(b.dtOcorr));
@@ -683,6 +684,13 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
     aplicarFiltrosTratativas();
 
     await salvarTratativasNaPlanilha(tratativasDadosAtuais);
+    if (avisos.length) {
+      const statusEl = document.getElementById('statusTratativas');
+      if (statusEl) {
+        statusEl.textContent += (statusEl.textContent ? ' ' : '') + `Atenção: não consegui buscar ${avisos.join(' e ')} agora — tente "Processar texto" de novo em alguns segundos.`;
+        statusEl.className = 'status-line erro';
+      }
+    }
     renderKpisOcorrenciasDeTratativas();
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = textoOriginalBtn; }
@@ -975,33 +983,38 @@ function setStatus(id, msg, cls) {
 }
 function toggleBtn(id, disabled) { document.getElementById(id).disabled = disabled; }
 
+// Busca um endpoint que devolve JSON, tentando de novo automaticamente se a
+// resposta vier cortada/incompleta (comum no Apps Script logo depois de uma
+// importação grande, com a planilha ainda ocupada).
+async function buscarJsonComRetry(url, tentativas) {
+  tentativas = tentativas || 3;
+  for (let i = 1; i <= tentativas; i++) {
+    try {
+      const resp = await fetch(url);
+      const texto = await resp.text();
+      const dados = JSON.parse(texto);
+      if (dados && dados.error) return { ok: false, erro: dados.error };
+      return { ok: true, dados };
+    } catch (err) {
+      if (i < tentativas) await new Promise(res => setTimeout(res, 1200 * i));
+    }
+  }
+  return { ok: false, erro: 'resposta inválida mesmo após tentar de novo' };
+}
+
 // ---------- Indicadores ----------
-async function carregarIndicadores(tentativa) {
-  tentativa = tentativa || 1;
+async function carregarIndicadores() {
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) return;
   document.getElementById('kpis').innerHTML = '<p>Carregando...</p>';
   try {
-    const [respIndicadores, respStatus] = await Promise.all([
-      fetch(`${API_URL}?action=getIndicadores`),
-      fetch(`${API_URL}?action=getStatus`)
+    const [resIndicadores, resStatus] = await Promise.all([
+      buscarJsonComRetry(`${API_URL}?action=getIndicadores`),
+      buscarJsonComRetry(`${API_URL}?action=getStatus`)
     ]);
-    const textoIndicadores = await respIndicadores.text();
-    const textoStatus = await respStatus.text();
-    let dados, status;
-    try {
-      dados = JSON.parse(textoIndicadores);
-      status = JSON.parse(textoStatus);
-    } catch (erroParse) {
-      // A resposta do Apps Script às vezes vem cortada no meio (comum logo
-      // depois de uma importação grande, com a planilha ainda ocupada).
-      // Tenta de novo automaticamente algumas vezes antes de desistir.
-      if (tentativa < 3) {
-        await new Promise(res => setTimeout(res, 1500 * tentativa));
-        return carregarIndicadores(tentativa + 1);
-      }
-      throw new Error('A resposta da API não veio em JSON, mesmo após tentar de novo (provavelmente um erro do Apps Script). Início da resposta: ' + textoIndicadores.slice(0, 300));
-    }
-    if (dados && dados.error) throw new Error('Erro retornado pela API: ' + dados.error);
+    if (!resIndicadores.ok) throw new Error('Não consegui carregar os indicadores (' + resIndicadores.erro + ').');
+    if (!resStatus.ok) throw new Error('Não consegui carregar o status das importações (' + resStatus.erro + ').');
+    const dados = resIndicadores.dados;
+    const status = resStatus.dados;
 
     renderKpis(dados);
     renderMeta(status);
