@@ -323,20 +323,17 @@ function fazerLogout() {
 // Se já tem um PIN salvo neste navegador, confirma que ainda é válido
 // (pode ter sido removido da planilha de Usuarios) e entra direto sem
 // pedir de novo; senão mostra a tela de login.
-async function verificarLoginSalvo() {
+// Se já tem um PIN salvo neste navegador, entra direto — sem esperar
+// confirmação nenhuma do servidor (fica logado até clicar em "Sair",
+// nunca cai sozinho por causa de lentidão ou de uma resposta demorada).
+// O PIN continua sendo exigido de verdade em toda chamada à API por baixo
+// dos panos (ver o fetch() interceptado logo acima), então se alguém tiver
+// o acesso removido da aba "Usuarios", as chamadas passam a falhar — só
+// não derruba a tela de login sozinha nesse caso.
+function verificarLoginSalvo() {
   const pinSalvo = localStorage.getItem(CHAVE_LOCALSTORAGE_PIN);
-  if (!pinSalvo || !API_URL || API_URL.indexOf('COLE_AQUI') === 0) return;
-  document.getElementById('loginPin').value = pinSalvo;
-  try {
-    const resp = await _fetchOriginal(`${API_URL}?action=login&pin=${encodeURIComponent(pinSalvo)}`).then(r => r.json());
-    if (resp && resp.ok) {
-      localStorage.setItem(CHAVE_LOCALSTORAGE_NOME, resp.nome || '');
-      entrarNoPortal(resp.nome || '');
-    } else {
-      localStorage.removeItem(CHAVE_LOCALSTORAGE_PIN);
-      localStorage.removeItem(CHAVE_LOCALSTORAGE_NOME);
-    }
-  } catch (err) { /* fica na tela de login, deixa a pessoa tentar manualmente */ }
+  if (!pinSalvo) return;
+  entrarNoPortal(localStorage.getItem(CHAVE_LOCALSTORAGE_NOME) || '');
 }
 
 function fmtMoeda(v) {
