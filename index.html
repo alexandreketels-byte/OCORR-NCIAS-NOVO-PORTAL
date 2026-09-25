@@ -137,8 +137,8 @@
 
     <div class="card">
       <h2>Importar Baixa de Entrega RTE</h2>
-      <p class="desc">Arquivo .csv de rastreio da Rodonaves (RTE). Cruza pelo número da NF com Pedidos Não Recebidos pra saber quais já foram entregues, igual à Baixa GFW. Cada importação substitui os dados anteriores (foto do momento).</p>
-      <input type="file" id="fileBaixaRTE" accept=".csv">
+      <p class="desc">Arquivo .csv ou .xlsx de rastreio da Rodonaves (RTE). Cruza pelo número da NF com Pedidos Não Recebidos pra saber quais já foram entregues, igual à Baixa GFW. Cada importação substitui os dados anteriores (foto do momento).</p>
+      <input type="file" id="fileBaixaRTE" accept=".csv,.xlsx">
       <button id="btnBaixaRTE" onclick="importarBaixaRTE()">Importar</button>
       <div class="progress-wrap" id="progressBaixaRTE"><div class="progress-bar" id="progressBarBaixaRTE"></div></div>
       <div class="status-line" id="statusBaixaRTE"></div>
@@ -487,15 +487,45 @@ function importarBaixaGFW() {
   });
 }
 
-// ---------- Importação: Baixa de Entrega RTE (CSV, rastreio Rodonaves) ----------
+// ---------- Importação: Baixa de Entrega RTE (aceita .csv ou .xlsx, rastreio Rodonaves) ----------
+function processarLinhaRTE(r) {
+  const f = fmtDataHoraCelEmRota; // no-op se já for texto; formata se vier como Data do Excel
+  return [
+    r['CNPJ'], r['NF'], r['NF + 1'], r['Último Status'], f(r['Últ. Atualização']),
+    f(r['Previsão Entrega']), f(r['Data Entrega Real']), r['Remetente'], r['Destinatário'],
+    r['Prazo (dias úteis)'], f(r['Emissão']), r['Entregue'], r['Atrasado']
+  ];
+}
+
 function importarBaixaRTE() {
   const input = document.getElementById('fileBaixaRTE');
   const file = input.files[0];
-  if (!file) { alert('Selecione o arquivo CSV primeiro.'); return; }
+  if (!file) { alert('Selecione o arquivo (.csv ou .xlsx) primeiro.'); return; }
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
 
   setStatus('statusBaixaRTE', 'Lendo arquivo...', '');
   toggleBtn('btnBaixaRTE', true);
+
+  const ehXlsx = /\.xlsx$/i.test(file.name || '');
+
+  if (ehXlsx) {
+    (async () => {
+      try {
+        const buffer = await file.arrayBuffer();
+        const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
+        const planilha = wb.Sheets[wb.SheetNames[0]];
+        const linhasObj = XLSX.utils.sheet_to_json(planilha, { raw: true, defval: '' });
+        const rows = linhasObj.filter(r => r['NF']).map(processarLinhaRTE);
+        await enviarEmLotes(rows, 'importBaixaEntregaRTE', 'statusBaixaRTE', 'progressBaixaRTE', 'progressBarBaixaRTE');
+        carregarIndicadores();
+      } catch (err) {
+        setStatus('statusBaixaRTE', 'Erro ao ler o arquivo: ' + err.message, 'erro');
+      } finally {
+        toggleBtn('btnBaixaRTE', false);
+      }
+    })();
+    return;
+  }
 
   Papa.parse(file, {
     encoding: 'UTF-8',
@@ -503,13 +533,7 @@ function importarBaixaRTE() {
     header: true,
     skipEmptyLines: true,
     complete: async function(results) {
-      const rows = results.data
-        .filter(r => r['NF'])
-        .map(r => [
-          r['CNPJ'], r['NF'], r['NF + 1'], r['Último Status'], r['Últ. Atualização'],
-          r['Previsão Entrega'], r['Data Entrega Real'], r['Remetente'], r['Destinatário'],
-          r['Prazo (dias úteis)'], r['Emissão'], r['Entregue'], r['Atrasado']
-        ]);
+      const rows = results.data.filter(r => r['NF']).map(processarLinhaRTE);
       await enviarEmLotes(rows, 'importBaixaEntregaRTE', 'statusBaixaRTE', 'progressBaixaRTE', 'progressBarBaixaRTE');
       toggleBtn('btnBaixaRTE', false);
       carregarIndicadores();
