@@ -15,6 +15,7 @@
     --fundo: #0d1117; --card-bg: #161b22; --borda: #30363d; --texto: #e6edf3;
     --linha-hover: rgba(255,255,255,0.04); --linha-par: rgba(255,255,255,0.02);
     --linha-destaque: rgba(63,185,80,0.16);
+    --balao-bg: #211a35; --balao-borda: #6e5b9e;
   }
   :root[data-theme="light"] {
     --azul: #1a5fb4; --azul-claro: #e8f0fb; --verde: #26a269;
@@ -23,6 +24,7 @@
     --fundo: #f5f6f8; --card-bg: #ffffff; --borda: #dcdfe4; --texto: #1f2328;
     --linha-hover: rgba(0,0,0,0.03); --linha-par: rgba(0,0,0,0.015);
     --linha-destaque: rgba(38,162,105,0.14);
+    --balao-bg: #f3edff; --balao-borda: #8250df;
   }
   * { box-sizing: border-box; }
   body { font-family: Segoe UI, Arial, sans-serif; background: var(--fundo); margin: 0; color: var(--texto); }
@@ -220,7 +222,7 @@
 </main>
 
 
-<div id="tratativasHistPopover" style="display:none;position:fixed;z-index:1200;width:340px;max-width:calc(100vw - 20px);max-height:320px;overflow-y:auto;background:var(--card-bg);border:1px solid var(--borda);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.45);padding:14px;font-size:0.85rem"></div>
+<div id="tratativasHistPopover" style="display:none;position:fixed;z-index:1200;width:340px;max-width:calc(100vw - 20px);max-height:320px;overflow-y:auto;background:var(--balao-bg);border:1px solid var(--balao-borda);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.45);padding:14px;font-size:0.85rem"></div>
 
 <div class="modal-overlay" id="modalOverlay" onclick="fecharModalSeClicouFora(event)">
   <div class="modal">
