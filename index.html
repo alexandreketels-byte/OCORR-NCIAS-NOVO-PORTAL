@@ -1303,7 +1303,10 @@ function aplicarFiltrosTratativas() {
   document.getElementById('tratativasTabelaBody').innerHTML = linhas.length
     ? linhas.map((l, posicao) => {
         const dataPrevisao = parseDataBR(l[idxPrevisao]);
-        const previsaoAtrasada = !!dataPrevisao && dataPrevisao < hoje && l[idxEntregue] !== 'Sim';
+        const entregue = l[idxEntregue] === 'Sim';
+        const previsaoAtrasada = entregue
+          ? (!!dataPrevisao && !!parseDataBR(l[idxDataEntrega]) && parseDataBR(l[idxDataEntrega]) > dataPrevisao)
+          : (!!dataPrevisao && dataPrevisao < hoje);
         const linhaHoje = ehHoje(l[idxDataUltMsg]);
 
         const celulas = indices.map(idx => {
