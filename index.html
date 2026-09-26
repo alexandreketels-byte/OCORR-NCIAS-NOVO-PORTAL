@@ -716,6 +716,23 @@ function escapeHtml(s) {
   ));
 }
 
+// Formato compacto (array de arrays, sem repetir nome de campo) pra ocupar
+// menos espaço na célula da planilha — [ [data, autor, texto], ... ].
+function compactarHistorico(mensagens) {
+  if (!mensagens || !mensagens.length) return '';
+  return JSON.stringify(mensagens.map(m => [m.data || '', m.autor || '', m.texto || '']));
+}
+
+function expandirHistorico(json) {
+  if (!json) return [];
+  try {
+    const arr = JSON.parse(json);
+    return arr.map(t => ({ data: t[0], autor: t[1], texto: t[2] }));
+  } catch (err) {
+    return [];
+  }
+}
+
 // ---------- Balão com a tratativa completa (ícone 💬 na coluna Mensagem) ----------
 function montarConteudoHistorico(mensagens) {
   if (!mensagens || !mensagens.length) {
@@ -862,12 +879,13 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
     let lookup = {}, lookupEmRota = {};
     let avisos = [];
     if (API_URL && API_URL.indexOf('COLE_AQUI') !== 0) {
-      const [resLookup, resEmRota] = await Promise.all([
-        buscarJsonComRetry(`${API_URL}?action=getTabDinamicaLookup`),
-        buscarJsonComRetry(`${API_URL}?action=getEmRotaGFWLookup`)
-      ]);
-      if (resLookup.ok) lookup = resLookup.dados; else avisos.push('previsão/loja/vendedor (Tabela Dinâmica)');
-      if (resEmRota.ok) lookupEmRota = resEmRota.dados; else avisos.push('"Em Rota"');
+      const resProcv = await buscarJsonComRetry(`${API_URL}?action=getProcvTratativas`);
+      if (resProcv.ok) {
+        lookup = resProcv.dados.tabDinamica || {};
+        lookupEmRota = resProcv.dados.emRota || {};
+      } else {
+        avisos.push('previsão/loja/vendedor e "Em Rota"');
+      }
     }
 
     registros.sort((a, b) => a.pedido.localeCompare(b.pedido) || a.dtOcorr.localeCompare(b.dtOcorr));
@@ -876,14 +894,16 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
       const m = ultimaMensagem(r);
       const info = lookup[r.pedido] || {};
       const infoEmRota = lookupEmRota[normalizarChaveNF(r.nf)] || {};
+      const historico = r.mensagens || [];
       const linha = [
         r.pedido, r.nf, r.cliente, r.transportadora, info.loja || '', info.vendedor || '',
         r.ocorrencia, r.status,
         infoEmRota.emRota ? 'Em Rota' : (infoEmRota.dataRomaneio || ''),
         fmtData(info.previsao || ''), info.recebCliente ? 'Sim' : 'Não',
-        fmtData(info.recebCliente || ''), m.data, m.autor, m.texto
+        fmtData(info.recebCliente || ''), m.data, m.autor, m.texto,
+        compactarHistorico(historico) // coluna oculta (não aparece na tabela) — só pra ir salva na planilha
       ];
-      linha.historico = r.mensagens || []; // usado só pelo balão de "ver tratativa completa"
+      linha.historico = historico; // usado direto pelo balão de "ver tratativa completa" nesta sessão
       return linha;
     });
 
@@ -1140,7 +1160,12 @@ async function restaurarTratativasSalvas() {
     try {
       const linhas = await fetch(`${API_URL}?action=getTratativasDetalhe`).then(r => r.json());
       if (linhas && linhas.length > 0) {
-        tratativasDadosAtuais = linhas.map(l => l.map(v => fmtData(v)));
+        const idxHistorico = COLUNAS_TRATATIVAS.length; // coluna oculta, logo depois das visíveis
+        tratativasDadosAtuais = linhas.map(l => {
+          const linha = l.slice(0, COLUNAS_TRATATIVAS.length).map(v => fmtData(v));
+          linha.historico = expandirHistorico(l[idxHistorico]);
+          return linha;
+        });
         document.getElementById('tratativasArea').style.display = 'block';
         tratativasOrdenacao = { indice: null, direcao: 1 };
         montarCabecalhoTratativas();
