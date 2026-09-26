@@ -187,7 +187,7 @@
 
   <div class="indicadores">
     <h2>Colar Tratativas de Ocorrências (texto)</h2>
-    <p class="desc">Cole aqui o texto das tratativas de ocorrências copiado direto da tela do sistema (com as mensagens de cada pedido). Fica salvo neste navegador até você processar um texto novo — não é enviado nem salvo na planilha.</p>
+    <p class="desc">Cole aqui direto da tela do sistema (com as mensagens de cada pedido) — não precisa mais passar pelo Excel antes, a caixa já reconhece a tabela colada e organiza as colunas sozinha. Fica salvo neste navegador até você processar um texto novo.</p>
     <textarea id="colarOcorrenciasTexto" rows="8" style="width:100%;font-family:inherit;font-size:0.9rem;padding:10px;border:1px solid var(--borda);border-radius:8px;"></textarea>
     <button id="btnProcessarTratativas" onclick="processarOcorrenciasTexto()" style="margin-top:10px">Processar texto</button>
     <div class="status-line" id="statusTratativas"></div>
@@ -849,6 +849,76 @@ function alternarColunaTratativas(nome, visivel) {
 function toggleColunasPanel() {
   const painel = document.getElementById('tratativasColunasPanel');
   painel.style.display = painel.style.display === 'none' ? 'block' : 'none';
+}
+
+// ---------- Colar direto de uma tabela (aproveita o text/html do clipboard) ----------
+// Quando você copia de um relatório na tela e cola numa caixa de texto comum,
+// o navegador só entrega o "text/plain" do clipboard — que muitas vezes não
+// vem separado por colunas (sem tabulação), diferente de quando você cola no
+// Excel primeiro (que lê o "text/html" e remonta a tabela certinho). Aqui a
+// gente intercepta o paste e faz o mesmo: lê o text/html e reconstrói a
+// tabela usando o motor do SheetJS (XLSX.utils.table_to_sheet), que já lida
+// bem com células mescladas — bem mais confiável que tentar reescrever essa
+// lógica na unha.
+function tabelaParaLinhasRobusto(tabela, linhasSaida) {
+  const clone = tabela.cloneNode(true);
+  clone.querySelectorAll('table').forEach(t => t.remove()); // tira as aninhadas — tratadas à parte abaixo
+  // raw:true nas duas chamadas é essencial: sem isso o SheetJS tenta
+  // "entender" texto como "13/01/2026" e reformata como data curta
+  // (viraria "1/13/26" ou pior, interpretado como mês/dia trocado).
+  const ws = XLSX.utils.table_to_sheet(clone, { raw: true });
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+  // iguala a quantidade de colunas entre as linhas desta tabela — o
+  // sheet_to_json corta cada linha no seu último valor preenchido, o que
+  // bagunça a leitura por posição de coluna lá na frente.
+  const maxCols = aoa.reduce((m, l) => Math.max(m, l.length), 0);
+  aoa.forEach(linha => {
+    while (linha.length < maxCols) linha.push('');
+    linhasSaida.push(linha.map(c => String(c === undefined || c === null ? '' : c).replace(/\s+/g, ' ').trim()).join('\t'));
+  });
+
+  // Desce nas tabelas aninhadas dentro de alguma célula (uma por vez, na
+  // ordem em que aparecem), cada uma processada do mesmo jeito.
+  Array.from(tabela.rows).forEach(tr => {
+    Array.from(tr.cells).forEach(td => {
+      Array.from(td.querySelectorAll(':scope > table')).forEach(nested => {
+        tabelaParaLinhasRobusto(nested, linhasSaida);
+      });
+    });
+  });
+}
+
+function htmlParaTextoTabuladoRobusto(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const tabelasTopo = Array.from(doc.querySelectorAll('table')).filter(
+    t => !t.parentElement || !t.parentElement.closest('table')
+  );
+  if (tabelasTopo.length === 0) return null; // não veio como tabela — deixa colar como texto normal
+
+  const linhas = [];
+  tabelasTopo.forEach(t => tabelaParaLinhasRobusto(t, linhas));
+  return linhas.join('\n');
+}
+
+function configurarColarComoTabela() {
+  const textarea = document.getElementById('colarOcorrenciasTexto');
+  if (!textarea) return;
+  textarea.addEventListener('paste', function(e) {
+    const clipboard = e.clipboardData || window.clipboardData;
+    const html = clipboard.getData('text/html');
+    if (!html) return; // sem HTML no clipboard — deixa o navegador colar o texto normalmente
+
+    e.preventDefault();
+    let textoConvertido = null;
+    try {
+      textoConvertido = htmlParaTextoTabuladoRobusto(html);
+    } catch (err) { /* cai no texto puro abaixo se der erro */ }
+
+    const inicio = textarea.selectionStart, fim = textarea.selectionEnd;
+    const textoFinal = textoConvertido || clipboard.getData('text/plain');
+    textarea.value = textarea.value.slice(0, inicio) + textoFinal + textarea.value.slice(fim);
+    textarea.selectionStart = textarea.selectionEnd = inicio + textoFinal.length;
+  });
 }
 
 async function processarOcorrenciasTexto(textoForcado) {
@@ -1659,6 +1729,7 @@ function alternarTema() {
 
 aplicarTema(localStorage.getItem(CHAVE_LOCALSTORAGE_TEMA) || 'dark');
 
+configurarColarComoTabela();
 configurarPopoverHistoricoTratativas();
 verificarLoginSalvo();
 </script>
