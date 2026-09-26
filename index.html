@@ -220,6 +220,8 @@
 </main>
 
 
+<div id="tratativasHistPopover" style="display:none;position:fixed;z-index:1200;width:340px;max-width:calc(100vw - 20px);max-height:320px;overflow-y:auto;background:var(--card-bg);border:1px solid var(--borda);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.45);padding:14px;font-size:0.85rem"></div>
+
 <div class="modal-overlay" id="modalOverlay" onclick="fecharModalSeClicouFora(event)">
   <div class="modal">
     <div class="modal-header">
@@ -708,6 +710,84 @@ function ultimaMensagem(registro) {
   return registro.mensagens[registro.mensagens.length - 1];
 }
 
+function escapeHtml(s) {
+  return String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+// ---------- Balão com a tratativa completa (ícone 💬 na coluna Mensagem) ----------
+function montarConteudoHistorico(mensagens) {
+  if (!mensagens || !mensagens.length) {
+    return '<p style="color:var(--cinza);margin:0">Sem mensagens registradas.</p>';
+  }
+  return mensagens.map(m => `
+    <div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--borda)">
+      <div style="font-size:0.75rem;color:var(--cinza);margin-bottom:3px">${escapeHtml(m.data)}${m.autor ? ' — <span style="font-weight:600">' + escapeHtml(m.autor) + '</span>' : ''}</div>
+      <div>${escapeHtml(m.texto).replace(/\n/g, '<br>')}</div>
+    </div>
+  `).join('');
+}
+
+let _histEsconderTimer = null;
+function _cancelarEsconderHistorico() {
+  if (_histEsconderTimer) { clearTimeout(_histEsconderTimer); _histEsconderTimer = null; }
+}
+function agendarEsconderHistoricoTratativas() {
+  _histEsconderTimer = setTimeout(esconderHistoricoTratativas, 250);
+}
+
+function mostrarHistoricoTratativas(idx, anchorEl) {
+  _cancelarEsconderHistorico();
+  const linha = tratativasLinhasFiltradas[idx];
+  const pop = document.getElementById('tratativasHistPopover');
+  if (!linha) return;
+  pop.innerHTML = montarConteudoHistorico(linha.historico);
+  pop.dataset.idxAtual = String(idx);
+  pop.style.display = 'block';
+
+  const rect = anchorEl.getBoundingClientRect();
+  const largura = pop.offsetWidth || 340;
+  let left = rect.left;
+  if (left + largura > window.innerWidth - 10) left = window.innerWidth - largura - 10;
+  if (left < 10) left = 10;
+  let top = rect.bottom + 6;
+  if (top + pop.offsetHeight > window.innerHeight - 10) top = Math.max(10, rect.top - pop.offsetHeight - 6);
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+}
+
+function esconderHistoricoTratativas() {
+  document.getElementById('tratativasHistPopover').style.display = 'none';
+}
+
+function configurarPopoverHistoricoTratativas() {
+  const tbody = document.getElementById('tratativasTabelaBody');
+  const pop = document.getElementById('tratativasHistPopover');
+  if (!tbody || !pop) return;
+
+  tbody.addEventListener('mouseover', e => {
+    const icone = e.target.closest('.hist-icone');
+    if (icone) mostrarHistoricoTratativas(Number(icone.dataset.idx), icone);
+  });
+  tbody.addEventListener('mouseout', e => {
+    if (e.target.closest('.hist-icone')) agendarEsconderHistoricoTratativas();
+  });
+  tbody.addEventListener('click', e => {
+    const icone = e.target.closest('.hist-icone');
+    if (!icone) return;
+    e.stopPropagation();
+    mostrarHistoricoTratativas(Number(icone.dataset.idx), icone);
+  });
+  pop.addEventListener('mouseover', _cancelarEsconderHistorico);
+  pop.addEventListener('mouseout', agendarEsconderHistoricoTratativas);
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.hist-icone') && !e.target.closest('#tratativasHistPopover')) {
+      esconderHistoricoTratativas();
+    }
+  });
+}
+
 const COLUNAS_TRATATIVAS = [
   'Pedido', 'NF', 'Cliente', 'Transportadora', 'Loja', 'Vendedor', 'Ocorrência', 'Status',
   'Em Rota', 'Previsão', 'Entregue?', 'Data Entrega', 'Data Últ. Msg', 'Autor Últ. Msg', 'Mensagem'
@@ -796,13 +876,15 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
       const m = ultimaMensagem(r);
       const info = lookup[r.pedido] || {};
       const infoEmRota = lookupEmRota[normalizarChaveNF(r.nf)] || {};
-      return [
+      const linha = [
         r.pedido, r.nf, r.cliente, r.transportadora, info.loja || '', info.vendedor || '',
         r.ocorrencia, r.status,
         infoEmRota.emRota ? 'Em Rota' : (infoEmRota.dataRomaneio || ''),
         fmtData(info.previsao || ''), info.recebCliente ? 'Sim' : 'Não',
         fmtData(info.recebCliente || ''), m.data, m.autor, m.texto
       ];
+      linha.historico = r.mensagens || []; // usado só pelo balão de "ver tratativa completa"
+      return linha;
     });
 
     if (aoSucessoLocal) aoSucessoLocal();
@@ -1005,6 +1087,7 @@ function aplicarFiltrosTratativas() {
   const idxDataUltMsg = COLUNAS_TRATATIVAS.indexOf('Data Últ. Msg');
   const idxAutor = COLUNAS_TRATATIVAS.indexOf('Autor Últ. Msg');
   const idxEmRota = COLUNAS_TRATATIVAS.indexOf('Em Rota');
+  const idxMensagem = COLUNAS_TRATATIVAS.indexOf('Mensagem');
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
 
   tratativasLinhasFiltradas = linhas;
@@ -1014,7 +1097,7 @@ function aplicarFiltrosTratativas() {
       : `${linhas.length} de ${tratativasDadosAtuais.length} registros`;
 
   document.getElementById('tratativasTabelaBody').innerHTML = linhas.length
-    ? linhas.map(l => {
+    ? linhas.map((l, posicao) => {
         const dataPrevisao = parseDataBR(l[idxPrevisao]);
         const previsaoAtrasada = !!dataPrevisao && dataPrevisao < hoje && l[idxEntregue] !== 'Sim';
         const linhaHoje = ehHoje(l[idxDataUltMsg]);
@@ -1028,6 +1111,9 @@ function aplicarFiltrosTratativas() {
           else if (idx === idxAutor) {
             const cor = corAutor(valor);
             if (cor) estilo = `color:${cor};font-weight:600`;
+          }
+          if (idx === idxMensagem && (l.historico || []).length > 0) {
+            return `<td${estilo ? ` style="${estilo}"` : ''}>${escapeHtml(valor)} <span class="hist-icone" data-idx="${posicao}" title="Ver tratativa completa">💬</span></td>`;
           }
           return `<td${estilo ? ` style="${estilo}"` : ''}>${valor}</td>`;
         }).join('');
@@ -1548,6 +1634,7 @@ function alternarTema() {
 
 aplicarTema(localStorage.getItem(CHAVE_LOCALSTORAGE_TEMA) || 'dark');
 
+configurarPopoverHistoricoTratativas();
 verificarLoginSalvo();
 </script>
 </body>
