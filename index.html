@@ -28,10 +28,12 @@
   }
   * { box-sizing: border-box; }
   body { font-family: Segoe UI, Arial, sans-serif; background: var(--fundo); margin: 0; color: var(--texto); }
-  header { background: var(--azul); color: #fff; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; }
+  header { background: var(--azul); color: #fff; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
   header h1 { margin: 0; font-size: 1.3rem; }
   #temaBtn { background: rgba(255,255,255,0.18); color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
   #temaBtn:hover { background: rgba(255,255,255,0.3); }
+  .atalho-btn { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.25); padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.88rem; }
+  .atalho-btn:hover { background: rgba(255,255,255,0.25); }
   main { max-width: 1800px; margin: 0 auto; padding: 28px 32px 60px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
   .card { background: var(--card-bg); border: 1px solid var(--borda); border-radius: 10px; padding: 20px; }
@@ -99,6 +101,14 @@
 <header>
   <h1>Portal de Indicadores</h1>
   <div style="display:flex;align-items:center;gap:10px">
+    <a href="https://rastreio-rte-dis.vercel.app/" target="_blank" rel="noopener" style="text-decoration:none">
+      <button type="button" class="atalho-btn">🚚 Rastreio Rodonaves</button>
+    </a>
+    <a href="https://consulta-gfw.atdata.online/login" target="_blank" rel="noopener" style="text-decoration:none">
+      <button type="button" class="atalho-btn">📦 Consulta GFW</button>
+    </a>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
     <span id="usuarioLogado" style="color:var(--cinza);font-size:0.9rem"></span>
     <button id="logoutBtn" onclick="fazerLogout()" type="button">Sair</button>
     <button id="temaBtn" onclick="alternarTema()">☀️ Tema claro</button>
@@ -106,17 +116,6 @@
 </header>
 
 <main>
-  <div class="card" style="margin-bottom:20px">
-    <h2>Atalhos</h2>
-    <p class="desc">Links rápidos pros sistemas usados no processo.</p>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <a href="https://rastreio-rte-dis.vercel.app/" target="_blank" rel="noopener"
-        style="text-decoration:none"><button type="button">🚚 Rastreio Rodonaves</button></a>
-      <a href="https://consulta-gfw.atdata.online/login" target="_blank" rel="noopener"
-        style="text-decoration:none"><button type="button">📦 Consulta GFW</button></a>
-    </div>
-  </div>
-
   <div class="grid">
     <div class="card">
       <h2>Importar Tabela Dinâmica</h2>
