@@ -598,9 +598,99 @@ async function importarEmRotaGFW() {
 // Detectamos automaticamente qual é: se o texto tem alguma tabulação (\t),
 // tratamos como o formato 1; senão, como o formato 2.
 function parseTratativasTexto(texto) {
-  return texto.indexOf('\t') !== -1
-    ? parseTratativasTextoTabulado(texto)
-    : parseTratativasTextoResumido(texto);
+  if (texto.indexOf('\t') === -1) return parseTratativasTextoResumido(texto);
+  const v2 = parseTratativasTextoTabuladoV2(texto);
+  // Rede de segurança: se por algum motivo a versão nova não reconhecer
+  // nada (ex: um formato bem diferente do relatório), tenta a versão
+  // antiga antes de desistir.
+  return v2.length > 0 ? v2 : parseTratativasTextoTabulado(texto);
+}
+
+// Formato tabulado, versão 2 — lida com a estrutura real da tela do
+// sistema: TODAS as linhas de cabeçalho de ocorrência vêm primeiro (uma
+// abaixo da outra), e só DEPOIS vêm as seções "MENSAGENS" de cada uma,
+// também em sequência — mas numa região SEPARADA do texto, não logo
+// abaixo do cabeçalho de cada ocorrência. Por isso processa em duas
+// passagens: primeiro extrai todos os cabeçalhos, depois todos os blocos
+// de mensagens, e junta os dois pela ORDEM (o 1º bloco de mensagens é da
+// 1ª ocorrência, e assim por diante).
+function parseTratativasTextoTabuladoV2(texto) {
+  const REGEX_DATA = /^\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}$/;
+
+  const todasLinhas = texto.split('\n').map(l => l.replace(/\r$/, ''));
+
+  // Acha o limite entre a região de cabeçalhos e a região de mensagens —
+  // normalmente a linha "TOTAL: N ocorrência(s)"; se não achar, usa a
+  // primeira ocorrência da palavra "MENSAGENS" como limite.
+  let idxLimite = todasLinhas.findIndex(l => /TOTAL:\s*\d+\s*ocorrência/i.test(l));
+  if (idxLimite === -1) {
+    idxLimite = todasLinhas.findIndex(l => l.split('\t').some(c => c.trim() === 'MENSAGENS'));
+  }
+  if (idxLimite === -1) idxLimite = todasLinhas.length;
+
+  const regiaoHeader = todasLinhas.slice(0, idxLimite);
+  const regiaoMsgs = todasLinhas.slice(idxLimite + 1);
+
+  // ---- Passo 1: extrai os cabeçalhos de ocorrência ----
+  const registros = [];
+  for (const linhaBruta of regiaoHeader) {
+    const cells = linhaBruta.split('\t').map(c => c.trim());
+    const idxDt = cells.findIndex(c => REGEX_DATA.test(c));
+    if (idxDt === -1) continue;
+
+    // Duas variações de layout observadas: colado direto da tela (Pedido
+    // fica 2 colunas depois da data) ou colado via Excel (Pedido fica 4
+    // colunas depois, com 2 colunas vazias no meio). Detecta pela própria
+    // linha, olhando se a posição "curta" está preenchida.
+    const curto = (cells[idxDt + 2] || '') !== '';
+    const g = curto ? 2 : 4;
+
+    registros.push({
+      dtOcorr: cells[idxDt],
+      loja: cells[idxDt + 1] || '',
+      pedido: cells[idxDt + g] || '',
+      nf: cells[idxDt + g + 1] || '',
+      cliente: cells[idxDt + g + 2] || '',
+      transportadora: cells[idxDt + g + 3] || '',
+      contato: cells[idxDt + g + 4] || '',
+      telefone: cells[idxDt + g + 5] || '',
+      ocorrencia: cells[idxDt + g + 6] || '',
+      status: cells[idxDt + g + 7] || '',
+      mensagens: []
+    });
+  }
+
+  // ---- Passo 2: extrai as seções MENSAGENS, na ordem em que aparecem ----
+  const blocosMensagens = [];
+  let atual = null;
+  for (const linhaBruta of regiaoMsgs) {
+    const cells = linhaBruta.split('\t').map(c => c.trim());
+    if (cells.some(c => c === 'MENSAGENS')) {
+      atual = [];
+      blocosMensagens.push(atual);
+      continue;
+    }
+    if (cells.some(c => c === 'NOVA MENSAGEM' || c === 'TIPO DE OCORRÊNCIA' || c === 'SOLUÇÃO')) {
+      atual = null; // fecha o bloco atual até achar o próximo "MENSAGENS"
+      continue;
+    }
+    if (!atual) continue;
+
+    const idxDtMsg = cells.findIndex(c => REGEX_DATA.test(c));
+    if (idxDtMsg !== -1) {
+      atual.push({ data: cells[idxDtMsg], autor: cells[idxDtMsg + 1] || '', texto: cells[idxDtMsg + 2] || '' });
+    } else {
+      const textoLinha = cells.filter(c => c).join(' ');
+      if (textoLinha && atual.length > 0) {
+        atual[atual.length - 1].texto += ' ' + textoLinha; // continuação da última mensagem
+      }
+    }
+  }
+
+  // ---- Passo 3: junta cabeçalho[i] com blocosMensagens[i], na ordem ----
+  registros.forEach((r, i) => { r.mensagens = blocosMensagens[i] || []; });
+
+  return registros;
 }
 
 // Formato 1: tabulado, com uma seção "MENSAGENS" por pedido. Cada ocorrência
@@ -906,7 +996,14 @@ function configurarColarComoTabela() {
   textarea.addEventListener('paste', function(e) {
     const clipboard = e.clipboardData || window.clipboardData;
     const html = clipboard.getData('text/html');
-    if (!html) return; // sem HTML no clipboard — deixa o navegador colar o texto normalmente
+    if (!html) {
+      // Sem HTML no clipboard — normalmente acontece quando a pessoa usa
+      // "Colar sem formatação" (Ctrl+Shift+V), que já manda só texto puro
+      // pro navegador (a estrutura de tabela nem chega a existir nessa
+      // colagem). Deixa colar o texto puro mesmo assim, só avisa.
+      setStatus('statusTratativas', 'Atenção: colou sem formatação (Ctrl+Shift+V) — a estrutura de colunas pode ter se perdido. Tente colar normal (Ctrl+V) nesta caixa.', 'erro');
+      return;
+    }
 
     e.preventDefault();
     let textoConvertido = null;
@@ -918,6 +1015,7 @@ function configurarColarComoTabela() {
     const textoFinal = textoConvertido || clipboard.getData('text/plain');
     textarea.value = textarea.value.slice(0, inicio) + textoFinal + textarea.value.slice(fim);
     textarea.selectionStart = textarea.selectionEnd = inicio + textoFinal.length;
+    if (textoConvertido) setStatus('statusTratativas', 'Colado como tabela — confira e clique em "Processar texto".', 'ok');
   });
 }
 
