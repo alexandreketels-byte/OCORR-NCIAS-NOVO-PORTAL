@@ -199,11 +199,13 @@
     <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--borda)">
       <h3 id="tituloTipoOcorrencia" style="margin:0;cursor:pointer;user-select:none;font-size:0.95rem" onclick="toggleIndicadoresPorTipoOcorrencia()">▶ Indicadores por Tipo de Ocorrência</h3>
       <div id="indicadoresPorTipoOcorrenciaArea" style="display:none;margin-top:10px">
-        <p class="desc">Clique num número para filtrar a tabela de Tratativas por aquele tipo.</p>
-        <table id="tabelaPorTipoOcorrencia" style="display:none">
-          <thead><tr><th>Tipo de Ocorrência</th><th>Quantidade</th></tr></thead>
-          <tbody id="tabelaPorTipoOcorrenciaBody"></tbody>
-        </table>
+        <p class="desc">Clique num número pra filtrar a tabela de Tratativas por aquele tipo (e loja, se clicar numa célula específica).</p>
+        <div style="overflow-x:auto">
+          <table id="tabelaPorTipoOcorrencia" style="display:none">
+            <thead id="tabelaPorTipoOcorrenciaThead"></thead>
+            <tbody id="tabelaPorTipoOcorrenciaBody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -1173,28 +1175,50 @@ async function salvarTratativasNaPlanilha(linhas) {
 function renderKpisOcorrenciasDeTratativas() {
   const idxTransp = COLUNAS_TRATATIVAS.indexOf('Transportadora');
   const idxOcorrencia = COLUNAS_TRATATIVAS.indexOf('Ocorrência');
+  const idxLoja = COLUNAS_TRATATIVAS.indexOf('Loja');
   const porTransportadora = {};
-  const porTipo = {};
+  const porTipoELoja = {}; // { tipo: { loja: quantidade, ... } }
+  const lojasEncontradas = new Set();
   tratativasDadosAtuais.forEach(l => {
     const t = l[idxTransp] || '(sem transportadora)';
     porTransportadora[t] = (porTransportadora[t] || 0) + 1;
+
     const tipo = l[idxOcorrencia] || '(sem ocorrência)';
-    porTipo[tipo] = (porTipo[tipo] || 0) + 1;
+    const loja = l[idxLoja] || '(sem loja)';
+    lojasEncontradas.add(loja);
+    if (!porTipoELoja[tipo]) porTipoELoja[tipo] = {};
+    porTipoELoja[tipo][loja] = (porTipoELoja[tipo][loja] || 0) + 1;
   });
   renderKpisOcorrencias({ ocorrencias: { total: tratativasDadosAtuais.length, porTransportadora } });
   renderTabelaOcorrencias(porTransportadora);
-  renderTabelaPorTipoOcorrencia(porTipo);
+  renderTabelaPorTipoOcorrencia(porTipoELoja, Array.from(lojasEncontradas).sort());
 }
 
-function renderTabelaPorTipoOcorrencia(porTipo) {
-  const tbody = document.getElementById('tabelaPorTipoOcorrenciaBody');
-  const linhas = Object.entries(porTipo).sort((a, b) => b[1] - a[1]);
-  if (linhas.length === 0) { document.getElementById('tabelaPorTipoOcorrencia').style.display = 'none'; return; }
+function renderTabelaPorTipoOcorrencia(porTipoELoja, lojas) {
+  const tipos = Object.keys(porTipoELoja);
+  if (tipos.length === 0) { document.getElementById('tabelaPorTipoOcorrencia').style.display = 'none'; return; }
   document.getElementById('tabelaPorTipoOcorrencia').style.display = 'table';
-  tbody.innerHTML = linhas.map(([tipo, qtd]) => `<tr>
-    <td>${tipo}</td>
-    <td><a class="num-link" onclick="filtrarTratativasPorColuna('Ocorrência', '${encodeURIComponent(tipo)}')">${qtd}</a></td>
-  </tr>`).join('');
+
+  const totalPorTipo = tipo => Object.values(porTipoELoja[tipo]).reduce((a, b) => a + b, 0);
+  const tiposOrdenados = tipos.sort((a, b) => totalPorTipo(b) - totalPorTipo(a));
+
+  document.getElementById('tabelaPorTipoOcorrenciaThead').innerHTML =
+    `<tr><th>Tipo de Ocorrência</th>${lojas.map(loja => `<th>${loja}</th>`).join('')}<th>Total</th></tr>`;
+
+  document.getElementById('tabelaPorTipoOcorrenciaBody').innerHTML = tiposOrdenados.map(tipo => {
+    const porLoja = porTipoELoja[tipo];
+    const celulasLoja = lojas.map(loja => {
+      const qtd = porLoja[loja] || 0;
+      return qtd === 0
+        ? `<td style="color:var(--cinza)">–</td>`
+        : `<td><a class="num-link" onclick="filtrarTratativasPorDuasColunas('Ocorrência', '${encodeURIComponent(tipo)}', 'Loja', '${encodeURIComponent(loja)}')">${qtd}</a></td>`;
+    }).join('');
+    return `<tr>
+      <td>${tipo}</td>
+      ${celulasLoja}
+      <td><a class="num-link" onclick="filtrarTratativasPorColuna('Ocorrência', '${encodeURIComponent(tipo)}')"><strong>${totalPorTipo(tipo)}</strong></a></td>
+    </tr>`;
+  }).join('');
 }
 
 function toggleIndicadoresPorTipoOcorrencia() {
@@ -1266,6 +1290,20 @@ function filtrarTratativasPorColuna(nomeColuna, valorEncoded) {
 
 function filtrarTratativasPorTransportadora(nomeEncoded) {
   filtrarTratativasPorColuna('Transportadora', nomeEncoded);
+}
+
+// Usado pelas células da tabela pivot (tipo de ocorrência x loja): filtra
+// pelos dois valores ao mesmo tempo.
+function filtrarTratativasPorDuasColunas(coluna1, valor1Encoded, coluna2, valor2Encoded) {
+  [[coluna1, valor1Encoded], [coluna2, valor2Encoded]].forEach(([coluna, valorEncoded]) => {
+    const valor = valorEncoded === 'TODAS' ? '' : decodeURIComponent(valorEncoded);
+    const select = document.querySelector(`#tratativasFiltrosSelects select[data-coluna="${coluna}"]`);
+    if (select) select.value = valor;
+    const idx = COLUNAS_TRATATIVAS.indexOf(coluna);
+    if (idx !== -1) tratativasFiltrosSelecionados[idx] = valor;
+  });
+  aplicarFiltrosTratativas();
+  document.getElementById('tratativasArea').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function ordenarValor(v) {
