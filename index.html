@@ -116,7 +116,11 @@
 </header>
 
 <main>
-  <div class="grid">
+  <div class="indicadores" style="margin-bottom:20px">
+    <h2 id="tituloImportadores" style="margin:0;cursor:pointer;user-select:none" onclick="toggleImportadores()">▶ Importadores</h2>
+  </div>
+
+  <div class="grid" id="gridImportadores" style="display:none">
     <div class="card">
       <h2>Importar Tabela Dinâmica</h2>
       <p class="desc">Arquivo .csv exportado do sistema. A importação preserva o histórico: pedidos novos são adicionados e pedidos já existentes têm apenas Status Entrega e Receb Cliente atualizados.</p>
@@ -2030,6 +2034,20 @@ function alternarTema() {
 }
 
 aplicarTema(localStorage.getItem(CHAVE_LOCALSTORAGE_TEMA) || 'dark');
+
+// ---------- Importadores recolhíveis ----------
+const CHAVE_LOCALSTORAGE_IMPORTADORES = 'dis_importadores_abertos_v1';
+
+function toggleImportadores() {
+  const grid = document.getElementById('gridImportadores');
+  const aberto = grid.style.display !== 'none';
+  const novoEstado = !aberto;
+  grid.style.display = novoEstado ? '' : 'none';
+  document.getElementById('tituloImportadores').textContent = (novoEstado ? '▼' : '▶') + ' Importadores';
+  localStorage.setItem(CHAVE_LOCALSTORAGE_IMPORTADORES, novoEstado ? '1' : '0');
+}
+
+if (localStorage.getItem(CHAVE_LOCALSTORAGE_IMPORTADORES) === '1') toggleImportadores();
 
 configurarColarComoTabela();
 configurarPopoverHistoricoTratativas();
