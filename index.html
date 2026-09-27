@@ -251,6 +251,13 @@
     <div class="modal-filtros">
       <input type="text" id="modalBusca" placeholder="Buscar em todas as colunas..." oninput="aplicarFiltrosModal()">
       <div id="modalFiltrosSelects" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+      <div id="modalFiltroDataEntrega" style="display:none;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="font-size:0.85rem;color:var(--cinza);white-space:nowrap">Entregue de</span>
+        <input type="date" id="modalDataEntregaDe" oninput="aplicarFiltrosModal()">
+        <span style="font-size:0.85rem;color:var(--cinza)">até</span>
+        <input type="date" id="modalDataEntregaAte" oninput="aplicarFiltrosModal()">
+        <button type="button" onclick="limparFiltroDataEntregaModal()" style="padding:6px 10px;font-size:0.8rem">Limpar</button>
+      </div>
     </div>
     <div class="modal-body">
       <table id="modalTabela">
@@ -1651,6 +1658,8 @@ function mostrarModalCarregando(titulo, colunas) {
   document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${colunas.length}">Carregando...</td></tr>`;
   document.getElementById('modalBusca').value = '';
   document.getElementById('modalFiltrosSelects').innerHTML = '';
+  document.getElementById('modalDataEntregaDe').value = '';
+  document.getElementById('modalDataEntregaAte').value = '';
   modalColunasAtuais = colunas;
   modalDadosAtuais = [];
   modalLinhasFiltradas = [];
@@ -1701,6 +1710,18 @@ function montarFiltrosModal() {
     select.onchange = () => { modalFiltrosSelecionados[idx] = select.value; aplicarFiltrosModal(); };
     container.appendChild(select);
   });
+
+  // O filtro por período de entrega (GFW e/ou RTE) só faz sentido nos
+  // relatórios que têm essas colunas (ex: Pedidos Não Recebidos).
+  const temColunaEntrega = modalColunasAtuais.indexOf('Data Entrega (GFW)') !== -1 ||
+    modalColunasAtuais.indexOf('Data Entrega (RTE)') !== -1;
+  document.getElementById('modalFiltroDataEntrega').style.display = temColunaEntrega ? 'flex' : 'none';
+}
+
+function limparFiltroDataEntregaModal() {
+  document.getElementById('modalDataEntregaDe').value = '';
+  document.getElementById('modalDataEntregaAte').value = '';
+  aplicarFiltrosModal();
 }
 
 function aplicarFiltrosModal() {
@@ -1712,6 +1733,25 @@ function aplicarFiltrosModal() {
     const valor = modalFiltrosSelecionados[idx];
     if (valor) linhas = linhas.filter(l => String(l[idx] ?? '') === valor);
   });
+
+  // Filtro por período de entrega — considera a data que estiver
+  // preenchida, seja da baixa GFW ou da RTE (cada pedido normalmente só
+  // tem uma das duas).
+  const dataDeStr = document.getElementById('modalDataEntregaDe').value;
+  const dataAteStr = document.getElementById('modalDataEntregaAte').value;
+  if (dataDeStr || dataAteStr) {
+    const idxGFW = modalColunasAtuais.indexOf('Data Entrega (GFW)');
+    const idxRTE = modalColunasAtuais.indexOf('Data Entrega (RTE)');
+    const dataDe = dataDeStr ? new Date(dataDeStr + 'T00:00:00') : null;
+    const dataAte = dataAteStr ? new Date(dataAteStr + 'T00:00:00') : null;
+    linhas = linhas.filter(l => {
+      const candidatas = [idxGFW, idxRTE]
+        .filter(idx => idx !== -1)
+        .map(idx => parseDataBR(l[idx]))
+        .filter(d => d !== null);
+      return candidatas.some(d => (!dataDe || d >= dataDe) && (!dataAte || d <= dataAte));
+    });
+  }
 
   if (busca) {
     linhas = linhas.filter(l => l.some(v => String(v ?? '').toLowerCase().includes(busca)));
