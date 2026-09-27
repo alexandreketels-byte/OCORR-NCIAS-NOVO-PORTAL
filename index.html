@@ -60,6 +60,19 @@
   tbody tr:hover { background: var(--linha-hover); }
   tbody tr.linha-destaque { background: var(--linha-destaque); }
   tbody tr.linha-destaque:hover { background: var(--linha-destaque); filter: brightness(1.1); }
+
+  /* Piscar quando a última mensagem menciona @camila e/ou @victoria */
+  @keyframes piscaRoxo { 0%, 100% { background-color: transparent; } 50% { background-color: rgba(194,151,255,0.35); } }
+  @keyframes piscaVermelho { 0%, 100% { background-color: transparent; } 50% { background-color: rgba(248,81,73,0.35); } }
+  @keyframes piscaAmbos {
+    0%, 8%   { background-color: rgba(194,151,255,0.35); }
+    33%, 41% { background-color: rgba(248,81,73,0.35); }
+    16%, 25%, 50%, 100% { background-color: transparent; }
+  }
+  .pisca-mencao { font-weight: 600; }
+  .pisca-roxo { animation: piscaRoxo 1.3s ease-in-out infinite; }
+  .pisca-vermelho { animation: piscaVermelho 1.3s ease-in-out infinite; }
+  .pisca-ambos { animation: piscaAmbos 2.6s ease-in-out infinite; }
   #refreshBtn { margin-top: 14px; }
   .kpi.clicavel { cursor: pointer; }
   .kpi.clicavel:hover { box-shadow: 0 0 0 2px var(--azul-claro); }
@@ -1381,6 +1394,19 @@ function corAutor(autor) {
   return encontrado ? encontrado.cor : null;
 }
 
+// Se a última mensagem menciona @camila e/ou @victoria, faz a célula
+// piscar na cor de cada uma (mesma cor já usada pro nome do autor); se
+// citar as duas, alterna piscando entre as duas cores.
+function classePiscaMencao(texto) {
+  if (!texto) return '';
+  const temCamila = /@camila/i.test(texto);
+  const temVictoria = /@vict[oó]ria/i.test(texto);
+  if (temCamila && temVictoria) return 'pisca-mencao pisca-ambos';
+  if (temCamila) return 'pisca-mencao pisca-roxo';
+  if (temVictoria) return 'pisca-mencao pisca-vermelho';
+  return '';
+}
+
 function limparFiltroDataEntregaTratativas() {
   document.getElementById('tratativasDataEntregaDe').value = '';
   document.getElementById('tratativasDataEntregaAte').value = '';
@@ -1463,8 +1489,13 @@ function aplicarFiltrosTratativas() {
             const cor = corAutor(valor);
             if (cor) estilo = `color:${cor};font-weight:600`;
           }
-          if (idx === idxMensagem && (l.historico || []).length > 0) {
-            return `<td${estilo ? ` style="${estilo}"` : ''}>${escapeHtml(valor)} <span class="hist-icone" data-idx="${posicao}" title="Ver tratativa completa">💬</span></td>`;
+          if (idx === idxMensagem) {
+            const classePisca = classePiscaMencao(valor);
+            const classeAttr = classePisca ? ` class="${classePisca}"` : '';
+            const icone = (l.historico || []).length > 0
+              ? ` <span class="hist-icone" data-idx="${posicao}" title="Ver tratativa completa">💬</span>`
+              : '';
+            return `<td${estilo ? ` style="${estilo}"` : ''}${classeAttr}>${escapeHtml(valor)}${icone}</td>`;
           }
           return `<td${estilo ? ` style="${estilo}"` : ''}>${valor}</td>`;
         }).join('');
