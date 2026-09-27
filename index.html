@@ -199,7 +199,10 @@
     <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--borda)">
       <h3 id="tituloTipoOcorrencia" style="margin:0;cursor:pointer;user-select:none;font-size:0.95rem" onclick="toggleIndicadoresPorTipoOcorrencia()">▶ Indicadores por Tipo de Ocorrência</h3>
       <div id="indicadoresPorTipoOcorrenciaArea" style="display:none;margin-top:10px">
-        <p class="desc">Clique num número pra filtrar a tabela de Tratativas por aquele tipo (e loja, se clicar numa célula específica).</p>
+        <p class="desc">
+          Clique num número pra filtrar a tabela de Tratativas por aquele tipo (e loja, se clicar numa célula específica).
+          <span id="tratativasTogglePorLoja" onclick="togglePorLojaOcorrencia()" style="cursor:pointer;color:var(--azul);white-space:nowrap;margin-left:6px">▶ Detalhar por loja</span>
+        </p>
         <div style="overflow-x:auto">
           <table id="tabelaPorTipoOcorrencia" style="display:none">
             <thead id="tabelaPorTipoOcorrenciaThead"></thead>
