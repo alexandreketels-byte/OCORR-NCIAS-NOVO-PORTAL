@@ -220,6 +220,13 @@
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:1">
           <input type="text" id="tratativasBusca" placeholder="Buscar em todas as colunas..." oninput="aplicarFiltrosTratativas()">
           <div id="tratativasFiltrosSelects" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span style="font-size:0.85rem;color:var(--cinza);white-space:nowrap">Entregue de</span>
+            <input type="date" id="tratativasDataEntregaDe" oninput="aplicarFiltrosTratativas()">
+            <span style="font-size:0.85rem;color:var(--cinza)">até</span>
+            <input type="date" id="tratativasDataEntregaAte" oninput="aplicarFiltrosTratativas()">
+            <button type="button" onclick="limparFiltroDataEntregaTratativas()" style="padding:6px 10px;font-size:0.8rem">Limpar</button>
+          </div>
           <span id="tratativasContador" style="color:var(--cinza);font-size:0.85rem;white-space:nowrap"></span>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
@@ -1313,6 +1320,12 @@ function corAutor(autor) {
   return encontrado ? encontrado.cor : null;
 }
 
+function limparFiltroDataEntregaTratativas() {
+  document.getElementById('tratativasDataEntregaDe').value = '';
+  document.getElementById('tratativasDataEntregaAte').value = '';
+  aplicarFiltrosTratativas();
+}
+
 function aplicarFiltrosTratativas() {
   const busca = (document.getElementById('tratativasBusca').value || '').toLowerCase().trim();
   let linhas = tratativasDadosAtuais;
@@ -1322,6 +1335,18 @@ function aplicarFiltrosTratativas() {
     const valor = tratativasFiltrosSelecionados[idx];
     if (valor) linhas = linhas.filter(l => String(l[idx] ?? '') === valor);
   });
+
+  const dataDeStr = document.getElementById('tratativasDataEntregaDe').value;
+  const dataAteStr = document.getElementById('tratativasDataEntregaAte').value;
+  if (dataDeStr || dataAteStr) {
+    const idxDataEntregaFiltro = COLUNAS_TRATATIVAS.indexOf('Data Entrega');
+    const dataDe = dataDeStr ? new Date(dataDeStr + 'T00:00:00') : null;
+    const dataAte = dataAteStr ? new Date(dataAteStr + 'T00:00:00') : null;
+    linhas = linhas.filter(l => {
+      const d = parseDataBR(l[idxDataEntregaFiltro]);
+      return !!d && (!dataDe || d >= dataDe) && (!dataAte || d <= dataAte);
+    });
+  }
 
   if (busca) {
     linhas = linhas.filter(l => l.some(v => String(v ?? '').toLowerCase().includes(busca)));
