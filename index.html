@@ -77,7 +77,7 @@
   .modal-close { background: none; color: var(--cinza); font-size: 1.4rem; padding: 0 6px; }
   .modal-filtros { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px 0; }
   .modal-filtros input[type=text] { flex: 1 1 220px; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 6px; font-size: 0.88rem; background: var(--fundo); color: var(--texto); }
-  .modal-filtros select { padding: 8px 10px; border: 1px solid var(--borda); border-radius: 6px; font-size: 0.88rem; background: var(--fundo); color: var(--texto); }
+  .modal-filtros select, .modal-filtros input[type=date] { padding: 8px 10px; border: 1px solid var(--borda); border-radius: 6px; font-size: 0.88rem; background: var(--fundo); color: var(--texto); }
   .modal-body { padding: 0 20px 20px; overflow-y: auto; }
   .modal-body table { margin-top: 12px; }
   .modal-body th { position: sticky; top: 0; background: var(--azul-claro); }
@@ -195,6 +195,17 @@
       <thead><tr><th>Transportadora</th><th>Ocorrências</th></tr></thead>
       <tbody id="tabelaOcorrenciasBody"></tbody>
     </table>
+
+    <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--borda)">
+      <h3 id="tituloTipoOcorrencia" style="margin:0;cursor:pointer;user-select:none;font-size:0.95rem" onclick="toggleIndicadoresPorTipoOcorrencia()">▶ Indicadores por Tipo de Ocorrência</h3>
+      <div id="indicadoresPorTipoOcorrenciaArea" style="display:none;margin-top:10px">
+        <p class="desc">Clique num número para filtrar a tabela de Tratativas por aquele tipo.</p>
+        <table id="tabelaPorTipoOcorrencia" style="display:none">
+          <thead><tr><th>Tipo de Ocorrência</th><th>Quantidade</th></tr></thead>
+          <tbody id="tabelaPorTipoOcorrenciaBody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <div class="indicadores">
@@ -1154,13 +1165,36 @@ async function salvarTratativasNaPlanilha(linhas) {
 // dados já carregados nas Tratativas, sem precisar chamar a API de novo.
 function renderKpisOcorrenciasDeTratativas() {
   const idxTransp = COLUNAS_TRATATIVAS.indexOf('Transportadora');
+  const idxOcorrencia = COLUNAS_TRATATIVAS.indexOf('Ocorrência');
   const porTransportadora = {};
+  const porTipo = {};
   tratativasDadosAtuais.forEach(l => {
     const t = l[idxTransp] || '(sem transportadora)';
     porTransportadora[t] = (porTransportadora[t] || 0) + 1;
+    const tipo = l[idxOcorrencia] || '(sem ocorrência)';
+    porTipo[tipo] = (porTipo[tipo] || 0) + 1;
   });
   renderKpisOcorrencias({ ocorrencias: { total: tratativasDadosAtuais.length, porTransportadora } });
   renderTabelaOcorrencias(porTransportadora);
+  renderTabelaPorTipoOcorrencia(porTipo);
+}
+
+function renderTabelaPorTipoOcorrencia(porTipo) {
+  const tbody = document.getElementById('tabelaPorTipoOcorrenciaBody');
+  const linhas = Object.entries(porTipo).sort((a, b) => b[1] - a[1]);
+  if (linhas.length === 0) { document.getElementById('tabelaPorTipoOcorrencia').style.display = 'none'; return; }
+  document.getElementById('tabelaPorTipoOcorrencia').style.display = 'table';
+  tbody.innerHTML = linhas.map(([tipo, qtd]) => `<tr>
+    <td>${tipo}</td>
+    <td><a class="num-link" onclick="filtrarTratativasPorColuna('Ocorrência', '${encodeURIComponent(tipo)}')">${qtd}</a></td>
+  </tr>`).join('');
+}
+
+function toggleIndicadoresPorTipoOcorrencia() {
+  const area = document.getElementById('indicadoresPorTipoOcorrenciaArea');
+  const aberto = area.style.display !== 'none';
+  area.style.display = aberto ? 'none' : 'block';
+  document.getElementById('tituloTipoOcorrencia').textContent = (aberto ? '▶' : '▼') + ' Indicadores por Tipo de Ocorrência';
 }
 
 function montarCabecalhoTratativas() {
@@ -1208,16 +1242,23 @@ function montarFiltrosTratativas() {
 
 // Usado pelo card "Ocorrências" acima: ao clicar num número, filtra a tabela
 // de Tratativas por aquela transportadora e rola a tela até ela.
-function filtrarTratativasPorTransportadora(nomeEncoded) {
-  const nome = nomeEncoded === 'TODAS' ? '' : decodeURIComponent(nomeEncoded);
-  const select = document.querySelector('#tratativasFiltrosSelects select[data-coluna="Transportadora"]');
+// Usado pelos cards "Ocorrências" acima: ao clicar num número, filtra a
+// tabela de Tratativas por aquele valor (transportadora, tipo de
+// ocorrência, etc.) e rola a tela até ela.
+function filtrarTratativasPorColuna(nomeColuna, valorEncoded) {
+  const valor = valorEncoded === 'TODAS' ? '' : decodeURIComponent(valorEncoded);
+  const select = document.querySelector(`#tratativasFiltrosSelects select[data-coluna="${nomeColuna}"]`);
   if (select) {
-    select.value = nome;
-    const idx = COLUNAS_TRATATIVAS.indexOf('Transportadora');
-    tratativasFiltrosSelecionados[idx] = nome;
+    select.value = valor;
+    const idx = COLUNAS_TRATATIVAS.indexOf(nomeColuna);
+    tratativasFiltrosSelecionados[idx] = valor;
     aplicarFiltrosTratativas();
   }
   document.getElementById('tratativasArea').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function filtrarTratativasPorTransportadora(nomeEncoded) {
+  filtrarTratativasPorColuna('Transportadora', nomeEncoded);
 }
 
 function ordenarValor(v) {
