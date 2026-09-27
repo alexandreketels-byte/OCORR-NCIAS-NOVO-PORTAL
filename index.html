@@ -61,18 +61,12 @@
   tbody tr.linha-destaque { background: var(--linha-destaque); }
   tbody tr.linha-destaque:hover { background: var(--linha-destaque); filter: brightness(1.1); }
 
-  /* Piscar quando a última mensagem menciona @camila e/ou @victoria */
-  @keyframes piscaRoxo { 0%, 100% { background-color: transparent; } 50% { background-color: rgba(194,151,255,0.35); } }
-  @keyframes piscaVermelho { 0%, 100% { background-color: transparent; } 50% { background-color: rgba(248,81,73,0.35); } }
-  @keyframes piscaAmbos {
-    0%, 8%   { background-color: rgba(194,151,255,0.35); }
-    33%, 41% { background-color: rgba(248,81,73,0.35); }
-    16%, 25%, 50%, 100% { background-color: transparent; }
-  }
-  .pisca-mencao { font-weight: 600; }
-  .pisca-roxo { animation: piscaRoxo 1.3s ease-in-out infinite; }
-  .pisca-vermelho { animation: piscaVermelho 1.3s ease-in-out infinite; }
-  .pisca-ambos { animation: piscaAmbos 2.6s ease-in-out infinite; }
+  /* Piscar quando a última mensagem menciona @camila, @victoria, @ketels,
+     @paloma ou @luiz/@luis — a cor em si vem da variável --pisca-cor,
+     definida por linha (e alternada via JS quando tem mais de uma pessoa
+     citada), então não precisa de uma animação por combinação possível. */
+  @keyframes piscaMencaoAnim { 0%, 100% { background-color: transparent; } 50% { background-color: var(--pisca-cor, transparent); } }
+  .pisca-mencao { font-weight: 600; animation: piscaMencaoAnim 1.3s ease-in-out infinite; }
   #refreshBtn { margin-top: 14px; }
   .kpi.clicavel { cursor: pointer; }
   .kpi.clicavel:hover { box-shadow: 0 0 0 2px var(--azul-claro); }
@@ -1394,18 +1388,35 @@ function corAutor(autor) {
   return encontrado ? encontrado.cor : null;
 }
 
-// Se a última mensagem menciona @camila e/ou @victoria, faz a célula
-// piscar na cor de cada uma (mesma cor já usada pro nome do autor); se
-// citar as duas, alterna piscando entre as duas cores.
-function classePiscaMencao(texto) {
-  if (!texto) return '';
-  const temCamila = /@camila/i.test(texto);
-  const temVictoria = /@vict[oó]ria/i.test(texto);
-  if (temCamila && temVictoria) return 'pisca-mencao pisca-ambos';
-  if (temCamila) return 'pisca-mencao pisca-roxo';
-  if (temVictoria) return 'pisca-mencao pisca-vermelho';
-  return '';
+// Se a última mensagem menciona @camila, @victoria, @ketels, @paloma e/ou
+// @luiz(luis), retorna a(s) cor(es) correspondente(s) — mesma cor já usada
+// pro nome de cada uma. Se for só uma pessoa, pisca fixo nessa cor; se for
+// mais de uma, o piscar alterna entre todas (ver ciclarCoresPiscaMencao).
+const MENCOES_PISCA = [
+  { regex: /@camila/i, cor: 'rgba(194,151,255,0.35)' },
+  { regex: /@vict[oó]ria/i, cor: 'rgba(248,81,73,0.35)' },
+  { regex: /@ketels/i, cor: 'rgba(227,179,65,0.35)' },
+  { regex: /@paloma/i, cor: 'rgba(63,185,80,0.35)' },
+  { regex: /@lu[ií][sz]/i, cor: 'rgba(76,141,255,0.35)' }
+];
+
+function coresPiscaMencao(texto) {
+  if (!texto) return [];
+  return MENCOES_PISCA.filter(m => m.regex.test(texto)).map(m => m.cor);
 }
+
+// Um único intervalo compartilhado pra toda a página: alterna a cor de
+// fundo (via --pisca-cor) de qualquer célula que tenha mais de uma pessoa
+// citada — assim não precisa de uma animação CSS diferente pra cada
+// combinação possível de pessoas.
+let _piscaMencaoTick = 0;
+setInterval(() => {
+  _piscaMencaoTick++;
+  document.querySelectorAll('.pisca-mencao[data-cores]').forEach(el => {
+    const cores = el.dataset.cores.split('|');
+    el.style.setProperty('--pisca-cor', cores[_piscaMencaoTick % cores.length]);
+  });
+}, 900);
 
 function limparFiltroDataEntregaTratativas() {
   document.getElementById('tratativasDataEntregaDe').value = '';
@@ -1490,12 +1501,17 @@ function aplicarFiltrosTratativas() {
             if (cor) estilo = `color:${cor};font-weight:600`;
           }
           if (idx === idxMensagem) {
-            const classePisca = classePiscaMencao(valor);
-            const classeAttr = classePisca ? ` class="${classePisca}"` : '';
+            const cores = coresPiscaMencao(valor);
+            let atributosPisca = '';
+            if (cores.length === 1) {
+              atributosPisca = ` class="pisca-mencao" style="--pisca-cor:${cores[0]}"`;
+            } else if (cores.length > 1) {
+              atributosPisca = ` class="pisca-mencao" data-cores="${cores.join('|')}" style="--pisca-cor:${cores[0]}"`;
+            }
             const icone = (l.historico || []).length > 0
               ? ` <span class="hist-icone" data-idx="${posicao}" title="Ver tratativa completa">💬</span>`
               : '';
-            return `<td${estilo ? ` style="${estilo}"` : ''}${classeAttr}>${escapeHtml(valor)}${icone}</td>`;
+            return `<td${atributosPisca}>${escapeHtml(valor)}${icone}</td>`;
           }
           return `<td${estilo ? ` style="${estilo}"` : ''}>${valor}</td>`;
         }).join('');
