@@ -1175,6 +1175,10 @@ async function salvarTratativasNaPlanilha(linhas) {
 
 // Recalcula o card "Ocorrências" (KPI + tabela por transportadora) direto dos
 // dados já carregados nas Tratativas, sem precisar chamar a API de novo.
+let tratativasPorLojaExpandido = false;
+let _ultimoPorTipoELoja = {};
+let _ultimasLojas = [];
+
 function renderKpisOcorrenciasDeTratativas() {
   const idxTransp = COLUNAS_TRATATIVAS.indexOf('Transportadora');
   const idxOcorrencia = COLUNAS_TRATATIVAS.indexOf('Ocorrência');
@@ -1194,14 +1198,26 @@ function renderKpisOcorrenciasDeTratativas() {
   });
   renderKpisOcorrencias({ ocorrencias: { total: tratativasDadosAtuais.length, porTransportadora } });
   renderTabelaOcorrencias(porTransportadora);
-  renderTabelaPorTipoOcorrencia(porTipoELoja, Array.from(lojasEncontradas).sort());
+
+  _ultimoPorTipoELoja = porTipoELoja;
+  _ultimasLojas = Array.from(lojasEncontradas).sort();
+  renderTabelaPorTipoOcorrencia(_ultimoPorTipoELoja, _ultimasLojas);
 }
 
-function renderTabelaPorTipoOcorrencia(porTipoELoja, lojas) {
+function togglePorLojaOcorrencia() {
+  tratativasPorLojaExpandido = !tratativasPorLojaExpandido;
+  renderTabelaPorTipoOcorrencia(_ultimoPorTipoELoja, _ultimasLojas);
+}
+
+function renderTabelaPorTipoOcorrencia(porTipoELoja, todasLojas) {
   const tipos = Object.keys(porTipoELoja);
   if (tipos.length === 0) { document.getElementById('tabelaPorTipoOcorrencia').style.display = 'none'; return; }
   document.getElementById('tabelaPorTipoOcorrencia').style.display = 'table';
 
+  document.getElementById('tratativasTogglePorLoja').textContent =
+    tratativasPorLojaExpandido ? '▼ Ocultar detalhamento por loja' : '▶ Detalhar por loja';
+
+  const lojas = tratativasPorLojaExpandido ? todasLojas : [];
   const totalPorTipo = tipo => Object.values(porTipoELoja[tipo]).reduce((a, b) => a + b, 0);
   const tiposOrdenados = tipos.sort((a, b) => totalPorTipo(b) - totalPorTipo(a));
 
