@@ -49,6 +49,8 @@
   .status-line { font-size: 0.85rem; color: var(--cinza); margin-top: 8px; }
   .status-line.ok { color: var(--verde); }
   .status-line.erro { color: var(--vermelho); }
+  /* Estados de "em andamento" (Carregando..., Lendo arquivo..., Salvando...) em amarelo */
+  .carregando, .status-line.carregando { color: var(--amarelo); font-weight: 600; }
   .meta { font-size: 0.8rem; color: var(--cinza); margin-top: 6px; }
   .indicadores { margin-top: 28px; }
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 14px; }
@@ -201,7 +203,7 @@
       <h2 style="margin:0">Indicadores</h2>
       <button type="button" onclick="baixarIndicadoresExcel()">⬇ Baixar Excel</button>
     </div>
-    <div class="kpis" id="kpis"><p>Carregando...</p></div>
+    <div class="kpis" id="kpis"><p class="carregando">Carregando...</p></div>
     <table id="tabelaTransportadoras" style="display:none">
       <thead><tr>
         <th>Transportadora</th><th>Pedidos não recebidos</th><th>Em atraso</th><th>Indefinidos</th>
@@ -218,7 +220,7 @@
       <button type="button" onclick="baixarOcorrenciasResumoExcel()">⬇ Baixar Excel</button>
     </div>
     <p class="desc">Calculado a partir do que estiver colado em "Tratativas de Ocorrências" mais abaixo. Clique num número para filtrar a tabela por aquela transportadora.</p>
-    <div class="kpis" id="kpisOcorrencias"><p>Carregando...</p></div>
+    <div class="kpis" id="kpisOcorrencias"><p class="carregando">Carregando...</p></div>
     <table id="tabelaOcorrencias" style="display:none">
       <thead><tr><th>Transportadora</th><th>Ocorrências</th></tr></thead>
       <tbody id="tabelaOcorrenciasBody"></tbody>
@@ -441,7 +443,7 @@ function importarTabDinamica() {
   if (/\.xlsx?$/i.test(file.name || '')) { alert('Este importador só lê arquivo .csv. O arquivo selecionado parece ser um Excel — exporte/salve como .csv e tente de novo.'); return; }
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
 
-  setStatus('statusTabDinamica', 'Lendo arquivo...', '');
+  setStatus('statusTabDinamica', 'Lendo arquivo...', 'carregando');
   toggleBtn('btnTabDinamica', true);
 
   Papa.parse(file, {
@@ -474,7 +476,7 @@ function importarPedidosNaoRecebidos() {
   if (!file) { alert('Selecione o arquivo primeiro.'); return; }
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
 
-  setStatus('statusPedidos', 'Lendo arquivo...', '');
+  setStatus('statusPedidos', 'Lendo arquivo...', 'carregando');
   toggleBtn('btnPedidosNaoRecebidos', true);
 
   const reader = new FileReader();
@@ -532,7 +534,7 @@ function importarBaixaGFW() {
   if (/\.xlsx?$/i.test(file.name || '')) { alert('Este importador só lê arquivo .csv. O arquivo selecionado parece ser um Excel — exporte/salve como .csv e tente de novo.'); return; }
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
 
-  setStatus('statusBaixaGFW', 'Lendo arquivo...', '');
+  setStatus('statusBaixaGFW', 'Lendo arquivo...', 'carregando');
   toggleBtn('btnBaixaGFW', true);
 
   Papa.parse(file, {
@@ -577,7 +579,7 @@ function importarBaixaRTE() {
   if (!file) { alert('Selecione o arquivo (.csv ou .xlsx) primeiro.'); return; }
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
 
-  setStatus('statusBaixaRTE', 'Lendo arquivo...', '');
+  setStatus('statusBaixaRTE', 'Lendo arquivo...', 'carregando');
   toggleBtn('btnBaixaRTE', true);
 
   const ehXlsx = /\.xlsx$/i.test(file.name || '');
@@ -634,7 +636,7 @@ async function importarEmRotaGFW() {
   if (/\.csv$/i.test(file.name || '')) { alert('Este importador só lê arquivo .xlsx (Excel). O arquivo selecionado parece ser um CSV — exporte como .xlsx e tente de novo.'); return; }
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
 
-  setStatus('statusEmRotaGFW', 'Lendo arquivo...', '');
+  setStatus('statusEmRotaGFW', 'Lendo arquivo...', 'carregando');
   toggleBtn('btnEmRotaGFW', true);
 
   try {
@@ -1589,7 +1591,7 @@ async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBar
   for (let i = 0; i < totalBatches; i++) {
     const batch = rows.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
     const isLast = i === totalBatches - 1;
-    setStatus(statusId, `Enviando lote ${i + 1} de ${totalBatches} (${batch.length} linhas)...`, '');
+    setStatus(statusId, `Enviando lote ${i + 1} de ${totalBatches} (${batch.length} linhas)...`, 'carregando');
     try {
       const resp = await fetch(API_URL, {
         method: 'POST',
@@ -1642,7 +1644,7 @@ async function buscarJsonComRetry(url, tentativas) {
 // ---------- Indicadores ----------
 async function carregarIndicadores() {
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) return;
-  document.getElementById('kpis').innerHTML = '<p>Carregando...</p>';
+  document.getElementById('kpis').innerHTML = '<p class="carregando">Carregando...</p>';
   try {
     const [resIndicadores, resStatus] = await Promise.all([
       buscarJsonComRetry(`${API_URL}?action=getIndicadores`),
@@ -1846,7 +1848,7 @@ const COLUNAS_FILTRAVEIS = ['Transportadora', 'Status', 'Ocorrência', 'Entregue
 function mostrarModalCarregando(titulo, colunas) {
   document.getElementById('modalTitulo').textContent = titulo;
   document.getElementById('modalContador').textContent = '';
-  document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${colunas.length}">Carregando...</td></tr>`;
+  document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${colunas.length}" class="carregando">Carregando...</td></tr>`;
   document.getElementById('modalBusca').value = '';
   document.getElementById('modalFiltrosSelects').innerHTML = '';
   document.getElementById('modalDataEntregaDe').value = '';
@@ -2052,7 +2054,7 @@ async function registrarPrevisaoRapida() {
     novaPrevisao = `${dia}/${mes}/${ano}`;
   }
 
-  setStatus('statusEditPrev', 'Salvando...', '');
+  setStatus('statusEditPrev', 'Salvando...', 'carregando');
   toggleBtn('btnEditPrev', true);
   try {
     const resp = await fetch(API_URL, {
@@ -2118,54 +2120,3 @@ async function verPedidosRecebidos() {
   mostrarModalCarregando('Pedidos recebidos pelo cliente', COLUNAS_RECEBIDOS);
   try {
     const dados = await fetch(`${API_URL}?action=getPedidosRecebidosDetalhe`).then(r => r.json());
-    renderModalLinhas(dados.map(d => [fmtData(d.data), d.pedido, d.transportadora]));
-  } catch (err) {
-    document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_RECEBIDOS.length}">Erro ao carregar pedidos.</td></tr>`;
-  }
-}
-
-function fecharModal() { document.getElementById('modalOverlay').style.display = 'none'; }
-function fecharModalSeClicouFora(e) { if (e.target.id === 'modalOverlay') fecharModal(); }
-
-// ---------- Tema claro/escuro ----------
-const CHAVE_LOCALSTORAGE_TEMA = 'dis_tema_v1';
-
-function aplicarTema(tema) {
-  if (tema === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
-    document.getElementById('temaBtn').textContent = '🌙 Tema escuro';
-  } else {
-    document.documentElement.removeAttribute('data-theme');
-    document.getElementById('temaBtn').textContent = '☀️ Tema claro';
-  }
-}
-
-function alternarTema() {
-  const atual = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-  const novo = atual === 'light' ? 'dark' : 'light';
-  localStorage.setItem(CHAVE_LOCALSTORAGE_TEMA, novo);
-  aplicarTema(novo);
-}
-
-aplicarTema(localStorage.getItem(CHAVE_LOCALSTORAGE_TEMA) || 'dark');
-
-// ---------- Importadores recolhíveis ----------
-const CHAVE_LOCALSTORAGE_IMPORTADORES = 'dis_importadores_abertos_v1';
-
-function toggleImportadores() {
-  const grid = document.getElementById('gridImportadores');
-  const aberto = grid.style.display !== 'none';
-  const novoEstado = !aberto;
-  grid.style.display = novoEstado ? '' : 'none';
-  document.getElementById('tituloImportadores').textContent = (novoEstado ? '▼' : '▶') + ' Importadores';
-  localStorage.setItem(CHAVE_LOCALSTORAGE_IMPORTADORES, novoEstado ? '1' : '0');
-}
-
-if (localStorage.getItem(CHAVE_LOCALSTORAGE_IMPORTADORES) === '1') toggleImportadores();
-
-configurarColarComoTabela();
-configurarPopoverHistoricoTratativas();
-verificarLoginSalvo();
-</script>
-</body>
-</html>
