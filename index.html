@@ -1600,7 +1600,21 @@ async function restaurarTratativasSalvas() {
 }
 
 // ---------- Envio em lotes ----------
+// Estes importadores SUBSTITUEM a aba inteira a cada importação — se o
+// arquivo errado for colado e nenhuma linha for reconhecida, mandar um
+// lote vazio apagaria os dados atuais sem colocar nada no lugar. Por isso
+// nem chega a enviar nesse caso.
+const ACOES_QUE_SUBSTITUEM = ['importPedidosNaoRecebidos', 'importBaixaEntregaGFW', 'importBaixaEntregaRTE', 'importEmRotaGFW'];
+
 async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBarId) {
+  if (rows.length === 0) {
+    const aviso = ACOES_QUE_SUBSTITUEM.indexOf(action) !== -1
+      ? 'Nenhum registro reconhecido nesse arquivo — parece que não é o arquivo certo pra este importador. Nada foi enviado; os dados atuais continuam intactos.'
+      : 'Nenhum registro reconhecido nesse arquivo — confira se é o arquivo certo pra este importador.';
+    setStatus(statusId, aviso, 'erro');
+    return;
+  }
+
   const wrap = document.getElementById(progressWrapId);
   const bar = document.getElementById(progressBarId);
   wrap.style.display = 'block';
