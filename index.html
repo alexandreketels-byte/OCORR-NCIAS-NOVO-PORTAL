@@ -2120,3 +2120,54 @@ async function verPedidosRecebidos() {
   mostrarModalCarregando('Pedidos recebidos pelo cliente', COLUNAS_RECEBIDOS);
   try {
     const dados = await fetch(`${API_URL}?action=getPedidosRecebidosDetalhe`).then(r => r.json());
+    renderModalLinhas(dados.map(d => [fmtData(d.data), d.pedido, d.transportadora]));
+  } catch (err) {
+    document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_RECEBIDOS.length}">Erro ao carregar pedidos.</td></tr>`;
+  }
+}
+
+function fecharModal() { document.getElementById('modalOverlay').style.display = 'none'; }
+function fecharModalSeClicouFora(e) { if (e.target.id === 'modalOverlay') fecharModal(); }
+
+// ---------- Tema claro/escuro ----------
+const CHAVE_LOCALSTORAGE_TEMA = 'dis_tema_v1';
+
+function aplicarTema(tema) {
+  if (tema === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+    document.getElementById('temaBtn').textContent = '🌙 Tema escuro';
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    document.getElementById('temaBtn').textContent = '☀️ Tema claro';
+  }
+}
+
+function alternarTema() {
+  const atual = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  const novo = atual === 'light' ? 'dark' : 'light';
+  localStorage.setItem(CHAVE_LOCALSTORAGE_TEMA, novo);
+  aplicarTema(novo);
+}
+
+aplicarTema(localStorage.getItem(CHAVE_LOCALSTORAGE_TEMA) || 'dark');
+
+// ---------- Importadores recolhíveis ----------
+const CHAVE_LOCALSTORAGE_IMPORTADORES = 'dis_importadores_abertos_v1';
+
+function toggleImportadores() {
+  const grid = document.getElementById('gridImportadores');
+  const aberto = grid.style.display !== 'none';
+  const novoEstado = !aberto;
+  grid.style.display = novoEstado ? '' : 'none';
+  document.getElementById('tituloImportadores').textContent = (novoEstado ? '▼' : '▶') + ' Importadores';
+  localStorage.setItem(CHAVE_LOCALSTORAGE_IMPORTADORES, novoEstado ? '1' : '0');
+}
+
+if (localStorage.getItem(CHAVE_LOCALSTORAGE_IMPORTADORES) === '1') toggleImportadores();
+
+configurarColarComoTabela();
+configurarPopoverHistoricoTratativas();
+verificarLoginSalvo();
+</script>
+</body>
+</html>
