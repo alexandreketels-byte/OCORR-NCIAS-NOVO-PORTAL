@@ -593,6 +593,7 @@ function importarBaixaRTE() {
         const linhasObj = XLSX.utils.sheet_to_json(planilha, { raw: true, defval: '' });
         const rows = linhasObj.filter(r => r['NF']).map(processarLinhaRTE);
         await enviarEmLotes(rows, 'importBaixaEntregaRTE', 'statusBaixaRTE', 'progressBaixaRTE', 'progressBarBaixaRTE');
+        atualizarEmRotaTratativas();
         carregarIndicadores();
       } catch (err) {
         setStatus('statusBaixaRTE', 'Erro ao ler o arquivo: ' + err.message, 'erro');
@@ -611,6 +612,7 @@ function importarBaixaRTE() {
     complete: async function(results) {
       const rows = results.data.filter(r => r['NF']).map(processarLinhaRTE);
       await enviarEmLotes(rows, 'importBaixaEntregaRTE', 'statusBaixaRTE', 'progressBaixaRTE', 'progressBarBaixaRTE');
+        atualizarEmRotaTratativas();
       toggleBtn('btnBaixaRTE', false);
       carregarIndicadores();
     },
@@ -654,6 +656,7 @@ async function importarEmRotaGFW() {
 
     await enviarEmLotes(rows, 'importEmRotaGFW', 'statusEmRotaGFW', 'progressEmRotaGFW', 'progressBarEmRotaGFW');
     carregarIndicadores();
+    atualizarEmRotaTratativas();
   } catch (err) {
     setStatus('statusEmRotaGFW', 'Erro ao ler o arquivo: ' + err.message, 'erro');
   } finally {
@@ -1551,6 +1554,23 @@ function baixarTratativasExcel() {
 // Ao carregar a página, busca as tratativas já salvas na planilha (visíveis
 // para qualquer pessoa). Só usa o que está salvo neste navegador como reserva,
 // para o caso da API ainda não estar configurada.
+// O "Em Rota" salvo junto com as tratativas é só uma foto do dia em que o
+// texto foi processado — fica velho no dia seguinte. Aqui recalcula ao vivo,
+// com o que está nas bases Em Rota GFW / Baixa RTE de agora.
+async function atualizarEmRotaTratativas() {
+  if (!tratativasDadosAtuais.length || !API_URL || API_URL.indexOf('COLE_AQUI') === 0) return;
+  const res = await buscarJsonComRetry(`${API_URL}?action=getEmRotaGFWLookup`);
+  if (!res.ok) return; // mantém o que já estava salvo
+  const lookup = res.dados;
+  const idxNF = COLUNAS_TRATATIVAS.indexOf('NF');
+  const idxEmRota = COLUNAS_TRATATIVAS.indexOf('Em Rota');
+  tratativasDadosAtuais.forEach(l => {
+    const info = lookup[normalizarChaveNF(l[idxNF])];
+    l[idxEmRota] = info ? (info.emRota ? 'Em Rota' : (info.dataRomaneio || '')) : '';
+  });
+  aplicarFiltrosTratativas();
+}
+
 async function restaurarTratativasSalvas() {
   inicializarColunasVisiveis();
   if (API_URL && API_URL.indexOf('COLE_AQUI') !== 0) {
@@ -1570,6 +1590,7 @@ async function restaurarTratativasSalvas() {
         montarPainelColunas();
         aplicarFiltrosTratativas();
         renderKpisOcorrenciasDeTratativas();
+        atualizarEmRotaTratativas(); // sem await: atualiza a coluna Em Rota assim que chegar
         return;
       }
     } catch (err) { /* segue pro fallback local abaixo */ }
@@ -1599,10 +1620,16 @@ async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBar
         body: JSON.stringify({ action, rows: batch, batchIndex: i, isLast })
       });
       const result = await resp.json();
+      if (result && (result.error || result.ok === false)) {
+        setStatus(statusId, 'A importação NÃO foi concluída: ' + (result.error || 'erro no servidor') +
+          (totalBatches > 1 ? ` (parou no lote ${i + 1} de ${totalBatches})` : ''), 'erro');
+        return;
+      }
       if (typeof result.novos === 'number') totalNovos += result.novos;
       if (typeof result.atualizados === 'number') totalAtualizados += result.atualizados;
     } catch (err) {
-      setStatus(statusId, 'Erro no envio: ' + err.message, 'erro');
+      setStatus(statusId, 'Erro no envio: ' + err.message +
+        (err instanceof SyntaxError ? ' — o servidor respondeu com erro; confira se o Code.gs mais novo foi implantado (nova versão) e tente de novo.' : ''), 'erro');
       return;
     }
     bar.style.width = Math.round(((i + 1) / totalBatches) * 100) + '%';
