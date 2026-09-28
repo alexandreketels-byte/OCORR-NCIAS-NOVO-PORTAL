@@ -33,6 +33,8 @@
   #temaBtn { background: rgba(255,255,255,0.18); color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
   #temaBtn:hover { background: rgba(255,255,255,0.3); }
   .atalho-btn { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.25); padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.88rem; }
+  .campo-simples { padding: 8px 10px; border: 1px solid var(--borda); border-radius: 6px; font-size: 0.9rem; background: var(--fundo); color: var(--texto); }
+  .campo-simples:disabled { opacity: 0.45; }
   .atalho-btn:hover { background: rgba(255,255,255,0.25); }
   main { max-width: 1800px; margin: 0 auto; padding: 28px 32px 60px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
@@ -66,7 +68,7 @@
      definida por linha (e alternada via JS quando tem mais de uma pessoa
      citada), então não precisa de uma animação por combinação possível. */
   @keyframes piscaMencaoAnim { 0%, 100% { background-color: transparent; } 50% { background-color: var(--pisca-cor, transparent); } }
-  .pisca-mencao { font-weight: 600; animation: piscaMencaoAnim 1.3s ease-in-out infinite; }
+  .pisca-mencao { font-weight: 600; animation: piscaMencaoAnim 0.5s ease-in-out infinite; }
   #refreshBtn { margin-top: 14px; }
   .kpi.clicavel { cursor: pointer; }
   .kpi.clicavel:hover { box-shadow: 0 0 0 2px var(--azul-claro); }
@@ -177,6 +179,21 @@
       <div class="status-line" id="statusEmRotaGFW"></div>
       <div class="meta" id="metaEmRotaGFW"></div>
     </div>
+  </div>
+
+  <div class="indicadores" style="margin-bottom:20px">
+    <h2 style="margin:0 0 6px">Editar previsão de entrega</h2>
+    <p class="desc">Digite o pedido e a nova data (ou marque "Indefinido") e clique em Registrar. Vale pra pedidos que estão em Pedidos Não Recebidos — é o mesmo efeito do lápis ✏️ da lista, só que direto daqui.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input type="text" id="editPrevPedido" class="campo-simples" placeholder="Nº do pedido (ex: 474798N)" autocomplete="off"
+        style="text-transform:uppercase;min-width:200px" onkeydown="if(event.key==='Enter') registrarPrevisaoRapida()">
+      <input type="date" id="editPrevData" class="campo-simples" onkeydown="if(event.key==='Enter') registrarPrevisaoRapida()">
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.9rem;color:var(--cinza);white-space:nowrap;cursor:pointer">
+        <input type="checkbox" id="editPrevIndefinido" onchange="alternarIndefinidoEditPrev()"> Indefinido
+      </label>
+      <button id="btnEditPrev" type="button" onclick="registrarPrevisaoRapida()">Registrar</button>
+    </div>
+    <div class="status-line" id="statusEditPrev"></div>
   </div>
 
   <div class="indicadores">
@@ -1416,7 +1433,7 @@ setInterval(() => {
     const cores = el.dataset.cores.split('|');
     el.style.setProperty('--pisca-cor', cores[_piscaMencaoTick % cores.length]);
   });
-}, 900);
+}, 350);
 
 function limparFiltroDataEntregaTratativas() {
   document.getElementById('tratativasDataEntregaDe').value = '';
@@ -2010,6 +2027,56 @@ function celulaPrevisaoEditavel(pedido, prevEtgFormatada) {
   const pedidoAttr = String(pedido).replace(/"/g, '&quot;');
   const texto = prevEtgFormatada || 'Indefinido';
   return `${texto} <a class="num-link" title="Editar previsão" onclick="editarPrevisao('${pedidoAttr}')">✏️</a>`;
+}
+
+// ---------- Edição rápida de previsão (formulário abaixo dos importadores) ----------
+function alternarIndefinidoEditPrev() {
+  const indefinido = document.getElementById('editPrevIndefinido').checked;
+  const campoData = document.getElementById('editPrevData');
+  campoData.disabled = indefinido;
+  if (indefinido) campoData.value = '';
+}
+
+async function registrarPrevisaoRapida() {
+  const pedido = document.getElementById('editPrevPedido').value.trim().toUpperCase();
+  const indefinido = document.getElementById('editPrevIndefinido').checked;
+  const dataIso = document.getElementById('editPrevData').value; // yyyy-mm-dd
+
+  if (!pedido) { setStatus('statusEditPrev', 'Informe o número do pedido.', 'erro'); return; }
+  if (!indefinido && !dataIso) { setStatus('statusEditPrev', 'Escolha a data ou marque "Indefinido".', 'erro'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { setStatus('statusEditPrev', 'API não configurada.', 'erro'); return; }
+
+  let novaPrevisao = 'Indefinido';
+  if (!indefinido) {
+    const [ano, mes, dia] = dataIso.split('-');
+    novaPrevisao = `${dia}/${mes}/${ano}`;
+  }
+
+  setStatus('statusEditPrev', 'Salvando...', '');
+  toggleBtn('btnEditPrev', true);
+  try {
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'editarPrevisaoPedido', pedido, novaPrevisao })
+    }).then(r => r.json());
+
+    if (!resp.ok) {
+      setStatus('statusEditPrev', 'Não consegui salvar: ' + (resp.error || resp.erro || 'erro desconhecido'), 'erro');
+      return;
+    }
+    setStatus('statusEditPrev', `Pedido ${pedido}: previsão registrada como ${novaPrevisao}.`, 'ok');
+    document.getElementById('editPrevPedido').value = '';
+    document.getElementById('editPrevData').value = '';
+    document.getElementById('editPrevIndefinido').checked = false;
+    document.getElementById('editPrevData').disabled = false;
+    document.getElementById('editPrevPedido').focus(); // já pronto pro próximo pedido
+    carregarIndicadores(); // a mudança pode alterar as contagens (atraso/indefinido)
+  } catch (err) {
+    setStatus('statusEditPrev', 'Erro ao salvar a previsão: ' + err.message, 'erro');
+  } finally {
+    toggleBtn('btnEditPrev', false);
+  }
 }
 
 async function editarPrevisao(pedido) {
