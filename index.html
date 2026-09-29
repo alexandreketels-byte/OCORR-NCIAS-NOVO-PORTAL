@@ -1155,12 +1155,6 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
       if (resProcv.ok) {
         lookup = resProcv.dados.tabDinamica || {};
         lookupEmRota = resProcv.dados.emRota || {};
-        // Mesmo com sucesso na chamada, uma das duas partes (Tabela
-        // Dinâmica ou Em Rota) pode ter falhado sozinha — a outra ainda
-        // veio certinho, então só avisa sobre a que faltou.
-        if (resProcv.dados.avisos && resProcv.dados.avisos.length) {
-          avisos.push(...resProcv.dados.avisos);
-        }
       } else {
         avisos.push('previsão/loja/vendedor e "Em Rota"');
       }
@@ -1198,7 +1192,7 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
     if (avisos.length) {
       const statusEl = document.getElementById('statusTratativas');
       if (statusEl) {
-        statusEl.textContent += (statusEl.textContent ? ' ' : '') + `Atenção: não consegui buscar tudo agora (${avisos.join('; ')}) — tente "Processar texto" de novo em alguns segundos.`;
+        statusEl.textContent += (statusEl.textContent ? ' ' : '') + `Atenção: não consegui buscar ${avisos.join(' e ')} agora — tente "Processar texto" de novo em alguns segundos.`;
         statusEl.className = 'status-line erro';
       }
     }
