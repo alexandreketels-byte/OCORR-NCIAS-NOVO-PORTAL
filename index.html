@@ -204,6 +204,7 @@
       <h2 style="margin:0">Indicadores</h2>
       <button type="button" onclick="baixarIndicadoresExcel()">⬇ Baixar Excel</button>
     </div>
+    <div class="progress-wrap" id="progressPainel"><div class="progress-bar" id="progressBarPainel"></div></div>
     <div class="status-line" id="statusPainel"></div>
     <div id="tempoCarregamento" style="font-size:0.75rem;color:var(--cinza);margin:2px 0 8px"></div>
     <div class="kpis" id="kpis"><p class="carregando">Carregando...</p></div>
@@ -305,6 +306,7 @@
         <button class="modal-close" onclick="fecharModal()">&times;</button>
       </div>
     </div>
+    <div class="progress-wrap" id="progressModal" style="margin:12px 20px 0"><div class="progress-bar" id="progressBarModal"></div></div>
     <div class="modal-filtros">
       <input type="text" id="modalBusca" placeholder="Buscar em todas as colunas..." oninput="aplicarFiltrosModal()">
       <div id="modalFiltrosSelects" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
@@ -1175,10 +1177,10 @@ async function processarOcorrenciasTexto(textoForcado) {
 // enquanto espera a resposta. Cada uso recebe um "token": se outra operação
 // começar no meio (ex: carregar as salvas e a pessoa clicar em Processar
 // texto), a mais antiga não consegue mais mexer na barra da mais nova.
-const progressoTratativas = (function () {
+function criarBarraProgresso(idWrap, idBarra) {
   let seq = 0, atual = 0, alvo = 0, timer = null;
-  const wrap = () => document.getElementById('progressTratativas');
-  const barra = () => document.getElementById('progressBarTratativas');
+  const wrap = () => document.getElementById(idWrap);
+  const barra = () => document.getElementById(idBarra);
   const desenhar = () => { barra().style.width = atual.toFixed(1) + '%'; };
   const parar = () => { if (timer) { clearInterval(timer); timer = null; } };
   const passo = () => {
@@ -1196,6 +1198,8 @@ const progressoTratativas = (function () {
       timer = setInterval(passo, 200);
       return seq;
     },
+    // true enquanto este token ainda é a operação mais recente dessa barra
+    ativo(token) { return token === seq; },
     etapa(token, inicio, fim) {
       if (token !== seq) return;
       if (atual < inicio) { atual = inicio; desenhar(); }
@@ -1213,7 +1217,10 @@ const progressoTratativas = (function () {
       esconderDepois(token, 4000);
     }
   };
-})();
+}
+const progressoTratativas = criarBarraProgresso('progressTratativas', 'progressBarTratativas');
+const progressoPainel = criarBarraProgresso('progressPainel', 'progressBarPainel');
+const progressoModal = criarBarraProgresso('progressModal', 'progressBarModal');
 
 async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLocal) {
   const btn = idBotao ? document.getElementById(idBotao) : null;
@@ -1929,7 +1936,8 @@ function renderPainel(painel) {
 
 async function carregarIndicadores() {
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) return;
-  const statusEl = document.getElementById('statusPainel');
+  const token = progressoPainel.iniciar();
+  progressoPainel.etapa(token, 5, 85);
   const cache = lerCacheLocal(CHAVE_CACHE_PAINEL_LOCAL);
   let mostrouCache = false;
   if (cache && cache.valor && cache.valor.indicadores) {
@@ -1945,6 +1953,7 @@ async function carregarIndicadores() {
   }
 
   const res = await buscarJsonComRetry(`${API_URL}?action=getPainel`);
+  if (!progressoPainel.ativo(token)) return; // outra atualização começou depois desta: só a mais recente desenha
   if (res.ok && res.dados && res.dados.indicadores) {
     try {
       renderPainel(res.dados);
@@ -1953,12 +1962,14 @@ async function carregarIndicadores() {
       const srv = typeof res.dados.servidorMs === 'number'
         ? `servidor ${fmtSegundos(res.dados.servidorMs)}${res.dados.doCache ? ', do cache' : ''}` : '';
       registrarTempo('painel', res, srv);
+      progressoPainel.concluir(token);
       return;
     } catch (err) {
       console.error('Erro ao desenhar o painel:', err);
     }
   }
 
+  progressoPainel.falhar(token);
   registrarTempo('painel', res);
   const motivo = escapeHtml(res.erro || 'resposta inesperada');
   const botao = '<button type="button" onclick="carregarIndicadores()" style="margin-left:8px">Tentar de novo</button>';
@@ -2300,16 +2311,27 @@ let ultimoFiltroPedidos = null;
 async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregue, apenasEmRota) {
   ultimoFiltroPedidos = { transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregue, apenasEmRota };
   mostrarModalCarregando(titulo, COLUNAS_PEDIDOS_NAO_RECEBIDOS);
+  const token = progressoModal.iniciar();
+  progressoModal.etapa(token, 5, 85);
+  const params = new URLSearchParams({
+    action: 'getPedidosDetalhe', transportadora,
+    apenasAtraso: apenasAtraso ? '1' : '0',
+    apenasIndefinido: apenasIndefinido ? '1' : '0',
+    apenasEntregue: apenasEntregue ? '1' : '0',
+    apenasEmRota: apenasEmRota ? '1' : '0'
+  });
+  const res = await buscarJsonComRetry(`${API_URL}?${params}`);
+  // Se a pessoa abriu outro relatório enquanto este carregava, este resultado
+  // é velho: descarta (antes ele aparecia por cima do relatório novo).
+  if (!progressoModal.ativo(token)) return;
+  if (!res.ok || !Array.isArray(res.dados)) {
+    progressoModal.falhar(token);
+    document.getElementById('modalTabelaBody').innerHTML =
+      `<tr><td colspan="${COLUNAS_PEDIDOS_NAO_RECEBIDOS.length}">Erro ao carregar pedidos (${escapeHtml(res.erro || 'resposta inesperada')}). Feche e abra o relatório de novo.</td></tr>`;
+    return;
+  }
   try {
-    const params = new URLSearchParams({
-      action: 'getPedidosDetalhe', transportadora,
-      apenasAtraso: apenasAtraso ? '1' : '0',
-      apenasIndefinido: apenasIndefinido ? '1' : '0',
-      apenasEntregue: apenasEntregue ? '1' : '0',
-      apenasEmRota: apenasEmRota ? '1' : '0'
-    });
-    const pedidos = await fetch(`${API_URL}?${params}`).then(r => r.json());
-    const linhas = pedidos.map(p => {
+    const linhas = res.dados.map(p => {
       const linha = [
         p.pedido, p.nf, p.cliente, p.cidade, p.loja, fmtData(p.dataColeta),
         celulaPrevisaoEditavel(p.pedido, fmtData(p.prevEtg)), p.atraso,
@@ -2322,8 +2344,10 @@ async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido
       return linha;
     });
     renderModalLinhas(linhas);
+    progressoModal.concluir(token);
   } catch (err) {
-    document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_PEDIDOS_NAO_RECEBIDOS.length}">Erro ao carregar pedidos.</td></tr>`;
+    progressoModal.falhar(token);
+    document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_PEDIDOS_NAO_RECEBIDOS.length}">Erro ao montar o relatório.</td></tr>`;
   }
 }
 
@@ -2422,11 +2446,22 @@ const COLUNAS_RECEBIDOS = ['Data', 'Pedido', 'Transportadora'];
 
 async function verPedidosRecebidos() {
   mostrarModalCarregando('Pedidos recebidos pelo cliente', COLUNAS_RECEBIDOS);
+  const token = progressoModal.iniciar();
+  progressoModal.etapa(token, 5, 85);
+  const res = await buscarJsonComRetry(`${API_URL}?action=getPedidosRecebidosDetalhe`);
+  if (!progressoModal.ativo(token)) return; // outro relatório foi aberto no meio: descarta este
+  if (!res.ok || !Array.isArray(res.dados)) {
+    progressoModal.falhar(token);
+    document.getElementById('modalTabelaBody').innerHTML =
+      `<tr><td colspan="${COLUNAS_RECEBIDOS.length}">Erro ao carregar pedidos (${escapeHtml(res.erro || 'resposta inesperada')}). Feche e abra o relatório de novo.</td></tr>`;
+    return;
+  }
   try {
-    const dados = await fetch(`${API_URL}?action=getPedidosRecebidosDetalhe`).then(r => r.json());
-    renderModalLinhas(dados.map(d => [fmtData(d.data), d.pedido, d.transportadora]));
+    renderModalLinhas(res.dados.map(d => [fmtData(d.data), d.pedido, d.transportadora]));
+    progressoModal.concluir(token);
   } catch (err) {
-    document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_RECEBIDOS.length}">Erro ao carregar pedidos.</td></tr>`;
+    progressoModal.falhar(token);
+    document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_RECEBIDOS.length}">Erro ao montar o relatório.</td></tr>`;
   }
 }
 
