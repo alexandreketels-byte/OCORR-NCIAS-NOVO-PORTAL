@@ -353,6 +353,17 @@ window.fetch = function(url, options) {
     } else {
       url = url + (url.indexOf('?') === -1 ? '?' : '&') + 'pin=' + encodeURIComponent(pin);
     }
+
+    // Sem isso, se o Apps Script demorar demais pra responder (fila de
+    // espera, execução presa etc.), o fetch fica esperando pra sempre — a
+    // tela "trava" de verdade, sem erro nenhum aparecer, só dá pra sair
+    // com F5. Com o timeout, a chamada desiste sozinha depois de 45s e
+    // quem pediu (ex: o retry automático) consegue tentar de novo ou
+    // mostrar um erro em vez de ficar parado no limbo.
+    const controlador = new AbortController();
+    const timeoutId = setTimeout(() => controlador.abort(), 45000);
+    options = Object.assign({}, options, { signal: controlador.signal });
+    return _fetchOriginal(url, options).finally(() => clearTimeout(timeoutId));
   }
   return _fetchOriginal(url, options);
 };
@@ -1669,6 +1680,7 @@ function toggleBtn(id, disabled) { document.getElementById(id).disabled = disabl
 // importação grande, com a planilha ainda ocupada).
 async function buscarJsonComRetry(url, tentativas) {
   tentativas = tentativas || 3;
+  let ultimoErro = null;
   for (let i = 1; i <= tentativas; i++) {
     try {
       const resp = await fetch(url);
@@ -1677,10 +1689,14 @@ async function buscarJsonComRetry(url, tentativas) {
       if (dados && dados.error) return { ok: false, erro: dados.error };
       return { ok: true, dados };
     } catch (err) {
+      ultimoErro = err;
       if (i < tentativas) await new Promise(res => setTimeout(res, 1200 * i));
     }
   }
-  return { ok: false, erro: 'resposta inválida mesmo após tentar de novo' };
+  const motivo = ultimoErro && ultimoErro.name === 'AbortError'
+    ? 'o servidor demorou demais pra responder (tempo esgotado)'
+    : 'resposta inválida';
+  return { ok: false, erro: `${motivo}, mesmo após tentar de novo` };
 }
 
 // ---------- Indicadores ----------
