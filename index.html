@@ -1027,7 +1027,16 @@ const CHAVE_LOCALSTORAGE_TRATATIVAS_COLS = 'dis_tratativas_colunas_v1';
 let tratativasDadosAtuais = [];
 let tratativasLinhasFiltradas = [];
 let tratativasFiltrosSelecionados = {};
-let tratativasOrdenacao = { indice: null, direcao: 1 };
+// Ordenação padrão da tabela de Tratativas: última mensagem MAIS RECENTE no topo.
+// Só deixa de valer se a pessoa clicar num cabeçalho (tratativasOrdenacaoManual).
+function ordenacaoPadraoTratativas() {
+  return { indice: COLUNAS_TRATATIVAS.indexOf('Data Últ. Msg'), direcao: -1 };
+}
+let tratativasOrdenacao = ordenacaoPadraoTratativas();
+let tratativasOrdenacaoManual = false;
+function definirOrdenacaoInicialTratativas() {
+  if (!tratativasOrdenacaoManual) tratativasOrdenacao = ordenacaoPadraoTratativas();
+}
 let tratativasColunasVisiveis = {};
 
 function inicializarColunasVisiveis() {
@@ -1207,7 +1216,7 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
     if (aoSucessoLocal) aoSucessoLocal();
     document.getElementById('tratativasArea').style.display = 'block';
 
-    tratativasOrdenacao = { indice: null, direcao: 1 };
+    definirOrdenacaoInicialTratativas();
     montarCabecalhoTratativas();
     montarFiltrosTratativas();
     montarPainelColunas();
@@ -1332,10 +1341,12 @@ function indicadorOrdenacao(estado, idx) {
 }
 
 function ordenarTratativas(idx) {
+  tratativasOrdenacaoManual = true; // a partir daqui a escolha é da pessoa: novos desenhos da tabela não voltam pro padrão
   if (tratativasOrdenacao.indice === idx) {
     tratativasOrdenacao.direcao *= -1;
   } else {
-    tratativasOrdenacao = { indice: idx, direcao: 1 };
+    // pra coluna de data da última mensagem o natural é começar pelo mais recente
+    tratativasOrdenacao = { indice: idx, direcao: idx === COLUNAS_TRATATIVAS.indexOf('Data Últ. Msg') ? -1 : 1 };
   }
   montarCabecalhoTratativas();
   aplicarFiltrosTratativas();
@@ -1621,7 +1632,7 @@ function aplicarLinhasSalvas(linhas) {
     return linha;
   });
   document.getElementById('tratativasArea').style.display = 'block';
-  tratativasOrdenacao = { indice: null, direcao: 1 };
+  definirOrdenacaoInicialTratativas();
   montarCabecalhoTratativas();
   montarFiltrosTratativas();
   montarPainelColunas();
