@@ -251,6 +251,7 @@
     <p class="desc">Cole aqui direto da tela do sistema (com as mensagens de cada pedido) — não precisa mais passar pelo Excel antes, a caixa já reconhece a tabela colada e organiza as colunas sozinha. Fica salvo neste navegador até você processar um texto novo.</p>
     <textarea id="colarOcorrenciasTexto" rows="8" style="width:100%;font-family:inherit;font-size:0.9rem;padding:10px;border:1px solid var(--borda);border-radius:8px;"></textarea>
     <button id="btnProcessarTratativas" onclick="processarOcorrenciasTexto()" style="margin-top:10px">Processar texto</button>
+    <div class="progress-wrap" id="progressTratativas"><div class="progress-bar" id="progressBarTratativas"></div></div>
     <div class="status-line" id="statusTratativas"></div>
 
     <div id="tratativasArea" style="display:none;margin-top:16px">
@@ -1168,15 +1169,64 @@ async function processarOcorrenciasTexto(textoForcado) {
 // Passos comuns depois de ter os "registros" (venham de texto colado ou de
 // arquivo Excel): PROCV contra a Tabela Dinâmica, montar a tabela na tela,
 // e salvar na planilha pra ficar visível pra qualquer pessoa.
+// ---------- Barra de progresso das Tratativas (igual à dos importadores) ----------
+// Não dá pra saber o % real de uma chamada ao servidor, então a barra anda por
+// ETAPAS: pula pro começo de cada etapa e "rasteja" devagar até o fim dela
+// enquanto espera a resposta. Cada uso recebe um "token": se outra operação
+// começar no meio (ex: carregar as salvas e a pessoa clicar em Processar
+// texto), a mais antiga não consegue mais mexer na barra da mais nova.
+const progressoTratativas = (function () {
+  let seq = 0, atual = 0, alvo = 0, timer = null;
+  const wrap = () => document.getElementById('progressTratativas');
+  const barra = () => document.getElementById('progressBarTratativas');
+  const desenhar = () => { barra().style.width = atual.toFixed(1) + '%'; };
+  const parar = () => { if (timer) { clearInterval(timer); timer = null; } };
+  const passo = () => {
+    if (atual < alvo) { atual = Math.min(alvo, atual + Math.max(0.15, (alvo - atual) * 0.04)); desenhar(); }
+  };
+  const esconderDepois = (token, ms) => setTimeout(() => {
+    if (token === seq) { wrap().style.display = 'none'; atual = 0; desenhar(); }
+  }, ms);
+  return {
+    iniciar() {
+      seq++; parar(); atual = 0; alvo = 0;
+      barra().style.background = '';
+      wrap().style.display = 'block';
+      desenhar();
+      timer = setInterval(passo, 200);
+      return seq;
+    },
+    etapa(token, inicio, fim) {
+      if (token !== seq) return;
+      if (atual < inicio) { atual = inicio; desenhar(); }
+      alvo = fim;
+    },
+    concluir(token) {
+      if (token !== seq) return;
+      parar(); atual = 100; alvo = 100; desenhar();
+      esconderDepois(token, 1200);
+    },
+    falhar(token) {
+      if (token !== seq) return;
+      parar();
+      barra().style.background = 'var(--vermelho)';
+      esconderDepois(token, 4000);
+    }
+  };
+})();
+
 async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLocal) {
   const btn = idBotao ? document.getElementById(idBotao) : null;
   const textoOriginalBtn = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = 'Processando...'; }
+  const token = progressoTratativas.iniciar();
 
   try {
     let lookup = {}, lookupEmRota = {};
     let avisos = [];
     if (API_URL && API_URL.indexOf('COLE_AQUI') !== 0) {
+      progressoTratativas.etapa(token, 8, 55);
+      setStatus('statusTratativas', 'Etapa 1 de 3 — buscando previsão, loja, vendedor e Em Rota...', 'carregando');
       const pedidosDoTexto = Array.from(new Set(registros.map(r => r.pedido).filter(Boolean)));
       const nfsDoTexto = Array.from(new Set(registros.map(r => r.nf).filter(Boolean)));
       const resProcv = await buscarJsonComRetry(API_URL, 2, { action: 'getProcvTratativasFiltrado', pedidos: pedidosDoTexto, nfs: nfsDoTexto });
@@ -1194,6 +1244,8 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
       }
     }
 
+    progressoTratativas.etapa(token, 60, 68);
+    setStatus('statusTratativas', 'Etapa 2 de 3 — montando a tabela...', 'carregando');
     registros.sort((a, b) => a.pedido.localeCompare(b.pedido) || a.dtOcorr.localeCompare(b.dtOcorr));
 
     tratativasDadosAtuais = registros.map(r => {
@@ -1222,7 +1274,9 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
     montarPainelColunas();
     aplicarFiltrosTratativas();
 
-    await salvarTratativasNaPlanilha(tratativasDadosAtuais);
+    progressoTratativas.etapa(token, 75, 95);
+    const salvou = await salvarTratativasNaPlanilha(tratativasDadosAtuais);
+    if (salvou === false) progressoTratativas.falhar(token); else progressoTratativas.concluir(token);
     if (avisos.length) {
       const statusEl = document.getElementById('statusTratativas');
       if (statusEl) {
@@ -1231,6 +1285,9 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
       }
     }
     renderKpisOcorrenciasDeTratativas();
+  } catch (err) {
+    progressoTratativas.falhar(token);
+    throw err;
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = textoOriginalBtn; }
   }
@@ -1240,18 +1297,29 @@ async function salvarTratativasNaPlanilha(linhas) {
   const statusEl = document.getElementById('statusTratativas');
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) {
     if (statusEl) { statusEl.textContent = 'API não configurada — ficou salvo só neste navegador.'; statusEl.className = 'status-line'; }
-    return;
+    return true;
   }
-  if (statusEl) { statusEl.textContent = 'Salvando para que outras pessoas também vejam...'; statusEl.className = 'status-line'; }
+  if (statusEl) { statusEl.textContent = 'Etapa 3 de 3 — salvando pra que outras pessoas também vejam...'; statusEl.className = 'status-line carregando'; }
   try {
-    await fetch(API_URL, {
+    const resp = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ action: 'importTratativas', rows: linhas, batchIndex: 0, isLast: true })
     });
+    // Antes só conferia se a chamada "chegou" — um erro do servidor (ex: sem
+    // permissão, planilha ocupada) aparecia como "Salvo". Agora lê a resposta.
+    let corpo = null;
+    try { corpo = await resp.json(); } catch (e) { corpo = null; }
+    if (!corpo || corpo.error || corpo.ok !== true) {
+      const motivo = corpo && corpo.error ? corpo.error : 'resposta inesperada do servidor';
+      if (statusEl) { statusEl.textContent = `Não consegui salvar para a equipe (${motivo}) — ficou só neste navegador.`; statusEl.className = 'status-line erro'; }
+      return false;
+    }
     if (statusEl) { statusEl.textContent = 'Salvo — qualquer pessoa que abrir o site agora vê essa tabela.'; statusEl.className = 'status-line ok'; }
+    return true;
   } catch (err) {
     if (statusEl) { statusEl.textContent = 'Não consegui salvar para a equipe (ficou só neste navegador).'; statusEl.className = 'status-line erro'; }
+    return false;
   }
 }
 
@@ -1650,16 +1718,28 @@ async function restaurarTratativasSalvas() {
       try { aplicarLinhasSalvas(cache.valor); mostrouCache = true; } catch (e) { mostrouCache = false; }
     }
 
+    const tokenCarga = progressoTratativas.iniciar();
+    progressoTratativas.etapa(tokenCarga, 5, 85);
+    const msgCarga = mostrouCache ? 'Atualizando as tratativas...' : 'Carregando as tratativas salvas...';
+    setStatus('statusTratativas', msgCarga, 'carregando');
     const res = await buscarJsonComRetry(`${API_URL}?action=getTratativasDetalhe`);
     registrarTempo('tratativas', res);
+    const limparMsgCarga = () => { // só apaga a mensagem se ainda for a nossa (outra operação pode ter escrito por cima)
+      const el = document.getElementById('statusTratativas');
+      if (el && el.textContent === msgCarga) setStatus('statusTratativas', '', '');
+    };
 
     if (res.ok && Array.isArray(res.dados)) {
       if (res.dados.length > 0) {
         const igualAoCache = mostrouCache && JSON.stringify(res.dados) === JSON.stringify(cache.valor);
         if (!igualAoCache) aplicarLinhasSalvas(res.dados); // só redesenha se mudou (evita zerar os filtros à toa)
         gravarCacheLocal(CHAVE_CACHE_TRATATIVAS_LOCAL, res.dados);
+        progressoTratativas.concluir(tokenCarga);
+        limparMsgCarga();
         return;
       }
+      progressoTratativas.concluir(tokenCarga);
+      limparMsgCarga();
       // O servidor respondeu que não há nada salvo ainda: aproveita o texto guardado
       // neste navegador (caso de primeira vez / migração).
       const salvoAntigo = localStorage.getItem(CHAVE_LOCALSTORAGE_TRATATIVAS);
@@ -1670,6 +1750,7 @@ async function restaurarTratativasSalvas() {
     // A leitura FALHOU (tempo esgotado ou erro). Não reprocessa nem regrava nada:
     // antes, isso reprocessava o texto local e sobrescrevia a tabela compartilhada
     // (pesado, e podia gravar uma versão antiga por cima da atual).
+    progressoTratativas.falhar(tokenCarga);
     const motivo = res.erro || 'erro desconhecido';
     setStatus('statusTratativas', mostrouCache
       ? `Não consegui atualizar as tratativas agora (${motivo}). Mostrando os dados de ${fmtQuando(cache.quando)}. Atualize a página (F5) pra tentar de novo.`
