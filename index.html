@@ -985,46 +985,10 @@ function configurarPopoverHistoricoTratativas() {
 }
 
 const COLUNAS_TRATATIVAS = [
-  'Pedido', 'NF', 'Cliente', 'Transportadora', 'Loja', 'Vendedor', 'Ocorrência', 'Sugestão', 'Status',
+  'Pedido', 'NF', 'Cliente', 'Transportadora', 'Loja', 'Vendedor', 'Ocorrência', 'Status',
   'Em Rota', 'Previsão', 'Entregue?', 'Data Entrega', 'Data Últ. Msg', 'Autor Últ. Msg', 'Mensagem'
 ];
-const COLUNAS_TRATATIVAS_FILTRAVEIS = ['Transportadora', 'Loja', 'Status', 'Ocorrência', 'Sugestão', 'Entregue?'];
-
-// ---------- Sugestão de Tipo de Ocorrência (a partir da 1ª mensagem) ----------
-// Isso NÃO é IA lendo a mensagem — é uma checagem simples por palavra-chave,
-// só pra sinalizar quando o tipo registrado pelo vendedor parece não bater
-// com o que ele escreveu. Pode dar falso positivo/negativo; é uma sugestão
-// pra revisão humana, não uma correção automática.
-//
-// Pra ajustar: a ordem importa (a primeira regra que bater "ganha"); "termos"
-// é uma lista de palavras/trechos (sem acento, minúsculo) que, se aparecerem
-// na primeira mensagem, apontam pro "tipo" à direita.
-const SUGESTOES_TIPO_OCORRENCIA = [
-  { termos: ['prazo', 'expirad'], tipo: 'Prazo de Entrega Expirado' },
-  { termos: ['endereco', 'mudou o endereco', 'local de entrega', 'divergente'], tipo: 'Alteração de Local de Entrega' },
-  { termos: ['ausente', 'fechado', 'nao tinha ninguem', 'ninguem no local'], tipo: 'Ausência do Cliente/Fechado' },
-  { termos: ['avaria', 'amassad', 'danificad'], tipo: 'Avaria Durante o Transporte' },
-  { termos: ['extravi', 'sumiu', 'nao foi localizad', 'nao localizad'], tipo: 'Extravio' },
-  { termos: ['sinistro', 'roubo', 'roubad', 'furtad'], tipo: 'Sinistro' },
-  { termos: ['recusa'], tipo: 'Recusa de Mercadoria - Avaria de Produto' },
-  { termos: ['cancelamento', 'cancelar o pedido', 'cancelar a compra'], tipo: 'Cancelamento de Pedido' },
-  { termos: ['produto errado', 'peca errada', 'item errado', 'mercadoria errada'], tipo: 'Produto Errado - Transportadora' },
-  { termos: ['agendar', 'agendamento'], tipo: 'Agendamento Realizado' },
-  { termos: ['dificil acesso', 'acesso restrito'], tipo: 'Local de Difícil Acesso' },
-  { termos: ['retirada programada', 'retirar na base'], tipo: 'Retirada Programada' }
-];
-
-function normalizarTextoSemAcento(s) {
-  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-}
-
-// Retorna o tipo sugerido (string) ou '' se nenhuma regra bateu.
-function sugerirTipoOcorrencia(primeiraMensagemTexto) {
-  const texto = normalizarTextoSemAcento(primeiraMensagemTexto);
-  if (!texto) return '';
-  const regra = SUGESTOES_TIPO_OCORRENCIA.find(r => r.termos.some(t => texto.indexOf(t) !== -1));
-  return regra ? regra.tipo : '';
-}
+const COLUNAS_TRATATIVAS_FILTRAVEIS = ['Transportadora', 'Loja', 'Status', 'Ocorrência', 'Entregue?'];
 
 const CHAVE_LOCALSTORAGE_TRATATIVAS = 'dis_tratativas_texto_v1';
 const CHAVE_LOCALSTORAGE_TRATATIVAS_COLS = 'dis_tratativas_colunas_v1';
@@ -1189,11 +1153,9 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
       const info = lookup[r.pedido] || {};
       const infoEmRota = lookupEmRota[normalizarChaveNF(r.nf)] || {};
       const historico = r.mensagens || [];
-      const primeira = historico[0];
-      const sugestao = sugerirTipoOcorrencia(primeira ? primeira.texto : '');
       const linha = [
         r.pedido, r.nf, r.cliente, r.transportadora, info.loja || '', info.vendedor || '',
-        r.ocorrencia, sugestao, r.status,
+        r.ocorrencia, r.status,
         infoEmRota.emRota ? 'Em Rota' : (infoEmRota.dataRomaneio || ''),
         fmtData(info.previsao || ''), info.recebCliente ? 'Sim' : 'Não',
         fmtData(info.recebCliente || ''), m.data, m.autor, m.texto,
@@ -1250,17 +1212,14 @@ async function salvarTratativasNaPlanilha(linhas) {
 let tratativasPorLojaExpandido = false;
 let _ultimoPorTipoELoja = {};
 let _ultimasLojas = [];
-let _ultimoTotalDivergentes = 0;
 
 function renderKpisOcorrenciasDeTratativas() {
   const idxTransp = COLUNAS_TRATATIVAS.indexOf('Transportadora');
   const idxOcorrencia = COLUNAS_TRATATIVAS.indexOf('Ocorrência');
-  const idxSugestao = COLUNAS_TRATATIVAS.indexOf('Sugestão');
   const idxLoja = COLUNAS_TRATATIVAS.indexOf('Loja');
   const porTransportadora = {};
   const porTipoELoja = {}; // { tipo: { loja: quantidade, ... } }
   const lojasEncontradas = new Set();
-  let divergentes = 0;
   tratativasDadosAtuais.forEach(l => {
     const t = l[idxTransp] || '(sem transportadora)';
     porTransportadora[t] = (porTransportadora[t] || 0) + 1;
@@ -1270,11 +1229,8 @@ function renderKpisOcorrenciasDeTratativas() {
     lojasEncontradas.add(loja);
     if (!porTipoELoja[tipo]) porTipoELoja[tipo] = {};
     porTipoELoja[tipo][loja] = (porTipoELoja[tipo][loja] || 0) + 1;
-
-    if (l[idxSugestao] && l[idxSugestao] !== l[idxOcorrencia]) divergentes++;
   });
-  _ultimoTotalDivergentes = divergentes;
-  renderKpisOcorrencias({ ocorrencias: { total: tratativasDadosAtuais.length, divergentes, porTransportadora } });
+  renderKpisOcorrencias({ ocorrencias: { total: tratativasDadosAtuais.length, porTransportadora } });
   renderTabelaOcorrencias(porTransportadora);
 
   _ultimoPorTipoELoja = porTipoELoja;
@@ -1501,12 +1457,6 @@ function aplicarFiltrosTratativas() {
     if (valor) linhas = linhas.filter(l => String(l[idx] ?? '') === valor);
   });
 
-  if (tratativasApenasDivergentes) {
-    const idxOcorrenciaFiltro = COLUNAS_TRATATIVAS.indexOf('Ocorrência');
-    const idxSugestaoFiltro = COLUNAS_TRATATIVAS.indexOf('Sugestão');
-    linhas = linhas.filter(l => l[idxSugestaoFiltro] && l[idxSugestaoFiltro] !== l[idxOcorrenciaFiltro]);
-  }
-
   const dataDeStr = document.getElementById('tratativasDataEntregaDe').value;
   const dataAteStr = document.getElementById('tratativasDataEntregaAte').value;
   if (dataDeStr || dataAteStr) {
@@ -1546,8 +1496,6 @@ function aplicarFiltrosTratativas() {
   const idxAutor = COLUNAS_TRATATIVAS.indexOf('Autor Últ. Msg');
   const idxEmRota = COLUNAS_TRATATIVAS.indexOf('Em Rota');
   const idxMensagem = COLUNAS_TRATATIVAS.indexOf('Mensagem');
-  const idxOcorrencia = COLUNAS_TRATATIVAS.indexOf('Ocorrência');
-  const idxSugestao = COLUNAS_TRATATIVAS.indexOf('Sugestão');
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
 
   tratativasLinhasFiltradas = linhas;
@@ -1574,9 +1522,6 @@ function aplicarFiltrosTratativas() {
           else if (idx === idxAutor) {
             const cor = corAutor(valor);
             if (cor) estilo = `color:${cor};font-weight:600`;
-          }
-          else if (idx === idxSugestao && valor && valor !== l[idxOcorrencia]) {
-            estilo = 'color:var(--laranja);font-weight:700';
           }
           if (idx === idxMensagem) {
             const cores = coresPiscaMencao(valor);
@@ -1840,25 +1785,9 @@ function renderKpisOcorrencias(dados) {
     { valor: dados.ocorrencias.total, rotulo: 'Total de ocorrências',
       onclick: `filtrarTratativasPorTransportadora('TODAS')` }
   ];
-  if (dados.ocorrencias.divergentes !== undefined) {
-    kpis.push({
-      valor: dados.ocorrencias.divergentes,
-      rotulo: tratativasApenasDivergentes ? 'Tipo possivelmente errado (clique pra ver todas)' : 'Tipo possivelmente errado (clique pra filtrar)',
-      cor: dados.ocorrencias.divergentes > 0 ? 'var(--laranja)' : null,
-      onclick: 'toggleApenasDivergentes()'
-    });
-  }
   document.getElementById('kpisOcorrencias').innerHTML = kpis.map(k =>
-    `<div class="kpi clicavel" onclick="${k.onclick}"><div class="valor"${k.cor ? ` style="color:${k.cor}"` : ''}>${k.valor}</div><div class="rotulo">${k.rotulo}</div></div>`
+    `<div class="kpi clicavel" onclick="${k.onclick}"><div class="valor">${k.valor}</div><div class="rotulo">${k.rotulo}</div></div>`
   ).join('');
-}
-
-let tratativasApenasDivergentes = false;
-function toggleApenasDivergentes() {
-  tratativasApenasDivergentes = !tratativasApenasDivergentes;
-  aplicarFiltrosTratativas();
-  renderKpisOcorrencias({ ocorrencias: { total: tratativasDadosAtuais.length, divergentes: _ultimoTotalDivergentes } });
-  if (tratativasApenasDivergentes) document.getElementById('tratativasArea').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 let dadosTabelaOcorrencias = [];
