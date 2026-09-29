@@ -2,6 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Portal de Indicadores</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
@@ -203,6 +204,8 @@
       <h2 style="margin:0">Indicadores</h2>
       <button type="button" onclick="baixarIndicadoresExcel()">⬇ Baixar Excel</button>
     </div>
+    <div class="status-line" id="statusPainel"></div>
+    <div id="tempoCarregamento" style="font-size:0.75rem;color:var(--cinza);margin:2px 0 8px"></div>
     <div class="kpis" id="kpis"><p class="carregando">Carregando...</p></div>
     <table id="tabelaTransportadoras" style="display:none">
       <thead><tr>
@@ -363,12 +366,16 @@ window.fetch = function(url, options) {
     // importação grande (ex: Tabela Dinâmica com dezenas de milhares de
     // linhas) pode legitimamente demorar mais que isso — não é travamento.
     const controlador = new AbortController();
-    let ehEscritaPesada = false;
+    let acaoPost = '';
     try {
-      const acao = options && typeof options.body === 'string' ? JSON.parse(options.body).action : '';
-      ehEscritaPesada = /^import|^reconstruir/.test(acao || '');
+      acaoPost = options && typeof options.body === 'string' ? (JSON.parse(options.body).action || '') : '';
     } catch (e) { /* corpo não é JSON */ }
-    const timeoutId = setTimeout(() => controlador.abort(), ehEscritaPesada ? 150000 : 45000);
+    const ehEscritaPesada = /^import|^reconstruir/.test(acaoPost);
+    const ehLeitura = !acaoPost || /^get/.test(acaoPost); // GET, ou POST que só lê (lista de pedidos grande demais pra URL)
+    // Leitura: 20s (uma execução que travou costuma ser resolvida por uma nova
+    // tentativa; esperar mais só deixa a tela parada). Importação grande: 150s.
+    const limiteMs = ehEscritaPesada ? 150000 : (ehLeitura ? 20000 : 45000);
+    const timeoutId = setTimeout(() => controlador.abort(), limiteMs);
     options = Object.assign({}, options, { signal: controlador.signal });
     return _fetchOriginal(url, options).finally(() => clearTimeout(timeoutId));
   }
@@ -386,7 +393,10 @@ async function tentarLogin(event) {
 
   btn.disabled = true; btn.textContent = 'Entrando...';
   try {
-    const resp = await _fetchOriginal(`${API_URL}?action=login&pin=${encodeURIComponent(pin)}`).then(r => r.json());
+    const ctrlLogin = new AbortController();
+    const tLogin = setTimeout(() => ctrlLogin.abort(), 20000);
+    const resp = await _fetchOriginal(`${API_URL}?action=login&pin=${encodeURIComponent(pin)}`, { signal: ctrlLogin.signal })
+      .then(r => r.json()).finally(() => clearTimeout(tLogin));
     if (resp && resp.ok) {
       localStorage.setItem(CHAVE_LOCALSTORAGE_PIN, pin);
       localStorage.setItem(CHAVE_LOCALSTORAGE_NOME, resp.nome || '');
@@ -395,7 +405,7 @@ async function tentarLogin(event) {
       erroEl.textContent = 'Senha incorreta.';
     }
   } catch (err) {
-    erroEl.textContent = 'Não consegui verificar a senha agora. Tente de novo.';
+    erroEl.textContent = err && err.name === 'AbortError' ? 'O servidor demorou pra responder. Tente de novo em instantes.' : 'Não consegui verificar a senha agora. Tente de novo.';
   } finally {
     btn.disabled = false; btn.textContent = 'Entrar';
   }
@@ -413,6 +423,8 @@ function entrarNoPortal(nome) {
 function fazerLogout() {
   localStorage.removeItem(CHAVE_LOCALSTORAGE_PIN);
   localStorage.removeItem(CHAVE_LOCALSTORAGE_NOME);
+  localStorage.removeItem(CHAVE_CACHE_PAINEL_LOCAL);
+  localStorage.removeItem(CHAVE_CACHE_TRATATIVAS_LOCAL);
   location.reload();
 }
 
@@ -1601,29 +1613,57 @@ async function atualizarEmRotaTratativas() {
   aplicarFiltrosTratativas();
 }
 
+function aplicarLinhasSalvas(linhas) {
+  const idxHistorico = COLUNAS_TRATATIVAS.length; // coluna oculta, logo depois das visíveis
+  tratativasDadosAtuais = linhas.map(l => {
+    const linha = l.slice(0, COLUNAS_TRATATIVAS.length).map(v => fmtData(v));
+    linha.historico = expandirHistorico(l[idxHistorico]);
+    return linha;
+  });
+  document.getElementById('tratativasArea').style.display = 'block';
+  tratativasOrdenacao = { indice: null, direcao: 1 };
+  montarCabecalhoTratativas();
+  montarFiltrosTratativas();
+  montarPainelColunas();
+  aplicarFiltrosTratativas();
+  renderKpisOcorrenciasDeTratativas();
+}
+
 async function restaurarTratativasSalvas() {
   inicializarColunasVisiveis();
-  if (API_URL && API_URL.indexOf('COLE_AQUI') !== 0) {
-    try {
-      const linhas = await fetch(`${API_URL}?action=getTratativasDetalhe`).then(r => r.json());
-      if (linhas && linhas.length > 0) {
-        const idxHistorico = COLUNAS_TRATATIVAS.length; // coluna oculta, logo depois das visíveis
-        tratativasDadosAtuais = linhas.map(l => {
-          const linha = l.slice(0, COLUNAS_TRATATIVAS.length).map(v => fmtData(v));
-          linha.historico = expandirHistorico(l[idxHistorico]);
-          return linha;
-        });
-        document.getElementById('tratativasArea').style.display = 'block';
-        tratativasOrdenacao = { indice: null, direcao: 1 };
-        montarCabecalhoTratativas();
-        montarFiltrosTratativas();
-        montarPainelColunas();
-        aplicarFiltrosTratativas();
-        renderKpisOcorrenciasDeTratativas();
-        atualizarEmRotaTratativas(); // sem await: atualiza a coluna Em Rota assim que chegar
+  const apiOk = API_URL && API_URL.indexOf('COLE_AQUI') !== 0;
+  if (apiOk) {
+    const cache = lerCacheLocal(CHAVE_CACHE_TRATATIVAS_LOCAL);
+    let mostrouCache = false;
+    if (cache && Array.isArray(cache.valor) && cache.valor.length > 0) {
+      try { aplicarLinhasSalvas(cache.valor); mostrouCache = true; } catch (e) { mostrouCache = false; }
+    }
+
+    const res = await buscarJsonComRetry(`${API_URL}?action=getTratativasDetalhe`);
+    registrarTempo('tratativas', res);
+
+    if (res.ok && Array.isArray(res.dados)) {
+      if (res.dados.length > 0) {
+        const igualAoCache = mostrouCache && JSON.stringify(res.dados) === JSON.stringify(cache.valor);
+        if (!igualAoCache) aplicarLinhasSalvas(res.dados); // só redesenha se mudou (evita zerar os filtros à toa)
+        gravarCacheLocal(CHAVE_CACHE_TRATATIVAS_LOCAL, res.dados);
         return;
       }
-    } catch (err) { /* segue pro fallback local abaixo */ }
+      // O servidor respondeu que não há nada salvo ainda: aproveita o texto guardado
+      // neste navegador (caso de primeira vez / migração).
+      const salvoAntigo = localStorage.getItem(CHAVE_LOCALSTORAGE_TRATATIVAS);
+      if (salvoAntigo) processarOcorrenciasTexto(salvoAntigo);
+      return;
+    }
+
+    // A leitura FALHOU (tempo esgotado ou erro). Não reprocessa nem regrava nada:
+    // antes, isso reprocessava o texto local e sobrescrevia a tabela compartilhada
+    // (pesado, e podia gravar uma versão antiga por cima da atual).
+    const motivo = res.erro || 'erro desconhecido';
+    setStatus('statusTratativas', mostrouCache
+      ? `Não consegui atualizar as tratativas agora (${motivo}). Mostrando os dados de ${fmtQuando(cache.quando)}. Atualize a página (F5) pra tentar de novo.`
+      : `Não consegui carregar as tratativas salvas agora (${motivo}). Atualize a página (F5) pra tentar de novo.`, 'erro');
+    return;
   }
   const salvo = localStorage.getItem(CHAVE_LOCALSTORAGE_TRATATIVAS);
   if (salvo) processarOcorrenciasTexto(salvo);
@@ -1730,7 +1770,8 @@ function toggleBtn(id, disabled) { document.getElementById(id).disabled = disabl
 // resposta vier cortada/incompleta (comum no Apps Script logo depois de uma
 // importação grande, com a planilha ainda ocupada).
 async function buscarJsonComRetry(url, tentativas, corpoPost) {
-  tentativas = tentativas || 2; // 2 no máximo: cada nova tentativa é mais uma execução pesada no servidor
+  tentativas = tentativas || 2;
+  const inicio = Date.now();
   let ultimoErro = null;
   for (let i = 1; i <= tentativas; i++) {
     try {
@@ -1739,39 +1780,102 @@ async function buscarJsonComRetry(url, tentativas, corpoPost) {
         : await fetch(url);
       const texto = await resp.text();
       const dados = JSON.parse(texto);
-      if (dados && dados.error) return { ok: false, erro: dados.error };
-      return { ok: true, dados };
+      if (dados && dados.error) return { ok: false, erro: dados.error, ms: Date.now() - inicio };
+      return { ok: true, dados, ms: Date.now() - inicio, tentativas: i };
     } catch (err) {
       ultimoErro = err;
-      if (ultimoErro.name === 'AbortError') break; // já esperou demais; tentar de novo só empilha
-      if (i < tentativas) await new Promise(res => setTimeout(res, 1500));
+      // Também tenta de novo depois de tempo esgotado: quando uma execução trava,
+      // a seguinte costuma responder normal (e a que ficou pra trás ainda
+      // termina e deixa o cache pronto).
+      if (i < tentativas) await new Promise(res => setTimeout(res, 1000));
     }
   }
   const motivo = ultimoErro && ultimoErro.name === 'AbortError'
     ? 'o servidor demorou demais pra responder (tempo esgotado)'
     : 'resposta inválida';
-  return { ok: false, erro: motivo };
+  return { ok: false, erro: motivo, ms: Date.now() - inicio };
+}
+
+// ---------- Cache local (mostra o último dado na hora e atualiza em seguida) ----------
+const CHAVE_CACHE_PAINEL_LOCAL = 'dis_painel_cache_v1';
+const CHAVE_CACHE_TRATATIVAS_LOCAL = 'dis_tratativas_cache_v1';
+
+function lerCacheLocal(chave) {
+  try { return JSON.parse(localStorage.getItem(chave) || 'null'); } catch (e) { return null; }
+}
+function gravarCacheLocal(chave, valor) {
+  try { localStorage.setItem(chave, JSON.stringify({ quando: Date.now(), valor })); } catch (e) { /* sem espaço: segue sem cache */ }
+}
+function fmtQuando(ms) {
+  return new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+function fmtSegundos(ms) { return (ms / 1000).toFixed(1).replace('.', ',') + ' s'; }
+
+// Medidor de tempo (fica discreto abaixo do título "Indicadores"): mostra quanto o
+// SITE esperou e quanto o SERVIDOR levou de fato — a diferença é o tempo perdido
+// no caminho até o Google, que o log do Apps Script não mostra.
+const _tempos = {};
+function registrarTempo(nome, res, extra) {
+  _tempos[nome] = { ms: res.ms, extra: extra || '', ok: res.ok };
+  const partes = Object.keys(_tempos).map(n => {
+    const t = _tempos[n];
+    return `${n} ${t.ok ? fmtSegundos(t.ms) : 'falhou após ' + fmtSegundos(t.ms)}${t.extra ? ' (' + t.extra + ')' : ''}`;
+  });
+  const el = document.getElementById('tempoCarregamento');
+  if (el) el.textContent = '⏱ ' + partes.join(' · ');
 }
 
 // ---------- Indicadores ----------
+function renderPainel(painel) {
+  const dados = painel.indicadores;
+  renderKpis(dados);
+  renderMeta(painel.status);
+  renderTabelaTransportadoras(dados.pedidosNaoRecebidos.porTransportadora);
+  renderKpisOcorrencias(dados);
+  renderTabelaOcorrencias(dados.ocorrencias.porTransportadora);
+}
+
 async function carregarIndicadores() {
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) return;
-  document.getElementById('kpis').innerHTML = '<p class="carregando">Carregando...</p>';
-  try {
-    const resPainel = await buscarJsonComRetry(`${API_URL}?action=getPainel`);
-    if (!resPainel.ok) throw new Error('Não consegui carregar os indicadores (' + resPainel.erro + ').');
-    const dados = resPainel.dados.indicadores;
-    const status = resPainel.dados.status;
+  const statusEl = document.getElementById('statusPainel');
+  const cache = lerCacheLocal(CHAVE_CACHE_PAINEL_LOCAL);
+  let mostrouCache = false;
+  if (cache && cache.valor && cache.valor.indicadores) {
+    try {
+      renderPainel(cache.valor);
+      mostrouCache = true;
+      setStatus('statusPainel', `Mostrando os dados de ${fmtQuando(cache.quando)} — atualizando...`, 'carregando');
+    } catch (e) { mostrouCache = false; }
+  }
+  if (!mostrouCache) {
+    document.getElementById('kpis').innerHTML = '<p class="carregando">Carregando...</p>';
+    setStatus('statusPainel', '', '');
+  }
 
-    renderKpis(dados);
-    renderMeta(status);
-    renderTabelaTransportadoras(dados.pedidosNaoRecebidos.porTransportadora);
-    renderKpisOcorrencias(dados);
-    renderTabelaOcorrencias(dados.ocorrencias.porTransportadora);
-  } catch (err) {
-    console.error('Erro ao carregar indicadores:', err);
-    document.getElementById('kpis').innerHTML =
-      `<p>Erro ao carregar indicadores: ${err.message || err} <button type="button" onclick="carregarIndicadores()" style="margin-left:8px">Tentar de novo</button></p>`;
+  const res = await buscarJsonComRetry(`${API_URL}?action=getPainel`);
+  if (res.ok && res.dados && res.dados.indicadores) {
+    try {
+      renderPainel(res.dados);
+      gravarCacheLocal(CHAVE_CACHE_PAINEL_LOCAL, { indicadores: res.dados.indicadores, status: res.dados.status });
+      setStatus('statusPainel', `Atualizado às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.`, '');
+      const srv = typeof res.dados.servidorMs === 'number'
+        ? `servidor ${fmtSegundos(res.dados.servidorMs)}${res.dados.doCache ? ', do cache' : ''}` : '';
+      registrarTempo('painel', res, srv);
+      return;
+    } catch (err) {
+      console.error('Erro ao desenhar o painel:', err);
+    }
+  }
+
+  registrarTempo('painel', res);
+  const motivo = escapeHtml(res.erro || 'resposta inesperada');
+  const botao = '<button type="button" onclick="carregarIndicadores()" style="margin-left:8px">Tentar de novo</button>';
+  if (mostrouCache) {
+    const el = document.getElementById('statusPainel');
+    el.className = 'status-line erro';
+    el.innerHTML = `Não consegui atualizar agora (${motivo}). Mostrando os dados de ${fmtQuando(cache.quando)}. ${botao}`;
+  } else {
+    document.getElementById('kpis').innerHTML = `<p>Erro ao carregar indicadores: ${motivo} ${botao}</p>`;
   }
 }
 
