@@ -357,11 +357,13 @@ window.fetch = function(url, options) {
     // Sem isso, se o Apps Script demorar demais pra responder (fila de
     // espera, execução presa etc.), o fetch fica esperando pra sempre — a
     // tela "trava" de verdade, sem erro nenhum aparecer, só dá pra sair
-    // com F5. Com o timeout, a chamada desiste sozinha depois de 45s e
-    // quem pediu (ex: o retry automático) consegue tentar de novo ou
-    // mostrar um erro em vez de ficar parado no limbo.
+    // com F5. Com o timeout, a chamada desiste sozinha e quem pediu (ex:
+    // o retry automático) consegue tentar de novo ou mostrar um erro em
+    // vez de ficar parado no limbo. 2 minutos porque o último lote de uma
+    // importação grande (ex: Tabela Dinâmica com dezenas de milhares de
+    // linhas) pode legitimamente demorar mais que isso — não é travamento.
     const controlador = new AbortController();
-    const timeoutId = setTimeout(() => controlador.abort(), 45000);
+    const timeoutId = setTimeout(() => controlador.abort(), 120000);
     options = Object.assign({}, options, { signal: controlador.signal });
     return _fetchOriginal(url, options).finally(() => clearTimeout(timeoutId));
   }
@@ -1654,8 +1656,13 @@ async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBar
       if (typeof result.novos === 'number') totalNovos += result.novos;
       if (typeof result.atualizados === 'number') totalAtualizados += result.atualizados;
     } catch (err) {
-      setStatus(statusId, 'Erro no envio: ' + err.message +
-        (err instanceof SyntaxError ? ' — o servidor respondeu com erro; confira se o Code.gs mais novo foi implantado (nova versão) e tente de novo.' : ''), 'erro');
+      let dica = '';
+      if (err.name === 'AbortError') {
+        dica = ' — o servidor demorou demais pra responder esse lote (pode acontecer em lotes grandes/últimos). Tente importar de novo; se persistir, o arquivo pode precisar ser dividido.';
+      } else if (err instanceof SyntaxError) {
+        dica = ' — o servidor respondeu com erro; confira se o Code.gs mais novo foi implantado (nova versão) e tente de novo.';
+      }
+      setStatus(statusId, 'Erro no envio' + (totalBatches > 1 ? ` (lote ${i + 1} de ${totalBatches})` : '') + ': ' + err.message + dica, 'erro');
       return;
     }
     bar.style.width = Math.round(((i + 1) / totalBatches) * 100) + '%';
