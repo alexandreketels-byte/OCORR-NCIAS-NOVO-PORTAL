@@ -471,7 +471,8 @@ function importarTabDinamica() {
         TAB_NUMERIC_COLS.forEach(i => { row[i] = parseBRNumber(row[i]); });
         return row;
       });
-      await enviarEmLotes(cleanRows, 'importTabDinamica', 'statusTabDinamica', 'progressTabDinamica', 'progressBarTabDinamica');
+      const sucesso = await enviarEmLotes(cleanRows, 'importTabDinamica', 'statusTabDinamica', 'progressTabDinamica', 'progressBarTabDinamica');
+      if (sucesso) await reconstruirIndiceTabDinamica();
       toggleBtn('btnTabDinamica', false);
       carregarIndicadores();
     },
@@ -1672,6 +1673,34 @@ async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBar
     setStatus(statusId, `Importação concluída: ${totalNovos} pedidos novos, ${totalAtualizados} atualizados.`, 'ok');
   } else {
     setStatus(statusId, `Importação concluída: ${rows.length} linhas.`, 'ok');
+  }
+  return true;
+}
+
+// Passo separado, chamado depois que a importação da Tabela Dinâmica
+// termina: reconstrói a mini-tabela (TabDinamicaLookup) usada pelos
+// indicadores, por "Pedidos Recebidos" e pelo PROCV das Tratativas. Fica
+// de fora do próprio envio dos lotes pra não empilhar dois trabalhos
+// pesados no mesmo pedido (é exatamente isso que estava estourando o
+// tempo limite antes).
+async function reconstruirIndiceTabDinamica() {
+  setStatus('statusTabDinamica', 'Importação concluída. Atualizando índice de busca (pode levar um tempinho)...', 'carregando');
+  try {
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'reconstruirTabDinamicaLookup' })
+    });
+    const result = await resp.json();
+    if (result && (result.error || result.ok === false)) {
+      setStatus('statusTabDinamica', 'Importação concluída, mas não consegui atualizar o índice de busca: ' +
+        (result.error || 'erro no servidor') + '. Os indicadores podem ficar desatualizados até a próxima importação.', 'erro');
+      return;
+    }
+    setStatus('statusTabDinamica', 'Importação concluída e índice de busca atualizado.', 'ok');
+  } catch (err) {
+    setStatus('statusTabDinamica', 'Importação concluída, mas não consegui atualizar o índice de busca (' + err.message +
+      '). Os indicadores podem ficar desatualizados até a próxima importação.', 'erro');
   }
 }
 
