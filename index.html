@@ -36,6 +36,9 @@
   .atalho-btn { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.25); padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.88rem; }
   .campo-simples { padding: 8px 10px; border: 1px solid var(--borda); border-radius: 6px; font-size: 0.9rem; background: var(--fundo); color: var(--texto); }
   .campo-simples:disabled { opacity: 0.45; }
+  .lapis-ocorrencia { cursor: pointer; opacity: .55; margin-left: 4px; }
+  .lapis-ocorrencia:hover { opacity: 1; }
+  .selo-editada { font-size: 0.68rem; color: var(--laranja); border: 1px solid var(--laranja); border-radius: 4px; padding: 0 4px; margin-left: 4px; white-space: nowrap; cursor: help; }
   .atalho-btn:hover { background: rgba(255,255,255,0.25); }
   main { max-width: 1800px; margin: 0 auto; padding: 28px 32px 60px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
@@ -199,6 +202,18 @@
     <div class="status-line" id="statusEditPrev"></div>
   </div>
 
+  <div class="indicadores" style="margin-bottom:20px">
+    <h2 style="margin:0 0 6px">Editar tipo de ocorrência</h2>
+    <p class="desc">Se a ocorrência foi aberta com o motivo errado, digite o pedido, escolha o tipo certo e clique em Registrar. Fica guardado na aba <b>OcorrenciasManuais</b> e vale sempre que um texto novo for processado (é o mesmo efeito do lápis ✏️ na coluna Ocorrência).</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input type="text" id="editOcorrPedido" class="campo-simples" placeholder="Nº do pedido (ex: 474798N)" autocomplete="off"
+        style="text-transform:uppercase;min-width:200px" onkeydown="if(event.key==='Enter') registrarOcorrenciaRapida()">
+      <select id="editOcorrTipo" class="campo-simples" style="min-width:260px"></select>
+      <button id="btnEditOcorr" type="button" onclick="registrarOcorrenciaRapida()">Registrar</button>
+    </div>
+    <div class="status-line" id="statusEditOcorr"></div>
+  </div>
+
   <div class="indicadores">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
       <h2 style="margin:0">Indicadores</h2>
@@ -291,6 +306,24 @@
 
 
 <div id="tratativasHistPopover" style="display:none;position:fixed;z-index:1200;width:340px;max-width:calc(100vw - 20px);max-height:320px;overflow-y:auto;background:var(--balao-bg);border:1px solid var(--balao-borda);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.45);padding:14px;font-size:0.85rem"></div>
+
+<div class="modal-overlay" id="editorOcorrenciaOverlay" onclick="if(event.target.id==='editorOcorrenciaOverlay') fecharEditorOcorrencia()">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h3>Alterar tipo de ocorrência</h3>
+      <button class="modal-close" onclick="fecharEditorOcorrencia()">&times;</button>
+    </div>
+    <div style="padding:16px 20px 20px">
+      <p class="desc" id="editorOcorrenciaInfo" style="margin-top:0"></p>
+      <select id="editorOcorrenciaSelect" class="campo-simples" style="width:100%"></select>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button id="btnSalvarEditorOcorrencia" type="button" onclick="salvarEditorOcorrencia()">Salvar</button>
+        <button type="button" onclick="fecharEditorOcorrencia()" style="background:none;border:1px solid var(--borda);color:var(--texto)">Cancelar</button>
+      </div>
+      <div class="status-line" id="statusEditorOcorrencia"></div>
+    </div>
+  </div>
+</div>
 
 <div class="modal-overlay" id="modalOverlay" onclick="fecharModalSeClicouFora(event)">
   <div class="modal">
@@ -1009,6 +1042,15 @@ function configurarPopoverHistoricoTratativas() {
   configurarPopoverHistorico('tratativasTabelaBody', () => tratativasLinhasFiltradas);
   configurarPopoverHistorico('modalTabelaBody', () => modalLinhasFiltradas);
 
+  const corpoTratativas = document.getElementById('tratativasTabelaBody');
+  if (corpoTratativas) corpoTratativas.addEventListener('click', e => {
+    const lapis = e.target.closest('.lapis-ocorrencia');
+    if (!lapis) return;
+    e.stopPropagation();
+    const linha = tratativasLinhasFiltradas[Number(lapis.dataset.idx)];
+    if (linha) abrirEditorOcorrencia(linha[COLUNAS_TRATATIVAS.indexOf('Pedido')], linha[COLUNAS_TRATATIVAS.indexOf('Ocorrência')]);
+  });
+
   pop.addEventListener('mouseover', _cancelarEsconderHistorico);
   pop.addEventListener('mouseout', agendarEsconderHistoricoTratativas);
   document.addEventListener('click', e => {
@@ -1023,6 +1065,31 @@ const COLUNAS_TRATATIVAS = [
   'Em Rota', 'Previsão', 'Entregue?', 'Data Entrega', 'Data Últ. Msg', 'Autor Últ. Msg', 'Mensagem'
 ];
 const COLUNAS_TRATATIVAS_FILTRAVEIS = ['Transportadora', 'Loja', 'Status', 'Ocorrência', 'Entregue?'];
+
+// Tipos de ocorrência do sistema (na ordem em que aparecem na lista do sistema).
+// Pra acrescentar/renomear um tipo, é só mexer nesta lista.
+const TIPOS_OCORRENCIA = [
+  'Agendar Entrega',
+  'Alteração de Local de Entrega',
+  'Avaria Durante o Transporte',
+  'Cancelamento do Pedido',
+  'Carta de Autorização de Retirada',
+  'Cliente Ausente/Fechado',
+  'Cliente Desconhecido no Local',
+  'Cliente Recebeu Produto Errado',
+  'Entrega - Produto Avariado',
+  'Extravio',
+  'Local de Difícil Acesso',
+  'Prazo de Entrega Expirado',
+  'Produto Apreendido',
+  'Reclamação - Transportadora',
+  'Recusa - Erro de Compra e ou Desistência',
+  'Recusa do Cliente por Máquina Avariada',
+  'Retido em Fiscalização',
+  'Sinistro',
+  'Transportadora Entregou no Endereço Errado',
+  'Outros'
+];
 
 const CHAVE_LOCALSTORAGE_TRATATIVAS = 'dis_tratativas_texto_v1';
 const CHAVE_LOCALSTORAGE_TRATATIVAS_COLS = 'dis_tratativas_colunas_v1';
@@ -1229,7 +1296,7 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
   const token = progressoTratativas.iniciar();
 
   try {
-    let lookup = {}, lookupEmRota = {};
+    let lookup = {}, lookupEmRota = {}, lookupOcorrencia = {};
     let avisos = [];
     if (API_URL && API_URL.indexOf('COLE_AQUI') !== 0) {
       progressoTratativas.etapa(token, 8, 55);
@@ -1240,6 +1307,7 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
       if (resProcv.ok) {
         lookup = resProcv.dados.tabDinamica || {};
         lookupEmRota = resProcv.dados.emRota || {};
+        lookupOcorrencia = resProcv.dados.ocorrenciasManuais || {};
         // Mesmo com sucesso na chamada, uma das duas partes (Tabela
         // Dinâmica ou Em Rota) pode ter falhado sozinha — a outra ainda
         // veio certinho, então só avisa sobre a que faltou.
@@ -1260,15 +1328,20 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
       const info = lookup[r.pedido] || {};
       const infoEmRota = lookupEmRota[normalizarChaveNF(r.nf)] || {};
       const historico = r.mensagens || [];
+      // PROCV do pedido na aba de ajustes: se o tipo foi corrigido à mão, vale o corrigido
+      const ajuste = lookupOcorrencia[r.pedido];
+      const tipoFinal = ajuste ? ajuste.tipo : r.ocorrencia;
       const linha = [
         r.pedido, r.nf, r.cliente, r.transportadora, info.loja || '', info.vendedor || '',
-        r.ocorrencia, r.status,
+        tipoFinal, r.status,
         infoEmRota.emRota ? 'Em Rota' : (infoEmRota.dataRomaneio || ''),
         fmtData(info.previsao || ''), info.recebCliente ? 'Sim' : 'Não',
         fmtData(info.recebCliente || ''), m.data, m.autor, m.texto,
         compactarHistorico(historico) // coluna oculta (não aparece na tabela) — só pra ir salva na planilha
       ];
       linha.historico = historico; // usado direto pelo balão de "ver tratativa completa" nesta sessão
+      // o "original" é o tipo que veio no texto (como o vendedor abriu)
+      definirEdicaoOcorrencia(linha, ajuste && ajuste.tipo !== r.ocorrencia ? { original: r.ocorrencia, por: ajuste.por, em: ajuste.em } : null);
       return linha;
     });
 
@@ -1621,6 +1694,7 @@ function aplicarFiltrosTratativas() {
   const idxAutor = COLUNAS_TRATATIVAS.indexOf('Autor Últ. Msg');
   const idxEmRota = COLUNAS_TRATATIVAS.indexOf('Em Rota');
   const idxMensagem = COLUNAS_TRATATIVAS.indexOf('Mensagem');
+  const idxOcorrencia = COLUNAS_TRATATIVAS.indexOf('Ocorrência');
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
 
   tratativasLinhasFiltradas = linhas;
@@ -1660,6 +1734,12 @@ function aplicarFiltrosTratativas() {
               ? ` <span class="hist-icone" data-idx="${posicao}" title="Ver tratativa completa">💬</span>`
               : '';
             return `<td${atributosPisca}>${escapeHtml(valor)}${icone}</td>`;
+          }
+          if (idx === idxOcorrencia) {
+            const ed = l.edicaoOcorrencia;
+            const dica = ed ? escapeHtml(`Original: ${ed.original || 'não registrado'}${ed.por ? ' · alterada por ' + ed.por : ''}${ed.em ? ' em ' + ed.em : ''}`) : '';
+            const selo = ed ? ` <span class="selo-editada" title="${dica}">alterada</span>` : '';
+            return `<td>${escapeHtml(valor)}${selo} <span class="lapis-ocorrencia" data-idx="${posicao}" title="Alterar tipo de ocorrência">✏️</span></td>`;
           }
           return `<td${estilo ? ` style="${estilo}"` : ''}>${valor}</td>`;
         }).join('');
@@ -1704,6 +1784,7 @@ function aplicarLinhasSalvas(linhas) {
   tratativasDadosAtuais = linhas.map(l => {
     const linha = l.slice(0, COLUNAS_TRATATIVAS.length).map(v => fmtData(v));
     linha.historico = expandirHistorico(l[idxHistorico]);
+    definirEdicaoOcorrencia(linha, infoEdicaoDoServidor(l[COLUNAS_TRATATIVAS.length + 1]));
     return linha;
   });
   document.getElementById('tratativasArea').style.display = 'block';
@@ -2409,6 +2490,145 @@ async function registrarPrevisaoRapida() {
   }
 }
 
+// ---------- Editar tipo de ocorrência ----------
+function chavePedidoFront(p) { return String(p || '').trim().toUpperCase(); }
+
+function infoEdicaoDoServidor(json) { // '["original","quem","quando"]' -> objeto, ou null
+  if (!json) return null;
+  try { const a = JSON.parse(json); return { original: a[0] || '', por: a[1] || '', em: a[2] || '' }; } catch (e) { return null; }
+}
+
+// Guarda na linha quem/quando alterou. Se o tipo atual é igual ao original (a pessoa
+// voltou ao original), não marca como "alterada".
+function definirEdicaoOcorrencia(linha, info) {
+  const tipoAtual = linha[COLUNAS_TRATATIVAS.indexOf('Ocorrência')];
+  linha.edicaoOcorrencia = info && !(info.original && info.original === tipoAtual) ? info : null;
+}
+
+function preencherSelectTipos(select, atual, comPlaceholder) {
+  const lista = TIPOS_OCORRENCIA.slice();
+  if (atual && lista.indexOf(atual) === -1) lista.unshift(atual); // tipo que não está na lista ainda aparece, pra não perder
+  select.innerHTML = (comPlaceholder ? '<option value="">Escolha o tipo...</option>' : '') +
+    lista.map(t => `<option value="${escapeHtml(t)}"${t === atual ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('');
+}
+
+// Refaz os filtros da tabela (os tipos mudaram) sem perder o que a pessoa já tinha filtrado.
+function refazerFiltrosPreservandoSelecao() {
+  const anteriores = Object.assign({}, tratativasFiltrosSelecionados);
+  montarFiltrosTratativas();
+  Object.keys(anteriores).forEach(idxStr => {
+    const valor = anteriores[idxStr];
+    if (!valor) return;
+    const select = document.querySelector(`#tratativasFiltrosSelects select[data-coluna="${COLUNAS_TRATATIVAS[Number(idxStr)]}"]`);
+    if (select && Array.from(select.options).some(o => o.value === valor)) {
+      select.value = valor;
+      tratativasFiltrosSelecionados[idxStr] = valor;
+    }
+  });
+}
+
+// Mantém a cópia guardada no navegador em dia (senão, na próxima abertura, apareceria
+// por um instante o tipo antigo antes de chegar a resposta do servidor).
+function atualizarCacheLocalOcorrencia(chave, r) {
+  const cache = lerCacheLocal(CHAVE_CACHE_TRATATIVAS_LOCAL);
+  if (!cache || !Array.isArray(cache.valor)) return;
+  const idxPed = COLUNAS_TRATATIVAS.indexOf('Pedido'), idxOc = COLUNAS_TRATATIVAS.indexOf('Ocorrência');
+  cache.valor.forEach(l => {
+    if (chavePedidoFront(l[idxPed]) !== chave) return;
+    l[idxOc] = r.tipo;
+    l[COLUNAS_TRATATIVAS.length + 1] = JSON.stringify([r.original || '', r.por || '', r.em || '']);
+  });
+  gravarCacheLocal(CHAVE_CACHE_TRATATIVAS_LOCAL, cache.valor);
+}
+
+function aplicarEdicaoOcorrenciaNaTabela(r) {
+  const idxPed = COLUNAS_TRATATIVAS.indexOf('Pedido'), idxOc = COLUNAS_TRATATIVAS.indexOf('Ocorrência');
+  const chave = chavePedidoFront(r.pedido);
+  let mudou = false;
+  tratativasDadosAtuais.forEach(l => {
+    if (chavePedidoFront(l[idxPed]) !== chave) return;
+    l[idxOc] = r.tipo;
+    definirEdicaoOcorrencia(l, { original: r.original || '', por: r.por || '', em: r.em || '' });
+    mudou = true;
+  });
+  atualizarCacheLocalOcorrencia(chave, r);
+  if (mudou) {
+    refazerFiltrosPreservandoSelecao();
+    aplicarFiltrosTratativas();
+    renderKpisOcorrenciasDeTratativas(); // os indicadores por tipo recalculam na hora
+  }
+  return mudou;
+}
+
+// Envia a alteração ao servidor e, se deu certo, já atualiza a tabela desta tela.
+async function enviarEdicaoOcorrencia(pedido, tipo, tipoOriginal) {
+  try {
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'editarOcorrenciaPedido', pedido, tipo, tipoOriginal: tipoOriginal || '' })
+    });
+    const r = await resp.json();
+    if (!r || r.error || r.ok !== true) return { ok: false, erro: (r && r.error) || 'resposta inesperada do servidor' };
+    aplicarEdicaoOcorrenciaNaTabela(r);
+    return { ok: true, dados: r };
+  } catch (err) {
+    return { ok: false, erro: err && err.name === 'AbortError' ? 'o servidor demorou demais pra responder' : (err && err.message) || 'erro de rede' };
+  }
+}
+
+let _editorOcorrenciaPedido = '', _editorOcorrenciaTipoAtual = '';
+
+function abrirEditorOcorrencia(pedido, tipoAtual) {
+  _editorOcorrenciaPedido = pedido;
+  _editorOcorrenciaTipoAtual = tipoAtual || '';
+  document.getElementById('editorOcorrenciaInfo').innerHTML =
+    `Pedido <b>${escapeHtml(pedido)}</b> — tipo atual: <b>${escapeHtml(tipoAtual || '(vazio)')}</b>`;
+  preencherSelectTipos(document.getElementById('editorOcorrenciaSelect'), tipoAtual, false);
+  setStatus('statusEditorOcorrencia', '', '');
+  toggleBtn('btnSalvarEditorOcorrencia', false);
+  document.getElementById('editorOcorrenciaOverlay').style.display = 'flex';
+  document.getElementById('editorOcorrenciaSelect').focus();
+}
+
+function fecharEditorOcorrencia() { document.getElementById('editorOcorrenciaOverlay').style.display = 'none'; }
+
+async function salvarEditorOcorrencia() {
+  const tipo = document.getElementById('editorOcorrenciaSelect').value;
+  if (!tipo) { setStatus('statusEditorOcorrencia', 'Escolha o tipo.', 'erro'); return; }
+  if (tipo === _editorOcorrenciaTipoAtual) { setStatus('statusEditorOcorrencia', 'Esse já é o tipo atual.', 'erro'); return; }
+  setStatus('statusEditorOcorrencia', 'Salvando...', 'carregando');
+  toggleBtn('btnSalvarEditorOcorrencia', true);
+  const r = await enviarEdicaoOcorrencia(_editorOcorrenciaPedido, tipo, _editorOcorrenciaTipoAtual);
+  if (r.ok) { fecharEditorOcorrencia(); return; }
+  toggleBtn('btnSalvarEditorOcorrencia', false);
+  setStatus('statusEditorOcorrencia', 'Não consegui salvar: ' + r.erro, 'erro');
+}
+
+async function registrarOcorrenciaRapida() {
+  const pedido = document.getElementById('editOcorrPedido').value.trim().toUpperCase();
+  const tipo = document.getElementById('editOcorrTipo').value;
+  if (!pedido) { setStatus('statusEditOcorr', 'Informe o número do pedido.', 'erro'); return; }
+  if (!tipo) { setStatus('statusEditOcorr', 'Escolha o tipo de ocorrência.', 'erro'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { setStatus('statusEditOcorr', 'API não configurada.', 'erro'); return; }
+
+  // se o pedido está na tabela desta tela, o tipo que ele tem agora é o "original" a guardar
+  const idxPed = COLUNAS_TRATATIVAS.indexOf('Pedido'), idxOc = COLUNAS_TRATATIVAS.indexOf('Ocorrência');
+  const linha = tratativasDadosAtuais.find(l => chavePedidoFront(l[idxPed]) === chavePedidoFront(pedido));
+  setStatus('statusEditOcorr', 'Salvando...', 'carregando');
+  toggleBtn('btnEditOcorr', true);
+  const r = await enviarEdicaoOcorrencia(pedido, tipo, linha ? linha[idxOc] : '');
+  toggleBtn('btnEditOcorr', false);
+  if (!r.ok) { setStatus('statusEditOcorr', 'Não consegui salvar: ' + r.erro, 'erro'); return; }
+  if (r.dados.naTabelaAtual) {
+    setStatus('statusEditOcorr', `Pedido ${pedido}: tipo registrado como "${tipo}" e já atualizado na tabela de ocorrências.`, 'ok');
+  } else {
+    setStatus('statusEditOcorr', `Pedido ${pedido}: tipo registrado como "${tipo}". Atenção: esse pedido NÃO está na tabela de ocorrências atual — confira o número; o ajuste vale quando ele aparecer num próximo texto.`, 'erro');
+  }
+  document.getElementById('editOcorrPedido').value = '';
+  document.getElementById('editOcorrPedido').focus();
+}
+
 async function editarPrevisao(pedido) {
   const entrada = prompt(`Nova previsão de entrega para o pedido ${pedido}\n(formato dd/mm/aaaa — deixe em branco para marcar como Indefinido):`);
   if (entrada === null) return; // cancelou
@@ -2504,6 +2724,7 @@ function toggleImportadores() {
 
 if (localStorage.getItem(CHAVE_LOCALSTORAGE_IMPORTADORES) === '1') toggleImportadores();
 
+preencherSelectTipos(document.getElementById('editOcorrTipo'), '', true);
 configurarColarComoTabela();
 configurarPopoverHistoricoTratativas();
 verificarLoginSalvo();
