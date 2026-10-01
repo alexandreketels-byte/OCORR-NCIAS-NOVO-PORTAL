@@ -38,6 +38,10 @@
   .campo-simples:disabled { opacity: 0.45; }
   .lapis-ocorrencia { cursor: pointer; opacity: .55; margin-left: 4px; }
   .lapis-ocorrencia:hover { opacity: 1; }
+  /* NEW / Ontem: quando a ocorrência foi aberta (canto da mensagem; o texto contorna o selo) */
+  .selo-novo, .selo-ontem { float: right; margin: 0 0 2px 8px; font-size: 0.62rem; line-height: 1.5; border-radius: 4px; padding: 0 6px; white-space: nowrap; cursor: help; }
+  .selo-novo { background: var(--azul); color: #fff; font-weight: 800; letter-spacing: .05em; }
+  .selo-ontem { color: var(--cinza); font-weight: 500; font-style: italic; }
   .selo-editada { font-size: 0.68rem; color: var(--laranja); border: 1px solid var(--laranja); border-radius: 4px; padding: 0 4px; margin-left: 4px; white-space: nowrap; cursor: help; }
   .atalho-btn:hover { background: rgba(255,255,255,0.25); }
   main { max-width: 1800px; margin: 0 auto; padding: 28px 32px 60px; }
@@ -1595,6 +1599,51 @@ function ehHoje(dataStr) {
   return d.getFullYear() === hoje.getFullYear() && d.getMonth() === hoje.getMonth() && d.getDate() === hoje.getDate();
 }
 
+// ---------- NEW / Ontem: quando a ocorrência foi aberta ----------
+// A data de abertura vem da PRIMEIRA mensagem do histórico (nos textos reais ela é
+// sempre do mesmo dia da abertura), então não precisa de coluna nova na planilha e
+// já vale para as ocorrências que estão salvas.
+function parseDataHoraBR(str) {
+  if (!str || typeof str !== 'string') return null;
+  const m = str.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+  if (!m) return null;
+  const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), Number(m[4] || 0), Number(m[5] || 0));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Mensagem mais antiga do histórico: { dia: Date (00:00), texto: 'dd/mm/aaaa hh:mm' } ou null.
+// Guarda o resultado na própria linha (a tabela é redesenhada a cada filtro).
+function aberturaDaLinha(linha) {
+  if (linha._abertura !== undefined) return linha._abertura;
+  let melhor = null;
+  (linha.historico || []).forEach(m => {
+    const quando = parseDataHoraBR(m.data);
+    if (quando && (!melhor || quando < melhor.quando)) melhor = { quando, texto: String(m.data).trim() };
+  });
+  linha._abertura = melhor
+    ? { dia: new Date(melhor.quando.getFullYear(), melhor.quando.getMonth(), melhor.quando.getDate()), texto: melhor.texto }
+    : null;
+  return linha._abertura;
+}
+
+// 'novo' (aberta hoje) | 'ontem' | '' — compara só o dia
+function rotuloAbertura(dia, hoje) {
+  const h0 = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+  const ontem = new Date(h0.getFullYear(), h0.getMonth(), h0.getDate() - 1);
+  if (dia.getTime() === h0.getTime()) return 'novo';
+  if (dia.getTime() === ontem.getTime()) return 'ontem';
+  return '';
+}
+
+function seloAbertura(linha, hoje) {
+  const ab = aberturaDaLinha(linha);
+  if (!ab) return '';
+  const rotulo = rotuloAbertura(ab.dia, hoje);
+  if (rotulo === 'novo') return `<span class="selo-novo" title="${escapeHtml('Ocorrência aberta hoje — 1ª mensagem em ' + ab.texto)}">NEW</span>`;
+  if (rotulo === 'ontem') return `<span class="selo-ontem" title="${escapeHtml('Ocorrência aberta ontem — 1ª mensagem em ' + ab.texto)}">Ontem</span>`;
+  return '';
+}
+
 // Cor por autor da última mensagem. Comparação por "começa com" (case-insensitive),
 // porque alguns nomes vêm com sufixo tipo "LUIS (Loja 205)".
 const AUTOR_CORES = [
@@ -1737,7 +1786,7 @@ function aplicarFiltrosTratativas() {
             const icone = (l.historico || []).length > 0
               ? ` <span class="hist-icone" data-idx="${posicao}" title="Ver tratativa completa">💬</span>`
               : '';
-            return `<td${atributosPisca}>${escapeHtml(valor)}${icone}</td>`;
+            return `<td${atributosPisca}>${seloAbertura(l, hoje)}${escapeHtml(valor)}${icone}</td>`;
           }
           if (idx === idxOcorrencia) {
             const ed = l.edicaoOcorrencia;
