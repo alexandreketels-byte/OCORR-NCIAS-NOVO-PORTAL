@@ -16,6 +16,7 @@
     --fundo: #0d1117; --card-bg: #161b22; --borda: #30363d; --texto: #e6edf3;
     --linha-hover: rgba(255,255,255,0.04); --linha-par: rgba(255,255,255,0.02);
     --linha-destaque: rgba(63,185,80,0.16);
+    --urgente-bg: rgba(248,81,73,0.24);
     --balao-bg: #211a35; --balao-borda: #6e5b9e;
   }
   :root[data-theme="light"] {
@@ -25,6 +26,7 @@
     --fundo: #f5f6f8; --card-bg: #ffffff; --borda: #dcdfe4; --texto: #1f2328;
     --linha-hover: rgba(0,0,0,0.03); --linha-par: rgba(0,0,0,0.015);
     --linha-destaque: rgba(38,162,105,0.14);
+    --urgente-bg: rgba(192,28,40,0.15);
     --balao-bg: #f3edff; --balao-borda: #8250df;
   }
   * { box-sizing: border-box; }
@@ -72,6 +74,12 @@
   tbody tr:hover { background: var(--linha-hover); }
   tbody tr.linha-destaque { background: var(--linha-destaque); }
   tbody tr.linha-destaque:hover { background: var(--linha-destaque); filter: brightness(1.1); }
+  /* Pedido URGENTE (caixinha marcada): linha vermelha em destaque, faixa na lateral e etiqueta */
+  tbody tr.linha-urgente { background: var(--urgente-bg); }
+  tbody tr.linha-urgente:hover { background: var(--urgente-bg); filter: brightness(1.12); }
+  tbody tr.linha-urgente td:first-child { box-shadow: inset 4px 0 0 var(--vermelho); font-weight: 700; }
+  .chk-urgente { width: 17px; height: 17px; cursor: pointer; accent-color: var(--vermelho); vertical-align: middle; margin: 0 7px 0 0; }
+  .selo-urgente { background: var(--vermelho); color: #fff; font-size: 0.62rem; font-weight: 800; letter-spacing: .06em; border-radius: 4px; padding: 1px 6px; margin-left: 7px; white-space: nowrap; vertical-align: middle; cursor: help; }
 
   /* Piscar quando a última mensagem menciona @camila, @victoria, @ketels,
      @paloma ou @luiz/@luis — a cor em si vem da variável --pisca-cor,
@@ -1212,6 +1220,13 @@ function configurarPopoverHistoricoTratativas() {
     if (linha) abrirEditorOcorrencia(linha[COLUNAS_TRATATIVAS.indexOf('Pedido')], linha[COLUNAS_TRATATIVAS.indexOf('Ocorrência')]);
   });
 
+  if (corpoTratativas) corpoTratativas.addEventListener('change', e => {
+    const caixa = e.target.closest('.chk-urgente');
+    if (!caixa) return;
+    const linha = tratativasLinhasFiltradas[Number(caixa.dataset.idx)];
+    if (linha) alternarUrgente(linha[COLUNAS_TRATATIVAS.indexOf('Pedido')], caixa.checked);
+  });
+
   pop.addEventListener('mouseover', _cancelarEsconderHistorico);
   pop.addEventListener('mouseout', agendarEsconderHistoricoTratativas);
   document.addEventListener('click', e => {
@@ -1462,7 +1477,7 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
   const token = progressoTratativas.iniciar();
 
   try {
-    let lookup = {}, lookupEmRota = {}, lookupOcorrencia = {};
+    let lookup = {}, lookupEmRota = {}, lookupOcorrencia = {}, lookupUrgentes = {};
     let avisos = [];
     if (API_URL && API_URL.indexOf('COLE_AQUI') !== 0) {
       progressoTratativas.etapa(token, 8, 55);
@@ -1474,6 +1489,7 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
         lookup = resProcv.dados.tabDinamica || {};
         lookupEmRota = resProcv.dados.emRota || {};
         lookupOcorrencia = resProcv.dados.ocorrenciasManuais || {};
+        lookupUrgentes = resProcv.dados.urgentes || {};
         // Mesmo com sucesso na chamada, uma das duas partes (Tabela
         // Dinâmica ou Em Rota) pode ter falhado sozinha — a outra ainda
         // veio certinho, então só avisa sobre a que faltou.
@@ -1508,6 +1524,8 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
       linha.historico = historico; // usado direto pelo balão de "ver tratativa completa" nesta sessão
       // o "original" é o tipo que veio no texto (como o vendedor abriu)
       definirEdicaoOcorrencia(linha, ajuste && ajuste.tipo !== r.ocorrencia ? { original: r.ocorrencia, por: ajuste.por, em: ajuste.em } : null);
+      const urg = lookupUrgentes[r.pedido];
+      linha.urgente = urg ? { por: urg.por || '', em: urg.em || '' } : null;
       return linha;
     });
 
@@ -1906,6 +1924,7 @@ function aplicarFiltrosTratativas() {
   const idxEmRota = COLUNAS_TRATATIVAS.indexOf('Em Rota');
   const idxMensagem = COLUNAS_TRATATIVAS.indexOf('Mensagem');
   const idxOcorrencia = COLUNAS_TRATATIVAS.indexOf('Ocorrência');
+  const idxPedidoCol = COLUNAS_TRATATIVAS.indexOf('Pedido');
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
 
   tratativasLinhasFiltradas = linhas;
@@ -1952,10 +1971,18 @@ function aplicarFiltrosTratativas() {
             const selo = ed ? ` <span class="selo-editada" title="${dica}">alterada</span>` : '';
             return `<td>${escapeHtml(valor)}${selo} <span class="lapis-ocorrencia" data-idx="${posicao}" title="Alterar tipo de ocorrência">✏️</span></td>`;
           }
+          if (idx === idxPedidoCol) {
+            const u = l.urgente;
+            const dica = escapeHtml(u ? `Marcado como urgente${u.por ? ' por ' + u.por : ''}${u.em ? ' em ' + u.em : ''}` : 'Marcar como urgente');
+            const caixa = `<input type="checkbox" class="chk-urgente" data-idx="${posicao}" title="${dica}"${u ? ' checked' : ''}>`;
+            const selo = u ? `<span class="selo-urgente" title="${dica}">URGENTE</span>` : '';
+            return `<td>${caixa}${escapeHtml(valor)}${selo}</td>`;
+          }
           return `<td${estilo ? ` style="${estilo}"` : ''}>${valor}</td>`;
         }).join('');
 
-        return `<tr${linhaHoje ? ' class="linha-destaque"' : ''}>${celulas}</tr>`;
+        const classeLinha = l.urgente ? 'linha-urgente' : (linhaHoje ? 'linha-destaque' : '');
+        return `<tr${classeLinha ? ` class="${classeLinha}"` : ''}>${celulas}</tr>`;
       }).join('')
     : `<tr><td colspan="${indices.length}">Nenhum registro encontrado.</td></tr>`;
 }
@@ -1996,6 +2023,7 @@ function aplicarLinhasSalvas(linhas) {
     const linha = l.slice(0, COLUNAS_TRATATIVAS.length).map(v => fmtData(v));
     linha.historico = expandirHistorico(l[idxHistorico]);
     definirEdicaoOcorrencia(linha, infoEdicaoDoServidor(l[COLUNAS_TRATATIVAS.length + 1]));
+    linha.urgente = infoUrgenteDoServidor(l[COLUNAS_TRATATIVAS.length + 2]);
     return linha;
   });
   document.getElementById('tratativasArea').style.display = 'block';
@@ -2708,6 +2736,61 @@ async function registrarPrevisaoRapida() {
     setStatus('statusEditPrev', 'Erro ao salvar a previsão: ' + err.message, 'erro');
   } finally {
     toggleBtn('btnEditPrev', false);
+  }
+}
+
+// ---------- Pedido URGENTE (caixinha na tabela de ocorrências) ----------
+function infoUrgenteDoServidor(json) { // '["quem","quando"]' -> { por, em } | null
+  if (!json) return null;
+  try { const a = JSON.parse(json); return { por: a[0] || '', em: a[1] || '' }; } catch (e) { return null; }
+}
+
+// Marca/desmarca TODAS as linhas desse pedido (o mesmo pedido pode ter mais de uma ocorrência) e redesenha.
+function aplicarUrgenteNaTabela(chave, info) {
+  const idxPed = COLUNAS_TRATATIVAS.indexOf('Pedido');
+  tratativasDadosAtuais.forEach(l => { if (chavePedidoFront(l[idxPed]) === chave) l.urgente = info; });
+  aplicarFiltrosTratativas();
+}
+
+// Mantém a cópia guardada no navegador em dia (senão, na próxima abertura, apareceria por um
+// instante o estado antigo antes de chegar a resposta do servidor).
+function atualizarCacheLocalUrgente(chave, r) {
+  const cache = lerCacheLocal(CHAVE_CACHE_TRATATIVAS_LOCAL);
+  if (!cache || !Array.isArray(cache.valor)) return;
+  const idxPed = COLUNAS_TRATATIVAS.indexOf('Pedido');
+  cache.valor.forEach(l => {
+    if (chavePedidoFront(l[idxPed]) === chave) l[COLUNAS_TRATATIVAS.length + 2] = r.urgente ? JSON.stringify([r.por || '', r.em || '']) : '';
+  });
+  gravarCacheLocal(CHAVE_CACHE_TRATATIVAS_LOCAL, cache.valor);
+}
+
+const _urgentesEmEnvio = new Set();
+
+// A linha já fica vermelha (ou deixa de ficar) NA HORA; o servidor grava em seguida. Se ele recusar
+// ou não responder, volta ao que era e avisa — assim nunca fica marcado só na sua tela.
+async function alternarUrgente(pedido, marcado) {
+  const chave = chavePedidoFront(pedido);
+  if (_urgentesEmEnvio.has(chave)) return; // clique repetido enquanto envia
+  _urgentesEmEnvio.add(chave);
+  const idxPed = COLUNAS_TRATATIVAS.indexOf('Pedido');
+  const anterior = (tratativasDadosAtuais.find(l => chavePedidoFront(l[idxPed]) === chave) || {}).urgente || null;
+  aplicarUrgenteNaTabela(chave, marcado ? { por: '', em: '' } : null);
+  try {
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'marcarUrgente', pedido, urgente: marcado })
+    });
+    const r = await resp.json();
+    if (!r || r.error || r.ok !== true) throw new Error((r && r.error) || 'resposta inesperada do servidor');
+    aplicarUrgenteNaTabela(chave, r.urgente ? { por: r.por || '', em: r.em || '' } : null); // agora com quem marcou e quando
+    atualizarCacheLocalUrgente(chave, r);
+  } catch (err) {
+    aplicarUrgenteNaTabela(chave, anterior);
+    const motivo = err && err.name === 'AbortError' ? 'o servidor demorou demais pra responder' : (err && err.message) || 'erro de rede';
+    setStatus('statusTratativas', `Não consegui ${marcado ? 'marcar' : 'desmarcar'} o pedido ${pedido} como urgente (${motivo}). Voltou ao que era.`, 'erro');
+  } finally {
+    _urgentesEmEnvio.delete(chave);
   }
 }
 
