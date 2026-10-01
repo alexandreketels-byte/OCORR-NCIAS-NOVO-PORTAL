@@ -189,6 +189,16 @@
       <div class="status-line" id="statusEmRotaGFW"></div>
       <div class="meta" id="metaEmRotaGFW"></div>
     </div>
+
+    <div class="card">
+      <h2>Importar Entregas GFW WhatsApp</h2>
+      <p class="desc">Arquivo .md com a exportação da conversa do WhatsApp com a GFW. O site lê os números de NF que os entregadores postaram (foto ou vídeo com o número, ou texto) e cruza pelo número da NF com Pedidos Não Recebidos: as que baterem passam a constar como entregues (WhatsApp). Notas que não são nossas simplesmente não casam. Cada importação acrescenta ao histórico (não apaga as anteriores; guarda 90 dias) e não guarda telefone nem nome de ninguém.</p>
+      <input type="file" id="fileEntregasWhats" accept=".md,.txt,text/markdown,text/plain">
+      <button id="btnEntregasWhats" onclick="importarEntregasWhatsApp()">Importar</button>
+      <div class="progress-wrap" id="progressEntregasWhats"><div class="progress-bar" id="progressBarEntregasWhats"></div></div>
+      <div class="status-line" id="statusEntregasWhats"></div>
+      <div class="meta" id="metaEntregasWhats"></div>
+    </div>
   </div>
 
   <div class="indicadores" style="margin-bottom:20px">
@@ -700,6 +710,153 @@ function fmtDataHoraCelEmRota(v) {
   const p = n => String(n).padStart(2, '0');
   const dataFmt = `${p(v.getDate())}/${p(v.getMonth() + 1)}/${v.getFullYear()}`;
   return (v.getHours() === 0 && v.getMinutes() === 0) ? dataFmt : `${dataFmt} ${p(v.getHours())}:${p(v.getMinutes())}`;
+}
+
+// ---------- Entregas GFW WhatsApp (exportação .md da conversa) ----------
+// Lê o .md da conversa e devolve os números de NF que o pessoal postou (foto/vídeo com
+// legenda, ou texto), cada um com a data/hora da PRIMEIRA vez que apareceu. Não guarda
+// telefone nem nome de ninguém: só "NF" e "quando".
+const MESES_PT = { janeiro: 0, fevereiro: 1, marco: 2, abril: 3, maio: 4, junho: 5, julho: 6, agosto: 7, setembro: 8, outubro: 9, novembro: 10, dezembro: 11 };
+
+function semAcentoMinusculo(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+// "## 1 de outubro de 2026"  ou  "Data de exportação: 1 de outubro de 2026 às 13:34"
+function dataDeCabecalhoWhats(linha) {
+  const m = semAcentoMinusculo(linha).match(/(\d{1,2}) de ([a-z]+) de (\d{4})/);
+  if (!m || !(m[2] in MESES_PT)) return null;
+  return new Date(Number(m[3]), MESES_PT[m[2]], Number(m[1]));
+}
+
+// Tira telefones (ex: "+55 11 97847-9678", "(11) 97847-9678", "97847-9678") pra não virarem NF.
+function semTelefonesWhats(s) {
+  return s
+    .replace(/\+\d{1,3}[\s-]?\(?\d{2}\)?[\s-]?\d{4,5}[\s-]?\d{4}/g, ' ')
+    .replace(/\(?\d{2}\)?\s?9?\d{4}-\d{4}/g, ' ')
+    .replace(/\b\d{4,5}-\d{4}\b/g, ' ');
+}
+
+// "NF 128771", "Nf: 139913", "NFe 123456", "nota fiscal 128111", "NFs 128111, 128112 e 128113"
+const RE_NF_PALAVRA = /(?:^|[^A-Za-z0-9])(?:n\.?\s?f\.?s?(?:-?e)?|nota(?:\s+fiscal)?)\s*[:.\-#º°]*\s*(\d{4,9}(?:\s*(?:[,;\/]|\be\b)\s*\d{4,9})*)(?!\d)/gi;
+const RE_NUMERO = /(?:^|[^A-Za-z0-9_])(\d{4,8})(?![A-Za-z0-9])/g;
+const RE_MIDIA = /\[(?:imagem|v[ií]deo|foto|documento)\]/i;
+
+function numerosDe(texto, regex) {
+  const out = [];
+  regex.lastIndex = 0;
+  let m;
+  while ((m = regex.exec(texto)) !== null) {
+    String(m[1]).split(/\D+/).forEach(n => { if (n) out.push(n); });
+    if (m[0].length === 0) regex.lastIndex++;
+  }
+  return out;
+}
+
+// NFs de UMA mensagem (várias linhas: legenda, texto, citação de resposta).
+function nfsDaMensagem(linhas) {
+  const achados = new Set();
+  const temMidia = linhas.some(l => RE_MIDIA.test(l));
+  linhas.forEach(bruta => {
+    const eCitacao = /^\s*>/.test(bruta);
+    const linha = semTelefonesWhats(bruta.replace(/^\s*>\s?/, ''));
+
+    if (eCitacao) {
+      // Resposta citando uma mensagem antiga ("Imagem: 128920"): só vale se a resposta trouxe mídia
+      // (foto/vídeo = comprovante); resposta só de texto citando um pedido de alguém não conta.
+      if (!temMidia) return;
+      numerosDe(linha, /(?:imagem|v[ií]deo|foto|documento)\s*:\s*(\d{4,9})(?!\d)/gi).forEach(n => achados.add(n));
+      numerosDe(linha, RE_NF_PALAVRA).forEach(n => achados.add(n));
+      return;
+    }
+
+    // 1) número logo depois de "NF" / "nota"
+    numerosDe(linha, RE_NF_PALAVRA).forEach(n => achados.add(n));
+
+    // 2) legenda de foto/vídeo: qualquer número de 4 a 8 dígitos na linha da mídia
+    const resto = linha.replace(/\[[^\]]*\]/g, ' ');
+    if (RE_MIDIA.test(linha)) {
+      numerosDe(resto, RE_NUMERO).forEach(n => achados.add(n));
+    } else if (/^\s*\d{5,8}(\s+[A-Za-zÀ-ÿ.]+){0,3}\s*$/.test(resto)) {
+      // 3) linha só com o número (ex: "128775"), opcionalmente seguido do nome do entregador
+      numerosDe(resto, RE_NUMERO).forEach(n => achados.add(n));
+    }
+  });
+  return achados;
+}
+
+function dataHoraTexto(d) {
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function parseEntregasWhatsApp(texto) {
+  const linhas = String(texto || '').replace(/\r/g, '').split('\n');
+  let dataExportacao = null;
+  linhas.some(l => {
+    if (/^data de exporta/i.test(semAcentoMinusculo(l).trim())) { dataExportacao = dataDeCabecalhoWhats(l); return true; }
+    return false;
+  });
+
+  const mensagens = [];
+  let dataAtual = null, atual = null;
+  linhas.forEach(l => {
+    if (/^\s*#{1,6}\s/.test(l)) {                       // "## 1 de outubro de 2026" muda o dia corrente
+      const d = dataDeCabecalhoWhats(l);
+      if (d) dataAtual = d;
+      atual = null;
+      return;
+    }
+    const m = l.match(/^\[(\d{1,2}):(\d{2})\]\s+\*\*(.+?):\*\*\s?(.*)$/);
+    if (m) {
+      atual = { hora: Number(m[1]), minuto: Number(m[2]), dia: dataAtual || dataExportacao, linhas: [m[4]] };
+      mensagens.push(atual);
+    } else if (atual && l.trim() !== '' && l.trim() !== '---') {
+      atual.linhas.push(l);                             // continuação (legenda em outra linha, citação...)
+    }
+  });
+
+  const hoje = new Date();
+  const primeira = {}; // nf -> Date
+  mensagens.forEach(msg => {
+    const dia = msg.dia || new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+    const quando = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate(), msg.hora, msg.minuto);
+    nfsDaMensagem(msg.linhas).forEach(nf => {
+      if (!primeira[nf] || quando < primeira[nf]) primeira[nf] = quando;
+    });
+  });
+
+  const entregas = Object.keys(primeira)
+    .sort((a, b) => Number(a) - Number(b) || (a < b ? -1 : 1))
+    .map(nf => [nf, dataHoraTexto(primeira[nf])]);
+  return { entregas, mensagens: mensagens.length };
+}
+
+async function importarEntregasWhatsApp() {
+  const input = document.getElementById('fileEntregasWhats');
+  const file = input.files[0];
+  if (!file) { alert('Selecione o arquivo .md da conversa primeiro.'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
+
+  setStatus('statusEntregasWhats', 'Lendo arquivo...', 'carregando');
+  toggleBtn('btnEntregasWhats', true);
+  try {
+    const lido = parseEntregasWhatsApp(await file.text());
+    if (lido.mensagens === 0) {
+      setStatus('statusEntregasWhats', 'Não reconheci mensagens nesse arquivo — confira se é a exportação .md da conversa do WhatsApp. Nada foi importado.', 'erro');
+      return;
+    }
+    if (lido.entregas.length === 0) {
+      setStatus('statusEntregasWhats', `Li ${lido.mensagens} mensagens, mas nenhuma com número de NF (foto ou vídeo com o número, ou texto "NF 123456"). Nada foi importado.`, 'erro');
+      return;
+    }
+    await enviarEmLotes(lido.entregas, 'importEntregasWhatsApp', 'statusEntregasWhats', 'progressEntregasWhats', 'progressBarEntregasWhats');
+    carregarIndicadores();
+  } catch (err) {
+    setStatus('statusEntregasWhats', 'Erro ao ler o arquivo: ' + err.message, 'erro');
+  } finally {
+    toggleBtn('btnEntregasWhats', false);
+  }
 }
 
 async function importarEmRotaGFW() {
@@ -1926,6 +2083,7 @@ async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBar
   const totalBatches = Math.max(1, Math.ceil(rows.length / BATCH_SIZE));
   let totalNovos = 0;
   let totalAtualizados = 0;
+  let totalCasaram = 0;
 
   for (let i = 0; i < totalBatches; i++) {
     const batch = rows.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
@@ -1945,6 +2103,7 @@ async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBar
       }
       if (typeof result.novos === 'number') totalNovos += result.novos;
       if (typeof result.atualizados === 'number') totalAtualizados += result.atualizados;
+      if (typeof result.casaramPNR === 'number') totalCasaram += result.casaramPNR;
     } catch (err) {
       let dica = '';
       if (err.name === 'AbortError') {
@@ -1960,6 +2119,8 @@ async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBar
 
   if (action === 'importTabDinamica') {
     setStatus(statusId, `Importação concluída: ${totalNovos} pedidos novos, ${totalAtualizados} atualizados.`, 'ok');
+  } else if (action === 'importEntregasWhatsApp') {
+    setStatus(statusId, `Importação concluída: ${rows.length} NFs lidas (${totalNovos} novas, ${totalAtualizados} já conhecidas). ${totalCasaram} constam em Pedidos Não Recebidos (já entregues); ${rows.length - totalCasaram} não constam (notas de outros clientes ou pedidos que já saíram da lista).`, 'ok');
   } else {
     setStatus(statusId, `Importação concluída: ${rows.length} linhas.`, 'ok');
   }
@@ -2155,6 +2316,10 @@ function renderMeta(status) {
     document.getElementById('metaEmRotaGFW').textContent =
       `Última importação: ${new Date(status.EmRotaGFW.ultimaImportacao).toLocaleString('pt-BR')} (${status.EmRotaGFW.totalLinhas} linhas)`;
   }
+  if (status.EntregasWhatsApp) {
+    document.getElementById('metaEntregasWhats').textContent =
+      `Última importação: ${new Date(status.EntregasWhatsApp.ultimaImportacao).toLocaleString('pt-BR')} (${status.EntregasWhatsApp.totalLinhas} NFs no histórico)`;
+  }
 }
 
 let dadosTabelaTransportadoras = [];
@@ -2293,7 +2458,7 @@ let modalFiltrosSelecionados = {};
 let modalOrdenacao = { indice: null, direcao: 1 };
 
 // Colunas que, quando presentes, ganham um dropdown de filtro automático
-const COLUNAS_FILTRAVEIS = ['Transportadora', 'Status', 'Ocorrência', 'Entregue?', 'Entregue (GFW)', 'Entregue (RTE)'];
+const COLUNAS_FILTRAVEIS = ['Transportadora', 'Status', 'Ocorrência', 'Entregue?', 'Entregue (GFW)', 'Entregue (RTE)', 'Entregue (WhatsApp)'];
 
 function mostrarModalCarregando(titulo, colunas) {
   document.getElementById('modalTitulo').textContent = titulo;
@@ -2357,7 +2522,8 @@ function montarFiltrosModal() {
   // O filtro por período de entrega (GFW e/ou RTE) só faz sentido nos
   // relatórios que têm essas colunas (ex: Pedidos Não Recebidos).
   const temColunaEntrega = modalColunasAtuais.indexOf('Data Entrega (GFW)') !== -1 ||
-    modalColunasAtuais.indexOf('Data Entrega (RTE)') !== -1;
+    modalColunasAtuais.indexOf('Data Entrega (RTE)') !== -1 ||
+    modalColunasAtuais.indexOf('Data Entrega (WhatsApp)') !== -1;
   document.getElementById('modalFiltroDataEntrega').style.display = temColunaEntrega ? 'flex' : 'none';
 }
 
@@ -2378,17 +2544,17 @@ function aplicarFiltrosModal() {
   });
 
   // Filtro por período de entrega — considera a data que estiver
-  // preenchida, seja da baixa GFW ou da RTE (cada pedido normalmente só
-  // tem uma das duas).
+  // preenchida (baixa GFW, baixa RTE ou entrega informada no WhatsApp).
   const dataDeStr = document.getElementById('modalDataEntregaDe').value;
   const dataAteStr = document.getElementById('modalDataEntregaAte').value;
   if (dataDeStr || dataAteStr) {
     const idxGFW = modalColunasAtuais.indexOf('Data Entrega (GFW)');
     const idxRTE = modalColunasAtuais.indexOf('Data Entrega (RTE)');
+    const idxWhats = modalColunasAtuais.indexOf('Data Entrega (WhatsApp)');
     const dataDe = dataDeStr ? new Date(dataDeStr + 'T00:00:00') : null;
     const dataAte = dataAteStr ? new Date(dataAteStr + 'T00:00:00') : null;
     linhas = linhas.filter(l => {
-      const candidatas = [idxGFW, idxRTE]
+      const candidatas = [idxGFW, idxRTE, idxWhats]
         .filter(idx => idx !== -1)
         .map(idx => parseDataBR(l[idx]))
         .filter(d => d !== null);
@@ -2439,7 +2605,7 @@ function baixarModalExcel() {
   exportarCSV(modalColunasAtuais, modalLinhasFiltradas, document.getElementById('modalTitulo').textContent);
 }
 
-const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)', 'Em Rota', 'Entregue (GFW)', 'Data Entrega (GFW)', 'Entregue (RTE)', 'Data Entrega (RTE)', 'Última Mensagem'];
+const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)', 'Em Rota', 'Entregue (GFW)', 'Data Entrega (GFW)', 'Entregue (RTE)', 'Data Entrega (RTE)', 'Entregue (WhatsApp)', 'Data Entrega (WhatsApp)', 'Última Mensagem'];
 
 let ultimoFiltroPedidos = null;
 
@@ -2473,6 +2639,7 @@ async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido
         p.emRota ? '<span style="color:var(--verde);font-weight:700">Em Rota</span>' : (p.dataRomaneio || ''),
         p.entregueGFW ? 'Sim' : 'Não', fmtData(p.dataEntregaGFW),
         p.entregueRTE ? 'Sim' : 'Não', fmtData(p.dataEntregaRTE),
+        p.entregueWhats ? 'Sim' : 'Não', p.dataEntregaWhats || '',
         p.ultimaOcorrencia || ''
       ];
       linha.historico = expandirHistorico(p.ultimaOcorrenciaHistorico);
