@@ -90,6 +90,7 @@
   #refreshBtn { margin-top: 14px; }
   .kpi.clicavel { cursor: pointer; }
   .kpi.clicavel:hover { box-shadow: 0 0 0 2px var(--azul-claro); }
+  .kpi.ativo { box-shadow: 0 0 0 2px var(--kpi-ativo, var(--azul)); }
   .num-link { color: var(--azul); text-decoration: underline; cursor: pointer; }
   .modal-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
@@ -260,7 +261,7 @@
       <h2 style="margin:0">Ocorrências</h2>
       <button type="button" onclick="baixarOcorrenciasResumoExcel()">⬇ Baixar Excel</button>
     </div>
-    <p class="desc">Calculado a partir do que estiver colado em "Tratativas de Ocorrências" mais abaixo. Clique num número para filtrar a tabela por aquela transportadora.</p>
+    <p class="desc">Calculado a partir do que estiver colado em "Tratativas de Ocorrências" mais abaixo. Clique num número para filtrar a tabela por aquela transportadora; os cartões de urgentes e de abertas hoje/ontem também filtram.</p>
     <div class="kpis" id="kpisOcorrencias"><p class="carregando">Carregando...</p></div>
     <table id="tabelaOcorrencias" style="display:none">
       <thead><tr><th>Transportadora</th><th>Ocorrências</th></tr></thead>
@@ -389,7 +390,7 @@
 
 <script>
 // >>> Cole aqui a URL do seu App da Web do Apps Script (termina em /exec) <<<
-const API_URL = 'https://script.google.com/macros/s/AKfycbyGvGN9dmCKHj4EHHWldpaZOJ8tvz8vpBqIgYTqGlbw93Cuw3h-Guf4gc8AUtlPB20jhw/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbyGvGN9dmCKHj4EHHWldpaZOJ8tvz8vpBqIgYTqGlbw93Cuw3h-Guf4gc8AUtlPB20jhw/exe';
 
 const BATCH_SIZE = 2000;
 
@@ -1532,6 +1533,7 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
     if (aoSucessoLocal) aoSucessoLocal();
     document.getElementById('tratativasArea').style.display = 'block';
 
+    tratativasFiltroEspecial = null;
     definirOrdenacaoInicialTratativas();
     montarCabecalhoTratativas();
     montarFiltrosTratativas();
@@ -1884,6 +1886,11 @@ function aplicarFiltrosTratativas() {
     if (valor) linhas = linhas.filter(l => String(l[idx] ?? '') === valor);
   });
 
+  if (tratativasFiltroEspecial) {
+    const hojeFiltro = new Date();
+    linhas = linhas.filter(l => linhaCasaFiltroEspecial(l, tratativasFiltroEspecial, hojeFiltro));
+  }
+
   const dataDeStr = document.getElementById('tratativasDataEntregaDe').value;
   const dataAteStr = document.getElementById('tratativasDataEntregaAte').value;
   if (dataDeStr || dataAteStr) {
@@ -2027,6 +2034,7 @@ function aplicarLinhasSalvas(linhas) {
     return linha;
   });
   document.getElementById('tratativasArea').style.display = 'block';
+  tratativasFiltroEspecial = null;
   definirOrdenacaoInicialTratativas();
   montarCabecalhoTratativas();
   montarFiltrosTratativas();
@@ -2381,14 +2389,81 @@ function baixarIndicadoresExcel() {
   exportarCSV(colunas, linhas, 'Indicadores por Transportadora');
 }
 
+// Filtro rápido da tabela de ocorrências pelos cartões: null | 'urgente' | 'hoje' | 'ontem'
+let tratativasFiltroEspecial = null;
+let _totalOcorrenciasAtual = 0;
+
+// Números calculados em cima da TABELA inteira (não só do que está filtrado):
+//  - urgentes: pedidos DIFERENTES com a caixinha marcada (o mesmo pedido pode ter 2 ocorrências)
+//  - hoje / ontem: ocorrências cuja abertura (1ª mensagem do histórico, mesma regra do selo NEW/Ontem) é desse dia
+function contagensOcorrencias() {
+  const hoje = new Date();
+  const idxPed = COLUNAS_TRATATIVAS.indexOf('Pedido');
+  const urgentes = new Set();
+  let abertasHoje = 0, abertasOntem = 0;
+  tratativasDadosAtuais.forEach(l => {
+    if (l.urgente) urgentes.add(chavePedidoFront(l[idxPed]));
+    const ab = aberturaDaLinha(l);
+    if (!ab) return;
+    const r = rotuloAbertura(ab.dia, hoje);
+    if (r === 'novo') abertasHoje++; else if (r === 'ontem') abertasOntem++;
+  });
+  return { urgentes: urgentes.size, hoje: abertasHoje, ontem: abertasOntem };
+}
+
+function linhaCasaFiltroEspecial(l, filtro, hoje) {
+  if (filtro === 'urgente') return !!l.urgente;
+  const ab = aberturaDaLinha(l);
+  return !!ab && rotuloAbertura(ab.dia, hoje) === (filtro === 'hoje' ? 'novo' : 'ontem');
+}
+
 function renderKpisOcorrencias(dados) {
+  _totalOcorrenciasAtual = dados.ocorrencias.total;
   const kpis = [
-    { valor: dados.ocorrencias.total, rotulo: 'Total de ocorrências',
-      onclick: `filtrarTratativasPorTransportadora('TODAS')` }
+    { valor: dados.ocorrencias.total, rotulo: 'Total de ocorrências', onclick: 'limparFiltrosKpiOcorrencias()' }
   ];
-  document.getElementById('kpisOcorrencias').innerHTML = kpis.map(k =>
-    `<div class="kpi clicavel" onclick="${k.onclick}"><div class="valor">${k.valor}</div><div class="rotulo">${k.rotulo}</div></div>`
-  ).join('');
+  // Os cartões abaixo dependem da tabela; antes dela carregar não aparecem (em vez de mostrar 0 errado).
+  // Ficam aqui dentro (e não só no desenho "da tabela") porque este bloco também é redesenhado pelo painel,
+  // e quem terminasse por último apagaria os cartões novos.
+  if (tratativasDadosAtuais.length > 0) {
+    const c = contagensOcorrencias();
+    kpis.push(
+      { valor: c.urgentes, rotulo: 'Pedidos urgentes', cor: 'var(--vermelho)', filtro: 'urgente',
+        dica: 'Pedidos marcados com a caixinha URGENTE que estão na tabela. Clique para filtrar.' },
+      { valor: c.hoje, rotulo: 'Abertas hoje', cor: 'var(--azul)', filtro: 'hoje',
+        dica: 'Ocorrências abertas hoje (1ª mensagem de hoje) — as que ganham o selo NEW. Clique para filtrar.' },
+      { valor: c.ontem, rotulo: 'Abertas ontem', cor: 'var(--cinza)', filtro: 'ontem',
+        dica: 'Ocorrências abertas ontem (1ª mensagem de ontem). Clique para filtrar.' }
+    );
+  }
+  document.getElementById('kpisOcorrencias').innerHTML = kpis.map(k => {
+    const ativo = k.filtro && tratativasFiltroEspecial === k.filtro ? ' ativo' : '';
+    const acao = k.filtro ? `alternarFiltroEspecialTratativas('${k.filtro}')` : k.onclick;
+    const estiloValor = k.cor ? ` style="color:${k.cor}"` : '';
+    const estiloCartao = k.cor ? ` style="--kpi-ativo:${k.cor}"` : '';
+    const titulo = k.dica ? ` title="${escapeHtml(k.dica)}"` : '';
+    return `<div class="kpi clicavel${ativo}"${estiloCartao}${titulo} onclick="${acao}"><div class="valor"${estiloValor}>${k.valor}</div><div class="rotulo">${k.rotulo}</div></div>`;
+  }).join('');
+}
+
+// Redesenha só os cartões (ex: depois de marcar/desmarcar urgente), sem refazer o resto.
+function redesenharKpisOcorrencias() {
+  renderKpisOcorrencias({ ocorrencias: { total: _totalOcorrenciasAtual } });
+}
+
+// Clicar num cartão filtra a tabela; clicar de novo desliga.
+function alternarFiltroEspecialTratativas(filtro) {
+  tratativasFiltroEspecial = tratativasFiltroEspecial === filtro ? null : filtro;
+  aplicarFiltrosTratativas();
+  redesenharKpisOcorrencias();
+  if (tratativasFiltroEspecial) document.getElementById('tratativasArea').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// "Total de ocorrências": mostra tudo (desliga o filtro do cartão e o da transportadora)
+function limparFiltrosKpiOcorrencias() {
+  tratativasFiltroEspecial = null;
+  filtrarTratativasPorColuna('Transportadora', 'TODAS');
+  redesenharKpisOcorrencias();
 }
 
 let dadosTabelaOcorrencias = [];
@@ -2750,6 +2825,7 @@ function aplicarUrgenteNaTabela(chave, info) {
   const idxPed = COLUNAS_TRATATIVAS.indexOf('Pedido');
   tratativasDadosAtuais.forEach(l => { if (chavePedidoFront(l[idxPed]) === chave) l.urgente = info; });
   aplicarFiltrosTratativas();
+  redesenharKpisOcorrencias();
 }
 
 // Mantém a cópia guardada no navegador em dia (senão, na próxima abertura, apareceria por um
