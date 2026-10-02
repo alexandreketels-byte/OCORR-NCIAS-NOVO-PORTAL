@@ -109,6 +109,60 @@
   .modal-body { padding: 0 20px 20px; overflow-y: auto; }
   .modal-body table { margin-top: 12px; }
   .modal-body th { position: sticky; top: 0; background: var(--azul-claro); }
+
+  /* ---------- Celular / telas estreitas ---------- */
+  @media (max-width: 700px) {
+    header { padding: 12px; }
+    header h1 { font-size: 1.15rem; }
+    main { padding: 10px 8px 40px; }
+    .card { padding: 12px; }
+    .grid { grid-template-columns: 1fr; gap: 12px; }
+    .indicadores { margin-top: 20px; }
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .kpi { padding: 12px 6px; }
+    .kpi .valor { font-size: 1.4rem; }
+    th, td { padding: 8px; }
+
+    /* filtros ocupam a largura toda (busca sozinha numa linha, selects e datas dois por linha) */
+    .modal-filtros input[type=text] { flex: 1 1 100%; }
+    .modal-filtros select, .modal-filtros input[type=date] { flex: 1 1 calc(50% - 8px); min-width: 0; }
+    #tratativasFiltrosSelects { width: 100%; }
+
+    /* tabela de ocorrências: o Pedido fica fixo à esquerda enquanto você rola pro lado, e as colunas de texto ganham largura pra ler */
+    #tratativasTabela { overflow: visible; border-radius: 0; } /* o 'overflow:hidden' (só arredondava os cantos) impede o Pedido de ficar fixo ao rolar */
+    #tratativasTabela th:first-child, #tratativasTabela td:first-child {
+      position: sticky; left: 0; z-index: 2; background-color: var(--card-bg); box-shadow: 1px 0 0 var(--borda);
+    }
+    #tratativasTabela th:first-child { z-index: 3; background-image: linear-gradient(var(--azul-claro), var(--azul-claro)); }
+    #tratativasTabela tr.linha-destaque td:first-child { background-image: linear-gradient(var(--linha-destaque), var(--linha-destaque)); }
+    #tratativasTabela tr.linha-urgente td:first-child {
+      background-image: linear-gradient(var(--urgente-bg), var(--urgente-bg));
+      box-shadow: inset 4px 0 0 var(--vermelho), 1px 0 0 var(--borda);
+    }
+    #tratativasTabela [data-col="Cliente"] { min-width: 150px; }
+    #tratativasTabela [data-col="Ocorrência"] { min-width: 150px; }
+    #tratativasTabela [data-col="Mensagem"] { min-width: 240px; }
+    .selo-urgente { display: block; width: fit-content; margin: 4px 0 0; }
+
+    /* relatórios em janela (e a janela do lápis): ocupam a tela, e o cabeçalho quebra de linha (antes os botões e o × saíam pela lateral) */
+    .modal-overlay { padding: 8px; }
+    .modal { position: relative; max-height: 96vh; }
+    .modal-header { flex-wrap: wrap; gap: 8px; padding: 12px; }
+    .modal-header h3 { padding-right: 30px; }
+    .modal-header > div { flex-wrap: wrap; }
+    .modal-header > div:last-child { width: 100%; }
+    .modal-close { position: absolute; top: 4px; right: 6px; z-index: 5; font-size: 1.9rem; padding: 4px 10px; }
+    .modal-filtros { padding: 12px 12px 0; }
+    .modal-body { padding: 0 8px 12px; }
+    #progressModal { margin: 10px 12px 0 !important; }
+
+    /* alvos de toque maiores */
+    .chk-urgente { width: 22px; height: 22px; margin-right: 8px; }
+    .lapis-ocorrencia { padding: 4px 2px; font-size: 1.05rem; }
+
+    /* painel "Colunas": abre inteiro na tela, em vez de sair pela lateral */
+    #tratativasColunasPanel { position: fixed !important; left: 8px !important; right: 8px !important; top: 12% !important; max-height: 70vh !important; z-index: 90 !important; }
+  }
 </style>
 </head>
 <body>
@@ -246,6 +300,7 @@
     <div class="status-line" id="statusPainel"></div>
     <div id="tempoCarregamento" style="font-size:0.75rem;color:var(--cinza);margin:2px 0 8px"></div>
     <div class="kpis" id="kpis"><p class="carregando">Carregando...</p></div>
+    <div style="overflow-x:auto">
     <table id="tabelaTransportadoras" style="display:none">
       <thead><tr>
         <th>Transportadora</th><th>Pedidos não recebidos</th><th>Em atraso</th><th>Indefinidos</th>
@@ -253,6 +308,7 @@
       </tr></thead>
       <tbody id="tabelaTransportadorasBody"></tbody>
     </table>
+    </div>
     <button id="refreshBtn" onclick="carregarIndicadores()">Atualizar indicadores</button>
   </div>
 
@@ -307,7 +363,7 @@
           </div>
           <span id="tratativasContador" style="color:var(--cinza);font-size:0.85rem;white-space:nowrap"></span>
         </div>
-        <div style="display:flex;align-items:center;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <button type="button" onclick="copiarColunaTratativas('Pedido', this)">📋 Copiar Pedidos</button>
           <button type="button" onclick="copiarColunaTratativas('NF', this)">📋 Copiar NFs</button>
           <button type="button" onclick="baixarTratativasExcel()">⬇ Baixar Excel</button>
@@ -1666,7 +1722,7 @@ function toggleIndicadoresPorTipoOcorrencia() {
 function montarCabecalhoTratativas() {
   const thead = document.getElementById('tratativasThead');
   const indices = indicesColunasVisiveis();
-  thead.innerHTML = indices.map(idx => `<th style="cursor:pointer;user-select:none" onclick="ordenarTratativas(${idx})">${COLUNAS_TRATATIVAS[idx]}${indicadorOrdenacao(tratativasOrdenacao, idx)}</th>`).join('');
+  thead.innerHTML = indices.map(idx => `<th data-col="${COLUNAS_TRATATIVAS[idx]}" style="cursor:pointer;user-select:none" onclick="ordenarTratativas(${idx})">${COLUNAS_TRATATIVAS[idx]}${indicadorOrdenacao(tratativasOrdenacao, idx)}</th>`).join('');
 }
 
 function indicadorOrdenacao(estado, idx) {
@@ -1949,7 +2005,7 @@ function aplicarFiltrosTratativas() {
           : (!!dataPrevisao && dataPrevisao < hoje);
         const linhaHoje = ehHoje(l[idxDataUltMsg]);
 
-        const celulas = indices.map(idx => {
+        const montarCelula = idx => {
           const valor = l[idx] === undefined || l[idx] === null ? '' : l[idx];
           let estilo = '';
           if (idx === idxPrevisao && previsaoAtrasada) estilo = 'color:var(--vermelho);font-weight:600';
@@ -1986,7 +2042,8 @@ function aplicarFiltrosTratativas() {
             return `<td>${caixa}${escapeHtml(valor)}${selo}</td>`;
           }
           return `<td${estilo ? ` style="${estilo}"` : ''}>${valor}</td>`;
-        }).join('');
+        };
+        const celulas = indices.map(idx => montarCelula(idx).replace(/^<td/, `<td data-col="${COLUNAS_TRATATIVAS[idx]}"`)).join('');
 
         const classeLinha = l.urgente ? 'linha-urgente' : (linhaHoje ? 'linha-destaque' : '');
         return `<tr${classeLinha ? ` class="${classeLinha}"` : ''}>${celulas}</tr>`;
