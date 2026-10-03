@@ -285,4 +285,2969 @@
       <div class="meta" id="metaEmRotaGFW"></div>
     </div>
 
-    <div class
+    <div class="card">
+      <h2>Importar Entregas GFW WhatsApp</h2>
+      <p class="desc">Arquivo .md com a exportação da conversa do WhatsApp com a GFW. O site lê os números de NF que os entregadores postaram (foto ou vídeo com o número, ou texto) e cruza pelo número da NF com Pedidos Não Recebidos: as que baterem passam a constar como entregues (WhatsApp). Notas que não são nossas simplesmente não casam. Cada importação acrescenta ao histórico (não apaga as anteriores; guarda 90 dias) e não guarda telefone nem nome de ninguém.</p>
+      <input type="file" id="fileEntregasWhats" accept=".md,.txt,text/markdown,text/plain">
+      <button id="btnEntregasWhats" onclick="importarEntregasWhatsApp()">Importar</button>
+      <div class="progress-wrap" id="progressEntregasWhats"><div class="progress-bar" id="progressBarEntregasWhats"></div></div>
+      <div class="status-line" id="statusEntregasWhats"></div>
+      <div class="meta" id="metaEntregasWhats"></div>
+    </div>
+  </div>
+
+  <div class="indicadores" style="margin-bottom:20px">
+    <h2 style="margin:0 0 6px">Editar previsão de entrega</h2>
+    <p class="desc">Digite o pedido e a nova data (ou marque "Indefinido") e clique em Registrar. Vale pra pedidos que estão em Pedidos Não Recebidos — é o mesmo efeito do lápis ✏️ da lista, só que direto daqui.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input type="text" id="editPrevPedido" class="campo-simples" placeholder="Nº do pedido (ex: 474798N)" autocomplete="off"
+        style="text-transform:uppercase;min-width:200px" onkeydown="if(event.key==='Enter') registrarPrevisaoRapida()">
+      <input type="date" id="editPrevData" class="campo-simples" onkeydown="if(event.key==='Enter') registrarPrevisaoRapida()">
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.9rem;color:var(--cinza);white-space:nowrap;cursor:pointer">
+        <input type="checkbox" id="editPrevIndefinido" onchange="alternarIndefinidoEditPrev()"> Indefinido
+      </label>
+      <button id="btnEditPrev" type="button" onclick="registrarPrevisaoRapida()">Registrar</button>
+    </div>
+    <div class="status-line" id="statusEditPrev"></div>
+  </div>
+
+  <div class="indicadores" style="margin-bottom:20px">
+    <h2 style="margin:0 0 6px">Editar tipo de ocorrência</h2>
+    <p class="desc">Se a ocorrência foi aberta com o motivo errado, digite o pedido, escolha o tipo certo e clique em Registrar. Fica guardado na aba <b>OcorrenciasManuais</b> e vale sempre que um texto novo for processado (é o mesmo efeito do lápis ✏️ na coluna Ocorrência).</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input type="text" id="editOcorrPedido" class="campo-simples" placeholder="Nº do pedido (ex: 474798N)" autocomplete="off"
+        style="text-transform:uppercase;min-width:200px" onkeydown="if(event.key==='Enter') registrarOcorrenciaRapida()">
+      <select id="editOcorrTipo" class="campo-simples" style="min-width:260px"></select>
+      <button id="btnEditOcorr" type="button" onclick="registrarOcorrenciaRapida()">Registrar</button>
+    </div>
+    <div class="status-line" id="statusEditOcorr"></div>
+  </div>
+
+  <div class="indicadores">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <h2 style="margin:0">Indicadores</h2>
+      <button type="button" onclick="baixarIndicadoresExcel()">⬇ Baixar Excel</button>
+    </div>
+    <div class="progress-wrap" id="progressPainel"><div class="progress-bar" id="progressBarPainel"></div></div>
+    <div class="status-line" id="statusPainel"></div>
+    <div id="tempoCarregamento" style="font-size:0.75rem;color:var(--cinza);margin:2px 0 8px"></div>
+    <div class="kpis" id="kpis"><p class="carregando">Carregando...</p></div>
+    <div style="overflow-x:auto">
+    <table id="tabelaTransportadoras" style="display:none">
+      <thead><tr>
+        <th>Transportadora</th><th>Pedidos não recebidos</th><th>Em atraso</th><th>Indefinidos</th>
+        <th>Em Rota</th><th>Entregues</th><th>Performance</th>
+      </tr></thead>
+      <tbody id="tabelaTransportadorasBody"></tbody>
+    </table>
+    </div>
+    <button id="refreshBtn" onclick="carregarIndicadores()">Atualizar indicadores</button>
+  </div>
+
+  <div class="indicadores">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <h2 style="margin:0">Ocorrências</h2>
+      <button type="button" onclick="baixarOcorrenciasResumoExcel()">⬇ Baixar Excel</button>
+    </div>
+    <p class="desc">Calculado a partir do que estiver colado em "Tratativas de Ocorrências" mais abaixo. Clique num número para filtrar a tabela por aquela transportadora; os cartões de urgentes e de abertas hoje/ontem também filtram.</p>
+    <div class="kpis" id="kpisOcorrencias"><p class="carregando">Carregando...</p></div>
+    <table id="tabelaOcorrencias" style="display:none">
+      <thead><tr><th>Transportadora</th><th>Ocorrências</th></tr></thead>
+      <tbody id="tabelaOcorrenciasBody"></tbody>
+    </table>
+
+    <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--borda)">
+      <h3 id="tituloTipoOcorrencia" style="margin:0;cursor:pointer;user-select:none;font-size:0.95rem" onclick="toggleIndicadoresPorTipoOcorrencia()">▶ Indicadores por Tipo de Ocorrência</h3>
+      <div id="indicadoresPorTipoOcorrenciaArea" style="display:none;margin-top:10px">
+        <p class="desc">
+          Clique num número pra filtrar a tabela de Tratativas por aquele tipo (e loja, se clicar numa célula específica).
+          <span id="tratativasTogglePorLoja" onclick="togglePorLojaOcorrencia()" style="cursor:pointer;color:var(--destaque);white-space:nowrap;margin-left:6px">▶ Detalhar por loja</span>
+        </p>
+        <div style="overflow-x:auto">
+          <table id="tabelaPorTipoOcorrencia" style="display:none">
+            <thead id="tabelaPorTipoOcorrenciaThead"></thead>
+            <tbody id="tabelaPorTipoOcorrenciaBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="indicadores">
+    <h2>Colar Tratativas de Ocorrências (texto)</h2>
+    <p class="desc">Cole aqui direto da tela do sistema (com as mensagens de cada pedido) — não precisa mais passar pelo Excel antes, a caixa já reconhece a tabela colada e organiza as colunas sozinha. Fica salvo neste navegador até você processar um texto novo.</p>
+    <textarea id="colarOcorrenciasTexto" rows="8" style="width:100%;font-family:inherit;font-size:0.9rem;padding:10px;border:1px solid var(--borda);border-radius:8px;"></textarea>
+    <button id="btnProcessarTratativas" onclick="processarOcorrenciasTexto()" style="margin-top:10px">Processar texto</button>
+    <div class="progress-wrap" id="progressTratativas"><div class="progress-bar" id="progressBarTratativas"></div></div>
+    <div class="status-line" id="statusTratativas"></div>
+
+    <div id="tratativasArea" style="display:none;margin-top:16px">
+      <div class="modal-filtros" style="padding:0 0 10px;justify-content:space-between;align-items:center">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:1">
+          <input type="text" id="tratativasBusca" placeholder="Buscar em todas as colunas..." oninput="aplicarFiltrosTratativas()">
+          <div id="tratativasFiltrosSelects" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span style="font-size:0.85rem;color:var(--cinza);white-space:nowrap">Entregue de</span>
+            <input type="date" id="tratativasDataEntregaDe" oninput="aplicarFiltrosTratativas()">
+            <span style="font-size:0.85rem;color:var(--cinza)">até</span>
+            <input type="date" id="tratativasDataEntregaAte" oninput="aplicarFiltrosTratativas()">
+            <button type="button" onclick="limparFiltroDataEntregaTratativas()" style="padding:6px 10px;font-size:0.8rem">Limpar</button>
+          </div>
+          <span id="tratativasContador" style="color:var(--cinza);font-size:0.85rem;white-space:nowrap"></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <button type="button" onclick="copiarColunaTratativas('Pedido', this)">📋 Copiar Pedidos</button>
+          <button type="button" onclick="copiarColunaTratativas('NF', this)">📋 Copiar NFs</button>
+          <button type="button" onclick="baixarTratativasExcel()">⬇ Baixar Excel</button>
+          <div style="position:relative">
+            <button onclick="toggleColunasPanel()" type="button">Colunas ▾</button>
+            <div id="tratativasColunasPanel" style="display:none;position:absolute;right:0;z-index:20;background:var(--card-bg);border:1px solid var(--borda);border-radius:8px;padding:10px 14px;margin-top:6px;max-height:320px;overflow-y:auto;min-width:220px;box-shadow:0 6px 18px rgba(0,0,0,0.35)"></div>
+          </div>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table id="tratativasTabela" style="width:100%">
+          <thead><tr id="tratativasThead"></tr></thead>
+          <tbody id="tratativasTabelaBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+
+<div id="tratativasHistPopover" style="display:none;position:fixed;z-index:1200;width:340px;max-width:calc(100vw - 20px);max-height:320px;overflow-y:auto;background:var(--balao-bg);border:1px solid var(--balao-borda);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.45);padding:14px;font-size:0.85rem"></div>
+
+<div class="modal-overlay" id="editorOcorrenciaOverlay" onclick="if(event.target.id==='editorOcorrenciaOverlay') fecharEditorOcorrencia()">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h3>Alterar tipo de ocorrência</h3>
+      <button class="modal-close" onclick="fecharEditorOcorrencia()">&times;</button>
+    </div>
+    <div style="padding:16px 20px 20px">
+      <p class="desc" id="editorOcorrenciaInfo" style="margin-top:0"></p>
+      <select id="editorOcorrenciaSelect" class="campo-simples" style="width:100%"></select>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button id="btnSalvarEditorOcorrencia" type="button" onclick="salvarEditorOcorrencia()">Salvar</button>
+        <button type="button" onclick="fecharEditorOcorrencia()" style="background:none;border:1px solid var(--borda);color:var(--texto)">Cancelar</button>
+      </div>
+      <div class="status-line" id="statusEditorOcorrencia"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" onclick="fecharModalSeClicouFora(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <h3 id="modalTitulo">Pedidos</h3>
+        <span id="modalContador" style="color:var(--cinza);font-size:0.85rem"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button type="button" onclick="copiarColunaModal('Pedido', this)">📋 Copiar Pedidos</button>
+        <button type="button" onclick="copiarColunaModal('NF', this)">📋 Copiar NFs</button>
+        <button type="button" onclick="baixarModalExcel()">⬇ Baixar Excel</button>
+        <button class="modal-close" onclick="fecharModal()">&times;</button>
+      </div>
+    </div>
+    <div class="progress-wrap" id="progressModal" style="margin:12px 20px 0"><div class="progress-bar" id="progressBarModal"></div></div>
+    <div class="modal-filtros">
+      <input type="text" id="modalBusca" placeholder="Buscar em todas as colunas..." oninput="aplicarFiltrosModal()">
+      <div id="modalFiltrosSelects" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+      <div id="modalFiltroDataEntrega" style="display:none;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="font-size:0.85rem;color:var(--cinza);white-space:nowrap">Entregue de</span>
+        <input type="date" id="modalDataEntregaDe" oninput="aplicarFiltrosModal()">
+        <span style="font-size:0.85rem;color:var(--cinza)">até</span>
+        <input type="date" id="modalDataEntregaAte" oninput="aplicarFiltrosModal()">
+        <button type="button" onclick="limparFiltroDataEntregaModal()" style="padding:6px 10px;font-size:0.8rem">Limpar</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <table id="modalTabela">
+        <thead><tr>
+          <th>Pedido</th><th>NF</th><th>Cliente</th><th>Cidade</th><th>Loja</th>
+          <th>Data Coleta</th><th>Prev Etg</th><th>Atraso (dias)</th>
+        </tr></thead>
+        <tbody id="modalTabelaBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+// >>> Cole aqui a URL do seu App da Web do Apps Script (termina em /exec) <<<
+const API_URL = 'https://script.google.com/macros/s/AKfycbyGvGN9dmCKHj4EHHWldpaZOJ8tvz8vpBqIgYTqGlbw93Cuw3h-Guf4gc8AUtlPB20jhw/exec';
+
+const BATCH_SIZE = 2000;
+
+// ---------- Acesso por PIN ----------
+// Intercepta toda chamada fetch() feita pra API_URL e injeta o PIN salvo
+// automaticamente (como parâmetro ?pin= no GET, ou campo "pin" no corpo do
+// POST) — assim nenhuma das dezenas de chamadas à API espalhadas pelo
+// código precisa ser alterada uma por uma.
+const CHAVE_LOCALSTORAGE_PIN = 'dis_pin_v1';
+const CHAVE_LOCALSTORAGE_NOME = 'dis_pin_nome_v1';
+
+const _fetchOriginal = window.fetch.bind(window);
+window.fetch = function(url, options) {
+  if (typeof url === 'string' && API_URL && url.indexOf(API_URL) === 0) {
+    const pin = localStorage.getItem(CHAVE_LOCALSTORAGE_PIN) || '';
+    if (options && options.method === 'POST' && typeof options.body === 'string') {
+      try {
+        const corpo = JSON.parse(options.body);
+        corpo.pin = pin;
+        options = Object.assign({}, options, { body: JSON.stringify(corpo) });
+      } catch (e) { /* corpo não é JSON — segue sem mexer */ }
+    } else {
+      url = url + (url.indexOf('?') === -1 ? '?' : '&') + 'pin=' + encodeURIComponent(pin);
+    }
+
+    // Sem isso, se o Apps Script demorar demais pra responder (fila de
+    // espera, execução presa etc.), o fetch fica esperando pra sempre — a
+    // tela "trava" de verdade, sem erro nenhum aparecer, só dá pra sair
+    // com F5. Com o timeout, a chamada desiste sozinha e quem pediu (ex:
+    // o retry automático) consegue tentar de novo ou mostrar um erro em
+    // vez de ficar parado no limbo. 2 minutos porque o último lote de uma
+    // importação grande (ex: Tabela Dinâmica com dezenas de milhares de
+    // linhas) pode legitimamente demorar mais que isso — não é travamento.
+    const controlador = new AbortController();
+    let acaoPost = '';
+    try {
+      acaoPost = options && typeof options.body === 'string' ? (JSON.parse(options.body).action || '') : '';
+    } catch (e) { /* corpo não é JSON */ }
+    const ehEscritaPesada = /^import|^reconstruir/.test(acaoPost);
+    const ehLeitura = !acaoPost || /^get/.test(acaoPost); // GET, ou POST que só lê (lista de pedidos grande demais pra URL)
+    // Leitura: 20s (uma execução que travou costuma ser resolvida por uma nova
+    // tentativa; esperar mais só deixa a tela parada). Importação grande: 150s.
+    const limiteMs = ehEscritaPesada ? 150000 : (ehLeitura ? 20000 : 45000);
+    const timeoutId = setTimeout(() => controlador.abort(), limiteMs);
+    options = Object.assign({}, options, { signal: controlador.signal });
+    return _fetchOriginal(url, options).finally(() => clearTimeout(timeoutId));
+  }
+  return _fetchOriginal(url, options);
+};
+
+async function tentarLogin(event) {
+  if (event) event.preventDefault();
+  const pin = document.getElementById('loginPin').value.trim();
+  const erroEl = document.getElementById('loginErro');
+  const btn = document.getElementById('loginBtn');
+  erroEl.textContent = '';
+  if (!pin) { erroEl.textContent = 'Digite sua senha.'; return false; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { erroEl.textContent = 'API não configurada.'; return false; }
+
+  btn.disabled = true; btn.textContent = 'Entrando...';
+  try {
+    const ctrlLogin = new AbortController();
+    const tLogin = setTimeout(() => ctrlLogin.abort(), 20000);
+    const resp = await _fetchOriginal(`${API_URL}?action=login&pin=${encodeURIComponent(pin)}`, { signal: ctrlLogin.signal })
+      .then(r => r.json()).finally(() => clearTimeout(tLogin));
+    if (resp && resp.ok) {
+      localStorage.setItem(CHAVE_LOCALSTORAGE_PIN, pin);
+      localStorage.setItem(CHAVE_LOCALSTORAGE_NOME, resp.nome || '');
+      entrarNoPortal(resp.nome || '');
+    } else {
+      erroEl.textContent = 'Senha incorreta.';
+    }
+  } catch (err) {
+    erroEl.textContent = err && err.name === 'AbortError' ? 'O servidor demorou pra responder. Tente de novo em instantes.' : 'Não consegui verificar a senha agora. Tente de novo.';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
+  return false;
+}
+
+function entrarNoPortal(nome) {
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('appContent').style.display = '';
+  document.getElementById('usuarioLogado').textContent = nome ? `Olá, ${nome}` : '';
+  carregarIndicadores();
+  restaurarTratativasSalvas();
+}
+
+function fazerLogout() {
+  localStorage.removeItem(CHAVE_LOCALSTORAGE_PIN);
+  localStorage.removeItem(CHAVE_LOCALSTORAGE_NOME);
+  localStorage.removeItem(CHAVE_CACHE_PAINEL_LOCAL);
+  localStorage.removeItem(CHAVE_CACHE_TRATATIVAS_LOCAL);
+  location.reload();
+}
+
+// Se já tem um PIN salvo neste navegador, confirma que ainda é válido
+// (pode ter sido removido da planilha de Usuarios) e entra direto sem
+// pedir de novo; senão mostra a tela de login.
+// Se já tem um PIN salvo neste navegador, entra direto — sem esperar
+// confirmação nenhuma do servidor (fica logado até clicar em "Sair",
+// nunca cai sozinho por causa de lentidão ou de uma resposta demorada).
+// O PIN continua sendo exigido de verdade em toda chamada à API por baixo
+// dos panos (ver o fetch() interceptado logo acima), então se alguém tiver
+// o acesso removido da aba "Usuarios", as chamadas passam a falhar — só
+// não derruba a tela de login sozinha nesse caso.
+function verificarLoginSalvo() {
+  const pinSalvo = localStorage.getItem(CHAVE_LOCALSTORAGE_PIN);
+  if (!pinSalvo) return;
+  entrarNoPortal(localStorage.getItem(CHAVE_LOCALSTORAGE_NOME) || '');
+}
+
+function fmtMoeda(v) {
+  return (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function stripFormula(v) {
+  if (typeof v !== 'string') return v;
+  const m = v.match(/^="(.*)"$/);
+  return m ? m[1] : v;
+}
+
+function parseBRNumber(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return v;
+  const n = String(v).trim().replace(/\./g, '').replace(',', '.');
+  const parsed = parseFloat(n);
+  return isNaN(parsed) ? null : parsed;
+}
+
+const TAB_NUMERIC_COLS = [45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 56]; // 0-based indices: Cubagem..VL Pago Cartão
+const TAB_FORMULA_COLS = [2, 8]; // NF, Pedido Marketplace
+
+// ---------- Importação: Tabela Dinâmica (CSV) ----------
+function importarTabDinamica() {
+  const input = document.getElementById('fileTabDinamica');
+  const file = input.files[0];
+  if (!file) { alert('Selecione o arquivo CSV primeiro.'); return; }
+  if (/\.xlsx?$/i.test(file.name || '')) { alert('Este importador só lê arquivo .csv. O arquivo selecionado parece ser um Excel — exporte/salve como .csv e tente de novo.'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
+
+  setStatus('statusTabDinamica', 'Lendo arquivo...', 'carregando');
+  toggleBtn('btnTabDinamica', true);
+
+  Papa.parse(file, {
+    encoding: 'ISO-8859-1',
+    delimiter: ';',
+    skipEmptyLines: true,
+    complete: async function(results) {
+      const rows = results.data.slice(1); // remove cabeçalho
+      const cleanRows = rows.map(r => {
+        const row = r.slice(0, 58); // ignora coluna vazia final
+        TAB_FORMULA_COLS.forEach(i => { row[i] = stripFormula(row[i]); });
+        TAB_NUMERIC_COLS.forEach(i => { row[i] = parseBRNumber(row[i]); });
+        return row;
+      });
+      const sucesso = await enviarEmLotes(cleanRows, 'importTabDinamica', 'statusTabDinamica', 'progressTabDinamica', 'progressBarTabDinamica');
+      if (sucesso) await reconstruirIndiceTabDinamica();
+      toggleBtn('btnTabDinamica', false);
+      carregarIndicadores();
+    },
+    error: function(err) {
+      setStatus('statusTabDinamica', 'Erro ao ler CSV: ' + err.message, 'erro');
+      toggleBtn('btnTabDinamica', false);
+    }
+  });
+}
+
+// ---------- Importação: Pedidos Não Recebidos (HTML disfarçado de .xls) ----------
+function importarPedidosNaoRecebidos() {
+  const input = document.getElementById('filePedidosNaoRecebidos');
+  const file = input.files[0];
+  if (!file) { alert('Selecione o arquivo primeiro.'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
+
+  setStatus('statusPedidos', 'Lendo arquivo...', 'carregando');
+  toggleBtn('btnPedidosNaoRecebidos', true);
+
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    try {
+      const rows = parsePedidosNaoRecebidosHtml(e.target.result);
+      await enviarEmLotes(rows, 'importPedidosNaoRecebidos', 'statusPedidos', 'progressPedidos', 'progressBarPedidos');
+      toggleBtn('btnPedidosNaoRecebidos', false);
+      carregarIndicadores();
+    } catch (err) {
+      setStatus('statusPedidos', 'Erro ao ler arquivo: ' + err.message, 'erro');
+      toggleBtn('btnPedidosNaoRecebidos', false);
+    }
+  };
+  reader.readAsText(file, 'ISO-8859-1');
+}
+
+function parsePedidosNaoRecebidosHtml(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const rows = [];
+  let transportadoraAtual = '';
+  const trs = doc.querySelectorAll('table tr');
+
+  trs.forEach(tr => {
+    const tds = tr.querySelectorAll('td');
+    // Linha de grupo: "Transportadora: NOME" (uma única célula)
+    if (tds.length === 1) {
+      const texto = tds[0].textContent.trim();
+      const m = texto.match(/Transportadora:\s*(.*)/i);
+      if (m) transportadoraAtual = m[1].trim();
+      return;
+    }
+    // Linha de cabeçalho de colunas (contém "Data Coleta")
+    if (tds.length === 11 && tr.textContent.indexOf('Data Coleta') !== -1) return;
+    // Linha de dados
+    if (tds.length === 11) {
+      const vals = Array.from(tds).map(td => td.textContent.trim());
+      rows.push([
+        transportadoraAtual,
+        vals[0], vals[1], parseBRNumber(vals[2]), vals[3], vals[4], vals[5],
+        parseBRNumber(vals[6]), parseBRNumber(vals[7]), parseBRNumber(vals[8]),
+        vals[9]
+        // vals[10] (Cliente) tratado abaixo
+      ].concat([vals[10]]));
+    }
+  });
+  return rows;
+}
+
+// ---------- Importação: Baixa de Entrega GFW (CSV) ----------
+function importarBaixaGFW() {
+  const input = document.getElementById('fileBaixaGFW');
+  const file = input.files[0];
+  if (!file) { alert('Selecione o arquivo CSV primeiro.'); return; }
+  if (/\.xlsx?$/i.test(file.name || '')) { alert('Este importador só lê arquivo .csv. O arquivo selecionado parece ser um Excel — exporte/salve como .csv e tente de novo.'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
+
+  setStatus('statusBaixaGFW', 'Lendo arquivo...', 'carregando');
+  toggleBtn('btnBaixaGFW', true);
+
+  Papa.parse(file, {
+    encoding: 'UTF-8',
+    delimiter: ';',
+    header: true,
+    skipEmptyLines: true,
+    complete: async function(results) {
+      const rows = results.data
+        .filter(r => r['Nota'])
+        .map(r => [
+          r['Nota'], r['Emissão'], r['Status'], r['Evento'], r['Prev. Entrega'],
+          r['Dt. Agendamento'], r['Entrega'], r['CNPJ/CPF Remetente'], r['Nome Remetente'],
+          r['Cidade Remetente'], r['UF Remetente'], r['CNPJ/CPF Destinatário'],
+          r['Nome Destinatário'], r['Cidade Destinatário'], r['UF Destinatário'],
+          r['Recebedor'], r['Quantidade Volume'], r['Valor da Mercadoria (R$)']
+        ]);
+      await enviarEmLotes(rows, 'importBaixaEntregaGFW', 'statusBaixaGFW', 'progressBaixaGFW', 'progressBarBaixaGFW');
+      toggleBtn('btnBaixaGFW', false);
+      carregarIndicadores();
+    },
+    error: function(err) {
+      setStatus('statusBaixaGFW', 'Erro ao ler CSV: ' + err.message, 'erro');
+      toggleBtn('btnBaixaGFW', false);
+    }
+  });
+}
+
+// ---------- Importação: Baixa de Entrega RTE (aceita .csv ou .xlsx, rastreio Rodonaves) ----------
+function processarLinhaRTE(r) {
+  const f = fmtDataHoraCelEmRota; // no-op se já for texto; formata se vier como Data do Excel
+  return [
+    r['CNPJ'], r['NF'], r['NF + 1'], r['Último Status'], f(r['Últ. Atualização']),
+    f(r['Previsão Entrega']), f(r['Data Entrega Real']), r['Remetente'], r['Destinatário'],
+    r['Prazo (dias úteis)'], f(r['Emissão']), r['Entregue'], r['Atrasado']
+  ];
+}
+
+function importarBaixaRTE() {
+  const input = document.getElementById('fileBaixaRTE');
+  const file = input.files[0];
+  if (!file) { alert('Selecione o arquivo (.csv ou .xlsx) primeiro.'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
+
+  setStatus('statusBaixaRTE', 'Lendo arquivo...', 'carregando');
+  toggleBtn('btnBaixaRTE', true);
+
+  const ehXlsx = /\.xlsx$/i.test(file.name || '');
+
+  if (ehXlsx) {
+    (async () => {
+      try {
+        const buffer = await file.arrayBuffer();
+        const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
+        const planilha = wb.Sheets[wb.SheetNames[0]];
+        const linhasObj = XLSX.utils.sheet_to_json(planilha, { raw: true, defval: '' });
+        const rows = linhasObj.filter(r => r['NF']).map(processarLinhaRTE);
+        await enviarEmLotes(rows, 'importBaixaEntregaRTE', 'statusBaixaRTE', 'progressBaixaRTE', 'progressBarBaixaRTE');
+        atualizarEmRotaTratativas();
+        carregarIndicadores();
+      } catch (err) {
+        setStatus('statusBaixaRTE', 'Erro ao ler o arquivo: ' + err.message, 'erro');
+      } finally {
+        toggleBtn('btnBaixaRTE', false);
+      }
+    })();
+    return;
+  }
+
+  Papa.parse(file, {
+    encoding: 'UTF-8',
+    delimiter: ';',
+    header: true,
+    skipEmptyLines: true,
+    complete: async function(results) {
+      const rows = results.data.filter(r => r['NF']).map(processarLinhaRTE);
+      await enviarEmLotes(rows, 'importBaixaEntregaRTE', 'statusBaixaRTE', 'progressBaixaRTE', 'progressBarBaixaRTE');
+        atualizarEmRotaTratativas();
+      toggleBtn('btnBaixaRTE', false);
+      carregarIndicadores();
+    },
+    error: function(err) {
+      setStatus('statusBaixaRTE', 'Erro ao ler CSV: ' + err.message, 'erro');
+      toggleBtn('btnBaixaRTE', false);
+    }
+  });
+}
+
+// ---------- Importação: Em Rota GFW (arquivo .xlsx, relatório REL141) ----------
+function fmtDataHoraCelEmRota(v) {
+  if (!(v instanceof Date)) return v;
+  const p = n => String(n).padStart(2, '0');
+  const dataFmt = `${p(v.getDate())}/${p(v.getMonth() + 1)}/${v.getFullYear()}`;
+  return (v.getHours() === 0 && v.getMinutes() === 0) ? dataFmt : `${dataFmt} ${p(v.getHours())}:${p(v.getMinutes())}`;
+}
+
+// ---------- Entregas GFW WhatsApp (exportação .md da conversa) ----------
+// Lê o .md da conversa e devolve os números de NF que o pessoal postou (foto/vídeo com
+// legenda, ou texto), cada um com a data/hora da PRIMEIRA vez que apareceu. Não guarda
+// telefone nem nome de ninguém: só "NF" e "quando".
+const MESES_PT = { janeiro: 0, fevereiro: 1, marco: 2, abril: 3, maio: 4, junho: 5, julho: 6, agosto: 7, setembro: 8, outubro: 9, novembro: 10, dezembro: 11 };
+
+function semAcentoMinusculo(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+// "## 1 de outubro de 2026"  ou  "Data de exportação: 1 de outubro de 2026 às 13:34"
+function dataDeCabecalhoWhats(linha) {
+  const m = semAcentoMinusculo(linha).match(/(\d{1,2}) de ([a-z]+) de (\d{4})/);
+  if (!m || !(m[2] in MESES_PT)) return null;
+  return new Date(Number(m[3]), MESES_PT[m[2]], Number(m[1]));
+}
+
+// Tira telefones (ex: "+55 11 97847-9678", "(11) 97847-9678", "97847-9678") pra não virarem NF.
+function semTelefonesWhats(s) {
+  return s
+    .replace(/\+\d{1,3}[\s-]?\(?\d{2}\)?[\s-]?\d{4,5}[\s-]?\d{4}/g, ' ')
+    .replace(/\(?\d{2}\)?\s?9?\d{4}-\d{4}/g, ' ')
+    .replace(/\b\d{4,5}-\d{4}\b/g, ' ');
+}
+
+// "NF 128771", "Nf: 139913", "NFe 123456", "nota fiscal 128111", "NFs 128111, 128112 e 128113"
+const RE_NF_PALAVRA = /(?:^|[^A-Za-z0-9])(?:n\.?\s?f\.?s?(?:-?e)?|nota(?:\s+fiscal)?)\s*[:.\-#º°]*\s*(\d{4,9}(?:\s*(?:[,;\/]|\be\b)\s*\d{4,9})*)(?!\d)/gi;
+const RE_NUMERO = /(?:^|[^A-Za-z0-9_])(\d{4,8})(?![A-Za-z0-9])/g;
+const RE_MIDIA = /\[(?:imagem|v[ií]deo|foto|documento)\]/i;
+
+function numerosDe(texto, regex) {
+  const out = [];
+  regex.lastIndex = 0;
+  let m;
+  while ((m = regex.exec(texto)) !== null) {
+    String(m[1]).split(/\D+/).forEach(n => { if (n) out.push(n); });
+    if (m[0].length === 0) regex.lastIndex++;
+  }
+  return out;
+}
+
+// NFs de UMA mensagem (várias linhas: legenda, texto, citação de resposta).
+function nfsDaMensagem(linhas) {
+  const achados = new Set();
+  const temMidia = linhas.some(l => RE_MIDIA.test(l));
+  linhas.forEach(bruta => {
+    const eCitacao = /^\s*>/.test(bruta);
+    const linha = semTelefonesWhats(bruta.replace(/^\s*>\s?/, ''));
+
+    if (eCitacao) {
+      // Resposta citando uma mensagem antiga ("Imagem: 128920"): só vale se a resposta trouxe mídia
+      // (foto/vídeo = comprovante); resposta só de texto citando um pedido de alguém não conta.
+      if (!temMidia) return;
+      numerosDe(linha, /(?:imagem|v[ií]deo|foto|documento)\s*:\s*(\d{4,9})(?!\d)/gi).forEach(n => achados.add(n));
+      numerosDe(linha, RE_NF_PALAVRA).forEach(n => achados.add(n));
+      return;
+    }
+
+    // 1) número logo depois de "NF" / "nota"
+    numerosDe(linha, RE_NF_PALAVRA).forEach(n => achados.add(n));
+
+    // 2) legenda de foto/vídeo: qualquer número de 4 a 8 dígitos na linha da mídia
+    const resto = linha.replace(/\[[^\]]*\]/g, ' ');
+    if (RE_MIDIA.test(linha)) {
+      numerosDe(resto, RE_NUMERO).forEach(n => achados.add(n));
+    } else if (/^\s*\d{5,8}(\s+[A-Za-zÀ-ÿ.]+){0,3}\s*$/.test(resto)) {
+      // 3) linha só com o número (ex: "128775"), opcionalmente seguido do nome do entregador
+      numerosDe(resto, RE_NUMERO).forEach(n => achados.add(n));
+    }
+  });
+  return achados;
+}
+
+function dataHoraTexto(d) {
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function parseEntregasWhatsApp(texto) {
+  const linhas = String(texto || '').replace(/\r/g, '').split('\n');
+  let dataExportacao = null;
+  linhas.some(l => {
+    if (/^data de exporta/i.test(semAcentoMinusculo(l).trim())) { dataExportacao = dataDeCabecalhoWhats(l); return true; }
+    return false;
+  });
+
+  const mensagens = [];
+  let dataAtual = null, atual = null;
+  linhas.forEach(l => {
+    if (/^\s*#{1,6}\s/.test(l)) {                       // "## 1 de outubro de 2026" muda o dia corrente
+      const d = dataDeCabecalhoWhats(l);
+      if (d) dataAtual = d;
+      atual = null;
+      return;
+    }
+    const m = l.match(/^\[(\d{1,2}):(\d{2})\]\s+\*\*(.+?):\*\*\s?(.*)$/);
+    if (m) {
+      atual = { hora: Number(m[1]), minuto: Number(m[2]), dia: dataAtual || dataExportacao, linhas: [m[4]] };
+      mensagens.push(atual);
+    } else if (atual && l.trim() !== '' && l.trim() !== '---') {
+      atual.linhas.push(l);                             // continuação (legenda em outra linha, citação...)
+    }
+  });
+
+  const hoje = new Date();
+  const primeira = {}; // nf -> Date
+  mensagens.forEach(msg => {
+    const dia = msg.dia || new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+    const quando = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate(), msg.hora, msg.minuto);
+    nfsDaMensagem(msg.linhas).forEach(nf => {
+      if (!primeira[nf] || quando < primeira[nf]) primeira[nf] = quando;
+    });
+  });
+
+  const entregas = Object.keys(primeira)
+    .sort((a, b) => Number(a) - Number(b) || (a < b ? -1 : 1))
+    .map(nf => [nf, dataHoraTexto(primeira[nf])]);
+  return { entregas, mensagens: mensagens.length };
+}
+
+async function importarEntregasWhatsApp() {
+  const input = document.getElementById('fileEntregasWhats');
+  const file = input.files[0];
+  if (!file) { alert('Selecione o arquivo .md da conversa primeiro.'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
+
+  setStatus('statusEntregasWhats', 'Lendo arquivo...', 'carregando');
+  toggleBtn('btnEntregasWhats', true);
+  try {
+    const lido = parseEntregasWhatsApp(await file.text());
+    if (lido.mensagens === 0) {
+      setStatus('statusEntregasWhats', 'Não reconheci mensagens nesse arquivo — confira se é a exportação .md da conversa do WhatsApp. Nada foi importado.', 'erro');
+      return;
+    }
+    if (lido.entregas.length === 0) {
+      setStatus('statusEntregasWhats', `Li ${lido.mensagens} mensagens, mas nenhuma com número de NF (foto ou vídeo com o número, ou texto "NF 123456"). Nada foi importado.`, 'erro');
+      return;
+    }
+    await enviarEmLotes(lido.entregas, 'importEntregasWhatsApp', 'statusEntregasWhats', 'progressEntregasWhats', 'progressBarEntregasWhats');
+    carregarIndicadores();
+  } catch (err) {
+    setStatus('statusEntregasWhats', 'Erro ao ler o arquivo: ' + err.message, 'erro');
+  } finally {
+    toggleBtn('btnEntregasWhats', false);
+  }
+}
+
+async function importarEmRotaGFW() {
+  const input = document.getElementById('fileEmRotaGFW');
+  const file = input.files[0];
+  if (!file) { alert('Selecione o arquivo .xlsx primeiro.'); return; }
+  if (/\.csv$/i.test(file.name || '')) { alert('Este importador só lê arquivo .xlsx (Excel). O arquivo selecionado parece ser um CSV — exporte como .xlsx e tente de novo.'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
+
+  setStatus('statusEmRotaGFW', 'Lendo arquivo...', 'carregando');
+  toggleBtn('btnEmRotaGFW', true);
+
+  try {
+    const buffer = await file.arrayBuffer();
+    const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
+    const planilha = wb.Sheets[wb.SheetNames[0]];
+    const aoa = XLSX.utils.sheet_to_json(planilha, { header: 1, raw: true, defval: '' });
+
+    const rows = aoa.slice(1)
+      .filter(r => r[0])
+      .map(r => [
+        r[0], fmtDataHoraCelEmRota(r[1]), fmtDataHoraCelEmRota(r[2]), r[3], r[4],
+        fmtDataHoraCelEmRota(r[5]), fmtDataHoraCelEmRota(r[6]), fmtDataHoraCelEmRota(r[7]), r[8], r[9], r[10]
+      ]);
+
+    await enviarEmLotes(rows, 'importEmRotaGFW', 'statusEmRotaGFW', 'progressEmRotaGFW', 'progressBarEmRotaGFW');
+    carregarIndicadores();
+    atualizarEmRotaTratativas();
+  } catch (err) {
+    setStatus('statusEmRotaGFW', 'Erro ao ler o arquivo: ' + err.message, 'erro');
+  } finally {
+    toggleBtn('btnEmRotaGFW', false);
+  }
+}
+
+// ---------- Colar Tratativas/Ocorrências como texto (copiado da tela) ----------
+// O sistema tem dois relatórios diferentes que podem ser colados aqui:
+// 1) O relatório DETALHADO (tabulado, com uma seção "MENSAGENS" por pedido) —
+//    usado quando você quer ver as tratativas.
+// 2) O relatório RESUMIDO de ocorrências (uma linha por campo, sem mensagens)
+//    — não tem tratativas porque esse relatório nunca as inclui.
+// Detectamos automaticamente qual é: se o texto tem alguma tabulação (\t),
+// tratamos como o formato 1; senão, como o formato 2.
+function parseTratativasTexto(texto) {
+  if (texto.indexOf('\t') === -1) return parseTratativasTextoResumido(texto);
+  const v2 = parseTratativasTextoTabuladoV2(texto);
+  // Rede de segurança: se por algum motivo a versão nova não reconhecer
+  // nada (ex: um formato bem diferente do relatório), tenta a versão
+  // antiga antes de desistir.
+  return v2.length > 0 ? v2 : parseTratativasTextoTabulado(texto);
+}
+
+// Formato tabulado, versão 2 — lida com a estrutura real da tela do
+// sistema: TODAS as linhas de cabeçalho de ocorrência vêm primeiro (uma
+// abaixo da outra), e só DEPOIS vêm as seções "MENSAGENS" de cada uma,
+// também em sequência — mas numa região SEPARADA do texto, não logo
+// abaixo do cabeçalho de cada ocorrência. Por isso processa em duas
+// passagens: primeiro extrai todos os cabeçalhos, depois todos os blocos
+// de mensagens, e junta os dois pela ORDEM (o 1º bloco de mensagens é da
+// 1ª ocorrência, e assim por diante).
+function parseTratativasTextoTabuladoV2(texto) {
+  const REGEX_DATA = /^\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}$/;
+
+  const todasLinhas = texto.split('\n').map(l => l.replace(/\r$/, ''));
+
+  // Acha o limite entre a região de cabeçalhos e a região de mensagens —
+  // normalmente a linha "TOTAL: N ocorrência(s)"; se não achar, usa a
+  // primeira ocorrência da palavra "MENSAGENS" como limite.
+  let idxLimite = todasLinhas.findIndex(l => /TOTAL:\s*\d+\s*ocorrência/i.test(l));
+  if (idxLimite === -1) {
+    idxLimite = todasLinhas.findIndex(l => l.split('\t').some(c => c.trim() === 'MENSAGENS'));
+  }
+  if (idxLimite === -1) idxLimite = todasLinhas.length;
+
+  const regiaoHeader = todasLinhas.slice(0, idxLimite);
+  const regiaoMsgs = todasLinhas.slice(idxLimite + 1);
+
+  // ---- Passo 1: extrai os cabeçalhos de ocorrência ----
+  const registros = [];
+  for (const linhaBruta of regiaoHeader) {
+    const cells = linhaBruta.split('\t').map(c => c.trim());
+    const idxDt = cells.findIndex(c => REGEX_DATA.test(c));
+    if (idxDt === -1) continue;
+
+    // Duas variações de layout observadas: colado direto da tela (Pedido
+    // fica 2 colunas depois da data) ou colado via Excel (Pedido fica 4
+    // colunas depois, com 2 colunas vazias no meio). Detecta pela própria
+    // linha, olhando se a posição "curta" está preenchida.
+    const curto = (cells[idxDt + 2] || '') !== '';
+    const g = curto ? 2 : 4;
+
+    registros.push({
+      dtOcorr: cells[idxDt],
+      loja: cells[idxDt + 1] || '',
+      pedido: cells[idxDt + g] || '',
+      nf: cells[idxDt + g + 1] || '',
+      cliente: cells[idxDt + g + 2] || '',
+      transportadora: cells[idxDt + g + 3] || '',
+      contato: cells[idxDt + g + 4] || '',
+      telefone: cells[idxDt + g + 5] || '',
+      ocorrencia: cells[idxDt + g + 6] || '',
+      status: cells[idxDt + g + 7] || '',
+      mensagens: []
+    });
+  }
+
+  // ---- Passo 2: extrai as seções MENSAGENS, na ordem em que aparecem ----
+  const blocosMensagens = [];
+  let atual = null;
+  for (const linhaBruta of regiaoMsgs) {
+    const cells = linhaBruta.split('\t').map(c => c.trim());
+    if (cells.some(c => c === 'MENSAGENS')) {
+      atual = [];
+      blocosMensagens.push(atual);
+      continue;
+    }
+    if (cells.some(c => c === 'NOVA MENSAGEM' || c === 'TIPO DE OCORRÊNCIA' || c === 'SOLUÇÃO')) {
+      atual = null; // fecha o bloco atual até achar o próximo "MENSAGENS"
+      continue;
+    }
+    if (!atual) continue;
+
+    const idxDtMsg = cells.findIndex(c => REGEX_DATA.test(c));
+    if (idxDtMsg !== -1) {
+      atual.push({ data: cells[idxDtMsg], autor: cells[idxDtMsg + 1] || '', texto: cells[idxDtMsg + 2] || '' });
+    } else {
+      const textoLinha = cells.filter(c => c).join(' ');
+      if (textoLinha && atual.length > 0) {
+        atual[atual.length - 1].texto += ' ' + textoLinha; // continuação da última mensagem
+      }
+    }
+  }
+
+  // ---- Passo 3: junta cabeçalho[i] com blocosMensagens[i], na ordem ----
+  registros.forEach((r, i) => { r.mensagens = blocosMensagens[i] || []; });
+
+  return registros;
+}
+
+// Formato 1: tabulado, com uma seção "MENSAGENS" por pedido. Cada ocorrência
+// começa numa linha com a data em DT Ocorr (col 0) e os dados do pedido nas
+// colunas seguintes. Logo abaixo vem uma seção "MENSAGENS" com uma linha por
+// mensagem (data / autor / texto), podendo ter linhas de continuação (texto
+// mais longo que quebrou em várias linhas na célula original).
+function parseTratativasTextoTabulado(texto) {
+  const REGEX_DATA = /^\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}$/;
+  const REGEX_TELEFONE = /^\(\d{2,3}\)[\d-]+$/;
+
+  const linhas = texto.split('\n');
+  const registros = [];
+  let atual = null;
+  let secao = null; // 'mensagens' | null
+
+  for (const linhaBruta of linhas) {
+    const cells = linhaBruta.replace(/\r$/, '').split('\t').map(c => c.trim());
+    const c0 = cells[0] || '';
+    const c1 = cells[1] || '';
+
+    // Nova ocorrência (início de um pedido)
+    if (REGEX_DATA.test(c0)) {
+      atual = {
+        dtOcorr: c0,
+        loja: cells[1] || '',
+        pedido: cells[4] || '',
+        nf: cells[5] || '',
+        cliente: cells[6] || '',
+        transportadora: cells[7] || '',
+        contato: cells[8] || '',
+        telefone: cells[9] || '',
+        ocorrencia: cells[10] || '',
+        status: cells[11] || '',
+        mensagens: []
+      };
+      registros.push(atual);
+      secao = null;
+      continue;
+    }
+
+    if (!atual) continue; // ainda não achamos a primeira ocorrência
+
+    if (c1 === 'MENSAGENS') { secao = 'mensagens'; continue; }
+    if (c1 === 'NOVA MENSAGEM') { secao = null; continue; }
+    if (c1 === 'TIPO DE OCORRÊNCIA' || c1 === 'SOLUÇÃO') { secao = null; continue; }
+
+    if (secao === 'mensagens') {
+      const dt = cells[1] || '';
+      const autor = cells[2] || '';
+      const texto2 = cells[3] || '';
+      if (REGEX_DATA.test(dt)) {
+        atual.mensagens.push({ data: dt, autor, texto: texto2 });
+      } else if (texto2 && atual.mensagens.length > 0) {
+        // continuação do texto da última mensagem
+        atual.mensagens[atual.mensagens.length - 1].texto += ' ' + texto2;
+      }
+      continue;
+    }
+
+    // Telefone extra numa linha própria (logo após o cabeçalho da ocorrência)
+    const naoVazias = cells.map(c => c.trim()).filter(c => c.length > 0);
+    if (naoVazias.length === 1 && REGEX_TELEFONE.test(naoVazias[0])) {
+      atual.telefone = atual.telefone ? atual.telefone + ' / ' + naoVazias[0] : naoVazias[0];
+    }
+  }
+
+  return registros;
+}
+
+// Formato 2: relatório resumido — cada registro aparece como uma linha por
+// coluna (DT Ocorr, Loja, Pedido, NF, Cliente, Transp, Contato, Telefone,
+// Ocorrência, Status), intercaladas com muitas linhas em branco (o próprio
+// relatório é assim, sem mensagens). O telefone pode vir em mais de uma linha.
+function parseTratativasTextoResumido(texto) {
+  const REGEX_DATA = /^\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}$/;
+  const REGEX_TELEFONE = /^\(\d{2,3}\)[\d-]+$/;
+
+  const linhas = texto.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const registros = [];
+  let i = 0;
+  while (i < linhas.length) {
+    if (!REGEX_DATA.test(linhas[i])) { i++; continue; }
+    const dtOcorr = linhas[i++];
+    const loja = linhas[i++] || '';
+    const pedido = linhas[i++] || '';
+    const nf = linhas[i++] || '';
+    const cliente = linhas[i++] || '';
+    const transportadora = linhas[i++] || '';
+    const contato = linhas[i++] || '';
+    const telefones = [];
+    while (i < linhas.length && REGEX_TELEFONE.test(linhas[i])) {
+      telefones.push(linhas[i++]);
+    }
+    const ocorrencia = linhas[i++] || '';
+    const status = linhas[i++] || '';
+    registros.push({
+      dtOcorr, loja, pedido, nf, cliente, transportadora, contato,
+      telefone: telefones.join(' / '), ocorrencia, status, mensagens: []
+    });
+  }
+  return registros;
+}
+
+function ultimaMensagem(registro) {
+  if (!registro.mensagens || registro.mensagens.length === 0) return { data: '', autor: '', texto: '' };
+  return registro.mensagens[registro.mensagens.length - 1];
+}
+
+function escapeHtml(s) {
+  return String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+// Formato compacto (array de arrays, sem repetir nome de campo) pra ocupar
+// menos espaço na célula da planilha — [ [data, autor, texto], ... ].
+function compactarHistorico(mensagens) {
+  if (!mensagens || !mensagens.length) return '';
+  return JSON.stringify(mensagens.map(m => [m.data || '', m.autor || '', m.texto || '']));
+}
+
+function expandirHistorico(json) {
+  if (!json) return [];
+  try {
+    const arr = JSON.parse(json);
+    return arr.map(t => ({ data: t[0], autor: t[1], texto: t[2] }));
+  } catch (err) {
+    return [];
+  }
+}
+
+// ---------- Balão com a tratativa completa (ícone 💬 na coluna Mensagem) ----------
+function montarConteudoHistorico(mensagens) {
+  if (!mensagens || !mensagens.length) {
+    return '<p style="color:var(--cinza);margin:0">Sem mensagens registradas.</p>';
+  }
+  return mensagens.map(m => `
+    <div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--borda)">
+      <div style="font-size:0.75rem;color:var(--cinza);margin-bottom:3px">${escapeHtml(m.data)}${m.autor ? ' — <span style="font-weight:600">' + escapeHtml(m.autor) + '</span>' : ''}</div>
+      <div>${escapeHtml(m.texto).replace(/\n/g, '<br>')}</div>
+    </div>
+  `).join('');
+}
+
+let _histEsconderTimer = null;
+function _cancelarEsconderHistorico() {
+  if (_histEsconderTimer) { clearTimeout(_histEsconderTimer); _histEsconderTimer = null; }
+}
+function agendarEsconderHistoricoTratativas() {
+  _histEsconderTimer = setTimeout(esconderHistoricoTratativas, 250);
+}
+
+function mostrarHistorico(linhas, idx, anchorEl) {
+  _cancelarEsconderHistorico();
+  const linha = linhas && linhas[idx];
+  const pop = document.getElementById('tratativasHistPopover');
+  if (!linha) return;
+  pop.innerHTML = montarConteudoHistorico(linha.historico);
+  pop.style.display = 'block';
+
+  const rect = anchorEl.getBoundingClientRect();
+  const largura = pop.offsetWidth || 340;
+  let left = rect.left;
+  if (left + largura > window.innerWidth - 10) left = window.innerWidth - largura - 10;
+  if (left < 10) left = 10;
+  let top = rect.bottom + 6;
+  if (top + pop.offsetHeight > window.innerHeight - 10) top = Math.max(10, rect.top - pop.offsetHeight - 6);
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+}
+
+function esconderHistoricoTratativas() {
+  document.getElementById('tratativasHistPopover').style.display = 'none';
+}
+
+// Liga o balão de histórico completo numa tabela — funciona tanto na
+// tabela de Tratativas quanto no modal genérico (Pedidos Não Recebidos,
+// Em Atraso, Em Rota, Entregues etc.), já que os dois mostram a coluna
+// "Última Mensagem"/"Última Ocorrência" com o ícone 💬. getLinhas() é
+// chamado a cada hover/clique pra sempre pegar a lista mais atual (o
+// filtro/busca pode ter mudado desde que a tabela foi montada).
+function configurarPopoverHistorico(tbodyId, getLinhas) {
+  const tbody = document.getElementById(tbodyId);
+  const pop = document.getElementById('tratativasHistPopover');
+  if (!tbody || !pop) return;
+
+  tbody.addEventListener('mouseover', e => {
+    const icone = e.target.closest('.hist-icone');
+    if (icone) mostrarHistorico(getLinhas(), Number(icone.dataset.idx), icone);
+  });
+  tbody.addEventListener('mouseout', e => {
+    if (e.target.closest('.hist-icone')) agendarEsconderHistoricoTratativas();
+  });
+  tbody.addEventListener('click', e => {
+    const icone = e.target.closest('.hist-icone');
+    if (!icone) return;
+    e.stopPropagation();
+    mostrarHistorico(getLinhas(), Number(icone.dataset.idx), icone);
+  });
+}
+
+function configurarPopoverHistoricoTratativas() {
+  const pop = document.getElementById('tratativasHistPopover');
+  if (!pop) return;
+
+  configurarPopoverHistorico('tratativasTabelaBody', () => tratativasLinhasFiltradas);
+  configurarPopoverHistorico('modalTabelaBody', () => modalLinhasFiltradas);
+
+  const corpoTratativas = document.getElementById('tratativasTabelaBody');
+  if (corpoTratativas) corpoTratativas.addEventListener('click', e => {
+    const lapis = e.target.closest('.lapis-ocorrencia');
+    if (!lapis) return;
+    e.stopPropagation();
+    const linha = tratativasLinhasFiltradas[Number(lapis.dataset.idx)];
+    if (linha) abrirEditorOcorrencia(linha[COLUNAS_TRATATIVAS.indexOf('Pedido')], linha[COLUNAS_TRATATIVAS.indexOf('Ocorrência')]);
+  });
+
+  if (corpoTratativas) corpoTratativas.addEventListener('change', e => {
+    const caixa = e.target.closest('.chk-urgente');
+    if (!caixa) return;
+    const linha = tratativasLinhasFiltradas[Number(caixa.dataset.idx)];
+    if (linha) alternarUrgente(linha[COLUNAS_TRATATIVAS.indexOf('Pedido')], caixa.checked);
+  });
+
+  pop.addEventListener('mouseover', _cancelarEsconderHistorico);
+  pop.addEventListener('mouseout', agendarEsconderHistoricoTratativas);
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.hist-icone') && !e.target.closest('#tratativasHistPopover')) {
+      esconderHistoricoTratativas();
+    }
+  });
+}
+
+const COLUNAS_TRATATIVAS = [
+  'Pedido', 'NF', 'Cliente', 'Transportadora', 'Loja', 'Vendedor', 'Ocorrência', 'Status',
+  'Em Rota', 'Previsão', 'Entregue?', 'Data Entrega', 'Data Últ. Msg', 'Autor Últ. Msg', 'Mensagem'
+];
+const COLUNAS_TRATATIVAS_FILTRAVEIS = ['Transportadora', 'Loja', 'Status', 'Ocorrência', 'Entregue?'];
+
+// Tipos de ocorrência do sistema (na ordem em que aparecem na lista do sistema).
+// Pra acrescentar/renomear um tipo, é só mexer nesta lista.
+const TIPOS_OCORRENCIA = [
+  'Agendar Entrega',
+  'Alteração de Local de Entrega',
+  'Antecipação',
+  'Avaria Durante o Transporte',
+  'Cancelamento do Pedido',
+  'Carta de Autorização de Retirada',
+  'Carta de correção',
+  'Cliente Ausente/Fechado',
+  'Cliente Desconhecido no Local',
+  'Cliente não pode receber',
+  'Cliente Recebeu Produto Errado',
+  'Endereço não encontrado',
+  'Entrega - Produto Avariado',
+  'Extravio',
+  'Local de Difícil Acesso',
+  'Prazo de Entrega Expirado',
+  'Produto Apreendido',
+  'Reclamação - Transportadora',
+  'Recusa - Erro de Compra e ou Desistência',
+  'Recusa do Cliente por Máquina Avariada',
+  'Retido em Fiscalização',
+  'Sinistro',
+  'Transportadora Entregou no Endereço Errado',
+  'Troca de nota fiscal',
+  'Outros'
+];
+
+const CHAVE_LOCALSTORAGE_TRATATIVAS = 'dis_tratativas_texto_v1';
+const CHAVE_LOCALSTORAGE_TRATATIVAS_COLS = 'dis_tratativas_colunas_v1';
+
+let tratativasDadosAtuais = [];
+let tratativasLinhasFiltradas = [];
+let tratativasFiltrosSelecionados = {};
+// Ordenação padrão da tabela de Tratativas: última mensagem MAIS RECENTE no topo.
+// Só deixa de valer se a pessoa clicar num cabeçalho (tratativasOrdenacaoManual).
+function ordenacaoPadraoTratativas() {
+  return { indice: COLUNAS_TRATATIVAS.indexOf('Data Últ. Msg'), direcao: -1 };
+}
+let tratativasOrdenacao = ordenacaoPadraoTratativas();
+let tratativasOrdenacaoManual = false;
+function definirOrdenacaoInicialTratativas() {
+  if (!tratativasOrdenacaoManual) tratativasOrdenacao = ordenacaoPadraoTratativas();
+}
+let tratativasColunasVisiveis = {};
+
+function inicializarColunasVisiveis() {
+  let salvo = {};
+  try { salvo = JSON.parse(localStorage.getItem(CHAVE_LOCALSTORAGE_TRATATIVAS_COLS) || '{}'); } catch (e) { salvo = {}; }
+  tratativasColunasVisiveis = {};
+  COLUNAS_TRATATIVAS.forEach(c => { tratativasColunasVisiveis[c] = salvo.hasOwnProperty(c) ? salvo[c] : true; });
+}
+
+function indicesColunasVisiveis() {
+  return COLUNAS_TRATATIVAS.map((c, i) => i).filter(i => tratativasColunasVisiveis[COLUNAS_TRATATIVAS[i]]);
+}
+
+function montarPainelColunas() {
+  const painel = document.getElementById('tratativasColunasPanel');
+  painel.innerHTML = COLUNAS_TRATATIVAS.map(c => `
+    <label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:0.85rem;cursor:pointer;white-space:nowrap">
+      <input type="checkbox" ${tratativasColunasVisiveis[c] ? 'checked' : ''} onchange="alternarColunaTratativas('${c}', this.checked)">
+      ${c}
+    </label>`).join('');
+}
+
+function alternarColunaTratativas(nome, visivel) {
+  tratativasColunasVisiveis[nome] = visivel;
+  localStorage.setItem(CHAVE_LOCALSTORAGE_TRATATIVAS_COLS, JSON.stringify(tratativasColunasVisiveis));
+  montarCabecalhoTratativas();
+  aplicarFiltrosTratativas();
+}
+
+function toggleColunasPanel() {
+  const painel = document.getElementById('tratativasColunasPanel');
+  painel.style.display = painel.style.display === 'none' ? 'block' : 'none';
+}
+
+// ---------- Colar direto de uma tabela (aproveita o text/html do clipboard) ----------
+// Quando você copia de um relatório na tela e cola numa caixa de texto comum,
+// o navegador só entrega o "text/plain" do clipboard — que muitas vezes não
+// vem separado por colunas (sem tabulação), diferente de quando você cola no
+// Excel primeiro (que lê o "text/html" e remonta a tabela certinho). Aqui a
+// gente intercepta o paste e faz o mesmo: lê o text/html e reconstrói a
+// tabela usando o motor do SheetJS (XLSX.utils.table_to_sheet), que já lida
+// bem com células mescladas — bem mais confiável que tentar reescrever essa
+// lógica na unha.
+function tabelaParaLinhasRobusto(tabela, linhasSaida) {
+  const clone = tabela.cloneNode(true);
+  clone.querySelectorAll('table').forEach(t => t.remove()); // tira as aninhadas — tratadas à parte abaixo
+  // raw:true nas duas chamadas é essencial: sem isso o SheetJS tenta
+  // "entender" texto como "13/01/2026" e reformata como data curta
+  // (viraria "1/13/26" ou pior, interpretado como mês/dia trocado).
+  const ws = XLSX.utils.table_to_sheet(clone, { raw: true });
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+  // iguala a quantidade de colunas entre as linhas desta tabela — o
+  // sheet_to_json corta cada linha no seu último valor preenchido, o que
+  // bagunça a leitura por posição de coluna lá na frente.
+  const maxCols = aoa.reduce((m, l) => Math.max(m, l.length), 0);
+  aoa.forEach(linha => {
+    while (linha.length < maxCols) linha.push('');
+    linhasSaida.push(linha.map(c => String(c === undefined || c === null ? '' : c).replace(/\s+/g, ' ').trim()).join('\t'));
+  });
+
+  // Desce nas tabelas aninhadas dentro de alguma célula (uma por vez, na
+  // ordem em que aparecem), cada uma processada do mesmo jeito.
+  Array.from(tabela.rows).forEach(tr => {
+    Array.from(tr.cells).forEach(td => {
+      Array.from(td.querySelectorAll(':scope > table')).forEach(nested => {
+        tabelaParaLinhasRobusto(nested, linhasSaida);
+      });
+    });
+  });
+}
+
+function htmlParaTextoTabuladoRobusto(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const tabelasTopo = Array.from(doc.querySelectorAll('table')).filter(
+    t => !t.parentElement || !t.parentElement.closest('table')
+  );
+  if (tabelasTopo.length === 0) return null; // não veio como tabela — deixa colar como texto normal
+
+  const linhas = [];
+  tabelasTopo.forEach(t => tabelaParaLinhasRobusto(t, linhas));
+  return linhas.join('\n');
+}
+
+function configurarColarComoTabela() {
+  const textarea = document.getElementById('colarOcorrenciasTexto');
+  if (!textarea) return;
+  textarea.addEventListener('paste', function(e) {
+    const clipboard = e.clipboardData || window.clipboardData;
+    const html = clipboard.getData('text/html');
+    if (!html) {
+      // Sem HTML no clipboard — normalmente acontece quando a pessoa usa
+      // "Colar sem formatação" (Ctrl+Shift+V), que já manda só texto puro
+      // pro navegador (a estrutura de tabela nem chega a existir nessa
+      // colagem). Deixa colar o texto puro mesmo assim, só avisa.
+      setStatus('statusTratativas', 'Atenção: colou sem formatação (Ctrl+Shift+V) — a estrutura de colunas pode ter se perdido. Tente colar normal (Ctrl+V) nesta caixa.', 'erro');
+      return;
+    }
+
+    e.preventDefault();
+    let textoConvertido = null;
+    try {
+      textoConvertido = htmlParaTextoTabuladoRobusto(html);
+    } catch (err) { /* cai no texto puro abaixo se der erro */ }
+
+    const inicio = textarea.selectionStart, fim = textarea.selectionEnd;
+    const textoFinal = textoConvertido || clipboard.getData('text/plain');
+    textarea.value = textarea.value.slice(0, inicio) + textoFinal + textarea.value.slice(fim);
+    textarea.selectionStart = textarea.selectionEnd = inicio + textoFinal.length;
+    if (textoConvertido) setStatus('statusTratativas', 'Colado como tabela — confira e clique em "Processar texto".', 'ok');
+  });
+}
+
+async function processarOcorrenciasTexto(textoForcado) {
+  const texto = textoForcado !== undefined ? textoForcado : document.getElementById('colarOcorrenciasTexto').value;
+  if (!texto || !texto.trim()) { alert('Cole o texto das tratativas de ocorrências primeiro.'); return; }
+
+  const registros = parseTratativasTexto(texto);
+  if (registros.length === 0) {
+    if (textoForcado === undefined) alert('Não consegui reconhecer nenhuma ocorrência nesse texto. Confira se o texto colado inclui as datas (DT Ocorr) de cada linha.');
+    return;
+  }
+
+  await finalizarProcessamentoTratativas(registros, 'btnProcessarTratativas', () => {
+    localStorage.setItem(CHAVE_LOCALSTORAGE_TRATATIVAS, texto);
+    document.getElementById('colarOcorrenciasTexto').value = texto;
+  });
+}
+
+// Passos comuns depois de ter os "registros" (venham de texto colado ou de
+// arquivo Excel): PROCV contra a Tabela Dinâmica, montar a tabela na tela,
+// e salvar na planilha pra ficar visível pra qualquer pessoa.
+// ---------- Barra de progresso das Tratativas (igual à dos importadores) ----------
+// Não dá pra saber o % real de uma chamada ao servidor, então a barra anda por
+// ETAPAS: pula pro começo de cada etapa e "rasteja" devagar até o fim dela
+// enquanto espera a resposta. Cada uso recebe um "token": se outra operação
+// começar no meio (ex: carregar as salvas e a pessoa clicar em Processar
+// texto), a mais antiga não consegue mais mexer na barra da mais nova.
+function criarBarraProgresso(idWrap, idBarra) {
+  let seq = 0, atual = 0, alvo = 0, timer = null;
+  const wrap = () => document.getElementById(idWrap);
+  const barra = () => document.getElementById(idBarra);
+  const desenhar = () => { barra().style.width = atual.toFixed(1) + '%'; };
+  const parar = () => { if (timer) { clearInterval(timer); timer = null; } };
+  const passo = () => {
+    if (atual < alvo) { atual = Math.min(alvo, atual + Math.max(0.15, (alvo - atual) * 0.04)); desenhar(); }
+  };
+  const esconderDepois = (token, ms) => setTimeout(() => {
+    if (token === seq) { wrap().style.display = 'none'; atual = 0; desenhar(); }
+  }, ms);
+  return {
+    iniciar() {
+      seq++; parar(); atual = 0; alvo = 0;
+      barra().style.background = '';
+      wrap().style.display = 'block';
+      desenhar();
+      timer = setInterval(passo, 200);
+      return seq;
+    },
+    // true enquanto este token ainda é a operação mais recente dessa barra
+    ativo(token) { return token === seq; },
+    etapa(token, inicio, fim) {
+      if (token !== seq) return;
+      if (atual < inicio) { atual = inicio; desenhar(); }
+      alvo = fim;
+    },
+    concluir(token) {
+      if (token !== seq) return;
+      parar(); atual = 100; alvo = 100; desenhar();
+      esconderDepois(token, 1200);
+    },
+    falhar(token) {
+      if (token !== seq) return;
+      parar();
+      barra().style.background = 'var(--vermelho)';
+      esconderDepois(token, 4000);
+    }
+  };
+}
+const progressoTratativas = criarBarraProgresso('progressTratativas', 'progressBarTratativas');
+const progressoPainel = criarBarraProgresso('progressPainel', 'progressBarPainel');
+const progressoModal = criarBarraProgresso('progressModal', 'progressBarModal');
+
+async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLocal) {
+  const btn = idBotao ? document.getElementById(idBotao) : null;
+  const textoOriginalBtn = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Processando...'; }
+  const token = progressoTratativas.iniciar();
+
+  try {
+    let lookup = {}, lookupEmRota = {}, lookupOcorrencia = {}, lookupUrgentes = {};
+    let avisos = [];
+    if (API_URL && API_URL.indexOf('COLE_AQUI') !== 0) {
+      progressoTratativas.etapa(token, 8, 55);
+      setStatus('statusTratativas', 'Etapa 1 de 3 — buscando previsão, loja, vendedor e Em Rota...', 'carregando');
+      const pedidosDoTexto = Array.from(new Set(registros.map(r => r.pedido).filter(Boolean)));
+      const nfsDoTexto = Array.from(new Set(registros.map(r => r.nf).filter(Boolean)));
+      const resProcv = await buscarJsonComRetry(API_URL, 2, { action: 'getProcvTratativasFiltrado', pedidos: pedidosDoTexto, nfs: nfsDoTexto });
+      if (resProcv.ok) {
+        lookup = resProcv.dados.tabDinamica || {};
+        lookupEmRota = resProcv.dados.emRota || {};
+        lookupOcorrencia = resProcv.dados.ocorrenciasManuais || {};
+        lookupUrgentes = resProcv.dados.urgentes || {};
+        // Mesmo com sucesso na chamada, uma das duas partes (Tabela
+        // Dinâmica ou Em Rota) pode ter falhado sozinha — a outra ainda
+        // veio certinho, então só avisa sobre a que faltou.
+        if (resProcv.dados.avisos && resProcv.dados.avisos.length) {
+          avisos.push(...resProcv.dados.avisos);
+        }
+      } else {
+        avisos.push('previsão/loja/vendedor e "Em Rota"');
+      }
+    }
+
+    progressoTratativas.etapa(token, 60, 68);
+    setStatus('statusTratativas', 'Etapa 2 de 3 — montando a tabela...', 'carregando');
+    registros.sort((a, b) => a.pedido.localeCompare(b.pedido) || a.dtOcorr.localeCompare(b.dtOcorr));
+
+    tratativasDadosAtuais = registros.map(r => {
+      const m = ultimaMensagem(r);
+      const info = lookup[r.pedido] || {};
+      const infoEmRota = lookupEmRota[normalizarChaveNF(r.nf)] || {};
+      const historico = r.mensagens || [];
+      // PROCV do pedido na aba de ajustes: se o tipo foi corrigido à mão, vale o corrigido
+      const ajuste = lookupOcorrencia[r.pedido];
+      const tipoFinal = ajuste ? ajuste.tipo : r.ocorrencia;
+      const linha = [
+        r.pedido, r.nf, r.cliente, r.transportadora, info.loja || '', info.vendedor || '',
+        tipoFinal, r.status,
+        infoEmRota.emRota ? 'Em Rota' : (infoEmRota.dataRomaneio || ''),
+        fmtData(info.previsao || ''), info.recebCliente ? 'Sim' : 'Não',
+        fmtData(info.recebCliente || ''), m.data, m.autor, m.texto,
+        compactarHistorico(historico) // coluna oculta (não aparece na tabela) — só pra ir salva na planilha
+      ];
+      linha.historico = historico; // usado direto pelo balão de "ver tratativa completa" nesta sessão
+      // o "original" é o tipo que veio no texto (como o vendedor abriu)
+      definirEdicaoOcorrencia(linha, ajuste && ajuste.tipo !== r.ocorrencia ? { original: r.ocorrencia, por: ajuste.por, em: ajuste.em } : null);
+      const urg = lookupUrgentes[r.pedido];
+      linha.urgente = urg ? { por: urg.por || '', em: urg.em || '' } : null;
+      return linha;
+    });
+
+    if (aoSucessoLocal) aoSucessoLocal();
+    document.getElementById('tratativasArea').style.display = 'block';
+
+    tratativasFiltroEspecial = null;
+    definirOrdenacaoInicialTratativas();
+    montarCabecalhoTratativas();
+    montarFiltrosTratativas();
+    montarPainelColunas();
+    aplicarFiltrosTratativas();
+
+    progressoTratativas.etapa(token, 75, 95);
+    const salvou = await salvarTratativasNaPlanilha(tratativasDadosAtuais);
+    if (salvou === false) progressoTratativas.falhar(token); else progressoTratativas.concluir(token);
+    if (avisos.length) {
+      const statusEl = document.getElementById('statusTratativas');
+      if (statusEl) {
+        statusEl.textContent += (statusEl.textContent ? ' ' : '') + `Atenção: não consegui buscar tudo agora (${avisos.join('; ')}) — tente "Processar texto" de novo em alguns segundos.`;
+        statusEl.className = 'status-line erro';
+      }
+    }
+    renderKpisOcorrenciasDeTratativas();
+  } catch (err) {
+    progressoTratativas.falhar(token);
+    throw err;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = textoOriginalBtn; }
+  }
+}
+
+async function salvarTratativasNaPlanilha(linhas) {
+  const statusEl = document.getElementById('statusTratativas');
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) {
+    if (statusEl) { statusEl.textContent = 'API não configurada — ficou salvo só neste navegador.'; statusEl.className = 'status-line'; }
+    return true;
+  }
+  if (statusEl) { statusEl.textContent = 'Etapa 3 de 3 — salvando pra que outras pessoas também vejam...'; statusEl.className = 'status-line carregando'; }
+  try {
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'importTratativas', rows: linhas, batchIndex: 0, isLast: true })
+    });
+    // Antes só conferia se a chamada "chegou" — um erro do servidor (ex: sem
+    // permissão, planilha ocupada) aparecia como "Salvo". Agora lê a resposta.
+    let corpo = null;
+    try { corpo = await resp.json(); } catch (e) { corpo = null; }
+    if (!corpo || corpo.error || corpo.ok !== true) {
+      const motivo = corpo && corpo.error ? corpo.error : 'resposta inesperada do servidor';
+      if (statusEl) { statusEl.textContent = `Não consegui salvar para a equipe (${motivo}) — ficou só neste navegador.`; statusEl.className = 'status-line erro'; }
+      return false;
+    }
+    if (statusEl) { statusEl.textContent = 'Salvo — qualquer pessoa que abrir o site agora vê essa tabela.'; statusEl.className = 'status-line ok'; }
+    return true;
+  } catch (err) {
+    if (statusEl) { statusEl.textContent = 'Não consegui salvar para a equipe (ficou só neste navegador).'; statusEl.className = 'status-line erro'; }
+    return false;
+  }
+}
+
+// Recalcula o card "Ocorrências" (KPI + tabela por transportadora) direto dos
+// dados já carregados nas Tratativas, sem precisar chamar a API de novo.
+let tratativasPorLojaExpandido = false;
+let _ultimoPorTipoELoja = {};
+let _ultimasLojas = [];
+
+function renderKpisOcorrenciasDeTratativas() {
+  const idxTransp = COLUNAS_TRATATIVAS.indexOf('Transportadora');
+  const idxOcorrencia = COLUNAS_TRATATIVAS.indexOf('Ocorrência');
+  const idxLoja = COLUNAS_TRATATIVAS.indexOf('Loja');
+  const porTransportadora = {};
+  const porTipoELoja = {}; // { tipo: { loja: quantidade, ... } }
+  const lojasEncontradas = new Set();
+  tratativasDadosAtuais.forEach(l => {
+    const t = l[idxTransp] || '(sem transportadora)';
+    porTransportadora[t] = (porTransportadora[t] || 0) + 1;
+
+    const tipo = l[idxOcorrencia] || '(sem ocorrência)';
+    const loja = l[idxLoja] || '(sem loja)';
+    lojasEncontradas.add(loja);
+    if (!porTipoELoja[tipo]) porTipoELoja[tipo] = {};
+    porTipoELoja[tipo][loja] = (porTipoELoja[tipo][loja] || 0) + 1;
+  });
+  renderKpisOcorrencias({ ocorrencias: { total: tratativasDadosAtuais.length, porTransportadora } });
+  renderTabelaOcorrencias(porTransportadora);
+
+  _ultimoPorTipoELoja = porTipoELoja;
+  _ultimasLojas = Array.from(lojasEncontradas).sort();
+  renderTabelaPorTipoOcorrencia(_ultimoPorTipoELoja, _ultimasLojas);
+}
+
+function togglePorLojaOcorrencia() {
+  tratativasPorLojaExpandido = !tratativasPorLojaExpandido;
+  renderTabelaPorTipoOcorrencia(_ultimoPorTipoELoja, _ultimasLojas);
+}
+
+function renderTabelaPorTipoOcorrencia(porTipoELoja, todasLojas) {
+  const tipos = Object.keys(porTipoELoja);
+  if (tipos.length === 0) { document.getElementById('tabelaPorTipoOcorrencia').style.display = 'none'; return; }
+  document.getElementById('tabelaPorTipoOcorrencia').style.display = 'table';
+
+  document.getElementById('tratativasTogglePorLoja').textContent =
+    tratativasPorLojaExpandido ? '▼ Ocultar detalhamento por loja' : '▶ Detalhar por loja';
+
+  const lojas = tratativasPorLojaExpandido ? todasLojas : [];
+  const totalPorTipo = tipo => Object.values(porTipoELoja[tipo]).reduce((a, b) => a + b, 0);
+  const tiposOrdenados = tipos.sort((a, b) => totalPorTipo(b) - totalPorTipo(a));
+
+  document.getElementById('tabelaPorTipoOcorrenciaThead').innerHTML =
+    `<tr><th>Tipo de Ocorrência</th>${lojas.map(loja => `<th>${loja}</th>`).join('')}<th>Total</th></tr>`;
+
+  document.getElementById('tabelaPorTipoOcorrenciaBody').innerHTML = tiposOrdenados.map(tipo => {
+    const porLoja = porTipoELoja[tipo];
+    const celulasLoja = lojas.map(loja => {
+      const qtd = porLoja[loja] || 0;
+      return qtd === 0
+        ? `<td style="color:var(--cinza)">–</td>`
+        : `<td><a class="num-link" onclick="filtrarTratativasPorDuasColunas('Ocorrência', '${encodeURIComponent(tipo)}', 'Loja', '${encodeURIComponent(loja)}')">${qtd}</a></td>`;
+    }).join('');
+    return `<tr>
+      <td>${tipo}</td>
+      ${celulasLoja}
+      <td><a class="num-link" onclick="filtrarTratativasPorColuna('Ocorrência', '${encodeURIComponent(tipo)}')"><strong>${totalPorTipo(tipo)}</strong></a></td>
+    </tr>`;
+  }).join('');
+}
+
+function toggleIndicadoresPorTipoOcorrencia() {
+  const area = document.getElementById('indicadoresPorTipoOcorrenciaArea');
+  const aberto = area.style.display !== 'none';
+  area.style.display = aberto ? 'none' : 'block';
+  document.getElementById('tituloTipoOcorrencia').textContent = (aberto ? '▶' : '▼') + ' Indicadores por Tipo de Ocorrência';
+}
+
+function montarCabecalhoTratativas() {
+  const thead = document.getElementById('tratativasThead');
+  const indices = indicesColunasVisiveis();
+  thead.innerHTML = indices.map(idx => `<th data-col="${COLUNAS_TRATATIVAS[idx]}" style="cursor:pointer;user-select:none" onclick="ordenarTratativas(${idx})">${COLUNAS_TRATATIVAS[idx]}${indicadorOrdenacao(tratativasOrdenacao, idx)}</th>`).join('');
+}
+
+function indicadorOrdenacao(estado, idx) {
+  if (estado.indice !== idx) return '';
+  return estado.direcao === 1 ? ' ▲' : ' ▼';
+}
+
+function ordenarTratativas(idx) {
+  tratativasOrdenacaoManual = true; // a partir daqui a escolha é da pessoa: novos desenhos da tabela não voltam pro padrão
+  if (tratativasOrdenacao.indice === idx) {
+    tratativasOrdenacao.direcao *= -1;
+  } else {
+    // pra coluna de data da última mensagem o natural é começar pelo mais recente
+    tratativasOrdenacao = { indice: idx, direcao: idx === COLUNAS_TRATATIVAS.indexOf('Data Últ. Msg') ? -1 : 1 };
+  }
+  montarCabecalhoTratativas();
+  aplicarFiltrosTratativas();
+}
+
+function montarFiltrosTratativas() {
+  const container = document.getElementById('tratativasFiltrosSelects');
+  container.innerHTML = '';
+  tratativasFiltrosSelecionados = {};
+
+  COLUNAS_TRATATIVAS.forEach((nome, idx) => {
+    if (COLUNAS_TRATATIVAS_FILTRAVEIS.indexOf(nome) === -1) return;
+    const valores = Array.from(new Set(
+      tratativasDadosAtuais.map(l => l[idx]).filter(v => v !== undefined && v !== null && v !== '')
+    )).sort();
+    if (valores.length === 0) return;
+
+    tratativasFiltrosSelecionados[idx] = '';
+    const select = document.createElement('select');
+    select.dataset.coluna = nome;
+    select.innerHTML = `<option value="">${nome} (todos)</option>` +
+      valores.map(v => `<option value="${v}">${v}</option>`).join('');
+    select.onchange = () => { tratativasFiltrosSelecionados[idx] = select.value; aplicarFiltrosTratativas(); };
+    container.appendChild(select);
+  });
+}
+
+// Usado pelo card "Ocorrências" acima: ao clicar num número, filtra a tabela
+// de Tratativas por aquela transportadora e rola a tela até ela.
+// Usado pelos cards "Ocorrências" acima: ao clicar num número, filtra a
+// tabela de Tratativas por aquele valor (transportadora, tipo de
+// ocorrência, etc.) e rola a tela até ela.
+function filtrarTratativasPorColuna(nomeColuna, valorEncoded) {
+  const valor = valorEncoded === 'TODAS' ? '' : decodeURIComponent(valorEncoded);
+  const select = document.querySelector(`#tratativasFiltrosSelects select[data-coluna="${nomeColuna}"]`);
+  if (select) {
+    select.value = valor;
+    const idx = COLUNAS_TRATATIVAS.indexOf(nomeColuna);
+    tratativasFiltrosSelecionados[idx] = valor;
+    aplicarFiltrosTratativas();
+  }
+  document.getElementById('tratativasArea').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function filtrarTratativasPorTransportadora(nomeEncoded) {
+  filtrarTratativasPorColuna('Transportadora', nomeEncoded);
+}
+
+// Usado pelas células da tabela pivot (tipo de ocorrência x loja): filtra
+// pelos dois valores ao mesmo tempo.
+function filtrarTratativasPorDuasColunas(coluna1, valor1Encoded, coluna2, valor2Encoded) {
+  [[coluna1, valor1Encoded], [coluna2, valor2Encoded]].forEach(([coluna, valorEncoded]) => {
+    const valor = valorEncoded === 'TODAS' ? '' : decodeURIComponent(valorEncoded);
+    const select = document.querySelector(`#tratativasFiltrosSelects select[data-coluna="${coluna}"]`);
+    if (select) select.value = valor;
+    const idx = COLUNAS_TRATATIVAS.indexOf(coluna);
+    if (idx !== -1) tratativasFiltrosSelecionados[idx] = valor;
+  });
+  aplicarFiltrosTratativas();
+  document.getElementById('tratativasArea').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function ordenarValor(v) {
+  if (v === undefined || v === null || v === '') return null;
+  // Remove eventual HTML embutido na célula (ex: o lápis de editar da Prev Etg)
+  const texto = String(v).replace(/<[^>]*>/g, '').trim();
+  if (texto === '') return null;
+
+  // Datas no formato dd/mm/aaaa (com ou sem hora) viram timestamp pra ordenar de verdade,
+  // em vez de comparar como texto (que bagunça: "01/12" vem antes de "15/01" por engano)
+  const dataMatch = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?$/);
+  if (dataMatch) {
+    const [, dd, mm, yyyy, hh, min] = dataMatch;
+    return new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh || 0), Number(min || 0)).getTime();
+  }
+
+  const n = Number(texto.replace(',', '.'));
+  return isNaN(n) ? texto.toLowerCase() : n;
+}
+
+// ---------- Destaques visuais da tabela de Tratativas ----------
+function parseDataBR(str) {
+  if (!str || typeof str !== 'string') return null;
+  const m = str.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (!m) return null;
+  const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function ehHoje(dataStr) {
+  const d = parseDataBR(dataStr);
+  if (!d) return false;
+  const hoje = new Date();
+  return d.getFullYear() === hoje.getFullYear() && d.getMonth() === hoje.getMonth() && d.getDate() === hoje.getDate();
+}
+
+// ---------- NEW / Ontem: quando a ocorrência foi aberta ----------
+// A data de abertura vem da PRIMEIRA mensagem do histórico (nos textos reais ela é
+// sempre do mesmo dia da abertura), então não precisa de coluna nova na planilha e
+// já vale para as ocorrências que estão salvas.
+function parseDataHoraBR(str) {
+  if (!str || typeof str !== 'string') return null;
+  const m = str.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+  if (!m) return null;
+  const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), Number(m[4] || 0), Number(m[5] || 0));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Mensagem mais antiga do histórico: { dia: Date (00:00), texto: 'dd/mm/aaaa hh:mm' } ou null.
+// Guarda o resultado na própria linha (a tabela é redesenhada a cada filtro).
+function aberturaDaLinha(linha) {
+  if (linha._abertura !== undefined) return linha._abertura;
+  let melhor = null;
+  (linha.historico || []).forEach(m => {
+    const quando = parseDataHoraBR(m.data);
+    if (quando && (!melhor || quando < melhor.quando)) melhor = { quando, texto: String(m.data).trim() };
+  });
+  linha._abertura = melhor
+    ? { dia: new Date(melhor.quando.getFullYear(), melhor.quando.getMonth(), melhor.quando.getDate()), texto: melhor.texto }
+    : null;
+  return linha._abertura;
+}
+
+// 'novo' (aberta hoje) | 'ontem' | '' — compara só o dia
+function rotuloAbertura(dia, hoje) {
+  const h0 = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+  const ontem = new Date(h0.getFullYear(), h0.getMonth(), h0.getDate() - 1);
+  if (dia.getTime() === h0.getTime()) return 'novo';
+  if (dia.getTime() === ontem.getTime()) return 'ontem';
+  return '';
+}
+
+function seloAbertura(linha, hoje) {
+  const ab = aberturaDaLinha(linha);
+  if (!ab) return '';
+  const rotulo = rotuloAbertura(ab.dia, hoje);
+  if (rotulo === 'novo') return `<span class="selo-novo" title="${escapeHtml('Ocorrência aberta hoje — 1ª mensagem em ' + ab.texto)}">NEW</span>`;
+  if (rotulo === 'ontem') return `<span class="selo-ontem" title="${escapeHtml('Ocorrência aberta ontem — 1ª mensagem em ' + ab.texto)}">Ontem</span>`;
+  return '';
+}
+
+// Cor por autor da última mensagem. Comparação por "começa com" (case-insensitive),
+// porque alguns nomes vêm com sufixo tipo "LUIS (Loja 205)".
+const AUTOR_CORES = [
+  { nome: 'CAMILA L', cor: 'var(--roxo)' },
+  { nome: 'VICTORIA', cor: 'var(--vermelho)' },
+  { nome: 'KETELS', cor: 'var(--amarelo)' },
+  { nome: 'PALOMA', cor: 'var(--verde)' },
+  { nome: 'LUIZ', cor: 'var(--azul)' },
+  { nome: 'LUIS', cor: 'var(--azul)' } // mesmo nome, grafia mais comum no texto colado
+];
+
+function corAutor(autor) {
+  if (!autor) return null;
+  const upper = String(autor).trim().toUpperCase();
+  const encontrado = AUTOR_CORES.find(a => upper.startsWith(a.nome));
+  return encontrado ? encontrado.cor : null;
+}
+
+// Se a última mensagem menciona @camila, @victoria, @ketels, @paloma e/ou
+// @luiz(luis), retorna a(s) cor(es) correspondente(s) — mesma cor já usada
+// pro nome de cada uma. Se for só uma pessoa, pisca fixo nessa cor; se for
+// mais de uma, o piscar alterna entre todas (ver ciclarCoresPiscaMencao).
+const MENCOES_PISCA = [
+  { regex: /@camila/i, cor: 'rgba(194,151,255,0.35)' },
+  { regex: /@vict[oó]ria/i, cor: 'rgba(248,81,73,0.35)' },
+  { regex: /@ketels/i, cor: 'rgba(227,179,65,0.35)' },
+  { regex: /@paloma/i, cor: 'rgba(63,185,80,0.35)' },
+  { regex: /@lu[ií][sz]/i, cor: 'rgba(76,141,255,0.35)' }
+];
+
+function coresPiscaMencao(texto) {
+  if (!texto) return [];
+  return MENCOES_PISCA.filter(m => m.regex.test(texto)).map(m => m.cor);
+}
+
+// Um único intervalo compartilhado pra toda a página: alterna a cor de
+// fundo (via --pisca-cor) de qualquer célula que tenha mais de uma pessoa
+// citada — assim não precisa de uma animação CSS diferente pra cada
+// combinação possível de pessoas.
+let _piscaMencaoTick = 0;
+setInterval(() => {
+  _piscaMencaoTick++;
+  document.querySelectorAll('.pisca-mencao[data-cores]').forEach(el => {
+    const cores = el.dataset.cores.split('|');
+    el.style.setProperty('--pisca-cor', cores[_piscaMencaoTick % cores.length]);
+  });
+}, 350);
+
+function limparFiltroDataEntregaTratativas() {
+  document.getElementById('tratativasDataEntregaDe').value = '';
+  document.getElementById('tratativasDataEntregaAte').value = '';
+  aplicarFiltrosTratativas();
+}
+
+function aplicarFiltrosTratativas() {
+  const busca = (document.getElementById('tratativasBusca').value || '').toLowerCase().trim();
+  let linhas = tratativasDadosAtuais;
+
+  Object.keys(tratativasFiltrosSelecionados).forEach(idxStr => {
+    const idx = Number(idxStr);
+    const valor = tratativasFiltrosSelecionados[idx];
+    if (valor) linhas = linhas.filter(l => String(l[idx] ?? '') === valor);
+  });
+
+  if (tratativasFiltroEspecial) {
+    const hojeFiltro = new Date();
+    linhas = linhas.filter(l => linhaCasaFiltroEspecial(l, tratativasFiltroEspecial, hojeFiltro));
+  }
+
+  const dataDeStr = document.getElementById('tratativasDataEntregaDe').value;
+  const dataAteStr = document.getElementById('tratativasDataEntregaAte').value;
+  if (dataDeStr || dataAteStr) {
+    const idxDataEntregaFiltro = COLUNAS_TRATATIVAS.indexOf('Data Entrega');
+    const dataDe = dataDeStr ? new Date(dataDeStr + 'T00:00:00') : null;
+    const dataAte = dataAteStr ? new Date(dataAteStr + 'T00:00:00') : null;
+    linhas = linhas.filter(l => {
+      const d = parseDataBR(l[idxDataEntregaFiltro]);
+      return !!d && (!dataDe || d >= dataDe) && (!dataAte || d <= dataAte);
+    });
+  }
+
+  if (busca) {
+    linhas = linhas.filter(l => l.some(v => String(v ?? '').toLowerCase().includes(busca)));
+  }
+
+  if (tratativasOrdenacao.indice !== null) {
+    const idx = tratativasOrdenacao.indice;
+    const dir = tratativasOrdenacao.direcao;
+    linhas = linhas.slice().sort((a, b) => {
+      const va = ordenarValor(a[idx]);
+      const vb = ordenarValor(b[idx]);
+      if (va === null && vb === null) return 0;
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+  }
+
+  const indices = indicesColunasVisiveis();
+  const idxPrevisao = COLUNAS_TRATATIVAS.indexOf('Previsão');
+  const idxEntregue = COLUNAS_TRATATIVAS.indexOf('Entregue?');
+  const idxDataEntrega = COLUNAS_TRATATIVAS.indexOf('Data Entrega');
+  const idxDataUltMsg = COLUNAS_TRATATIVAS.indexOf('Data Últ. Msg');
+  const idxAutor = COLUNAS_TRATATIVAS.indexOf('Autor Últ. Msg');
+  const idxEmRota = COLUNAS_TRATATIVAS.indexOf('Em Rota');
+  const idxMensagem = COLUNAS_TRATATIVAS.indexOf('Mensagem');
+  const idxOcorrencia = COLUNAS_TRATATIVAS.indexOf('Ocorrência');
+  const idxPedidoCol = COLUNAS_TRATATIVAS.indexOf('Pedido');
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+
+  tratativasLinhasFiltradas = linhas;
+  document.getElementById('tratativasContador').textContent =
+    linhas.length === tratativasDadosAtuais.length
+      ? `${linhas.length} registro${linhas.length === 1 ? '' : 's'}`
+      : `${linhas.length} de ${tratativasDadosAtuais.length} registros`;
+
+  document.getElementById('tratativasTabelaBody').innerHTML = linhas.length
+    ? linhas.map((l, posicao) => {
+        const dataPrevisao = parseDataBR(l[idxPrevisao]);
+        const entregue = l[idxEntregue] === 'Sim';
+        const previsaoAtrasada = entregue
+          ? (!!dataPrevisao && !!parseDataBR(l[idxDataEntrega]) && parseDataBR(l[idxDataEntrega]) > dataPrevisao)
+          : (!!dataPrevisao && dataPrevisao < hoje);
+        const linhaHoje = ehHoje(l[idxDataUltMsg]);
+
+        const montarCelula = idx => {
+          const valor = l[idx] === undefined || l[idx] === null ? '' : l[idx];
+          let estilo = '';
+          if (idx === idxPrevisao && previsaoAtrasada) estilo = 'color:var(--vermelho);font-weight:600';
+          else if (idx === idxDataEntrega && valor) estilo = 'color:var(--verde);font-weight:600';
+          else if (idx === idxEmRota && valor === 'Em Rota') estilo = 'color:var(--verde);font-weight:700';
+          else if (idx === idxAutor) {
+            const cor = corAutor(valor);
+            if (cor) estilo = `color:${cor};font-weight:600`;
+          }
+          if (idx === idxMensagem) {
+            const cores = coresPiscaMencao(valor);
+            let atributosPisca = '';
+            if (cores.length === 1) {
+              atributosPisca = ` class="pisca-mencao" style="--pisca-cor:${cores[0]}"`;
+            } else if (cores.length > 1) {
+              atributosPisca = ` class="pisca-mencao" data-cores="${cores.join('|')}" style="--pisca-cor:${cores[0]}"`;
+            }
+            const icone = (l.historico || []).length > 0
+              ? ` <span class="hist-icone" data-idx="${posicao}" title="Ver tratativa completa">💬</span>`
+              : '';
+            return `<td${atributosPisca}>${seloAbertura(l, hoje)}${escapeHtml(valor)}${icone}</td>`;
+          }
+          if (idx === idxOcorrencia) {
+            const ed = l.edicaoOcorrencia;
+            const dica = ed ? escapeHtml(`Original: ${ed.original || 'não registrado'}${ed.por ? ' · alterada por ' + ed.por : ''}${ed.em ? ' em ' + ed.em : ''}`) : '';
+            const selo = ed ? ` <span class="selo-editada" title="${dica}">alterada</span>` : '';
+            return `<td>${escapeHtml(valor)}${selo} <span class="lapis-ocorrencia" data-idx="${posicao}" title="Alterar tipo de ocorrência">✏️</span></td>`;
+          }
+          if (idx === idxPedidoCol) {
+            const u = l.urgente;
+            const dica = escapeHtml(u ? `Marcado como urgente${u.por ? ' por ' + u.por : ''}${u.em ? ' em ' + u.em : ''}` : 'Marcar como urgente');
+            const caixa = `<input type="checkbox" class="chk-urgente" data-idx="${posicao}" title="${dica}"${u ? ' checked' : ''}>`;
+            const selo = u ? `<span class="selo-urgente" title="${dica}">URGENTE</span>` : '';
+            return `<td>${caixa}${escapeHtml(valor)}${selo}</td>`;
+          }
+          return `<td${estilo ? ` style="${estilo}"` : ''}>${valor}</td>`;
+        };
+        const celulas = indices.map(idx => montarCelula(idx).replace(/^<td/, `<td data-col="${COLUNAS_TRATATIVAS[idx]}"`)).join('');
+
+        const classeLinha = l.urgente ? 'linha-urgente' : (linhaHoje ? 'linha-destaque' : '');
+        return `<tr${classeLinha ? ` class="${classeLinha}"` : ''}>${celulas}</tr>`;
+      }).join('')
+    : `<tr><td colspan="${indices.length}">Nenhum registro encontrado.</td></tr>`;
+}
+
+function baixarTratativasExcel() {
+  if (!tratativasLinhasFiltradas.length) { alert('Não há registros para baixar.'); return; }
+  const indices = indicesColunasVisiveis();
+  const colunas = indices.map(idx => COLUNAS_TRATATIVAS[idx]);
+  const linhas = tratativasLinhasFiltradas.map(l => indices.map(idx => l[idx]));
+  exportarCSV(colunas, linhas, 'Tratativas de Ocorrencias');
+}
+
+// Ao carregar a página, busca as tratativas já salvas na planilha (visíveis
+// para qualquer pessoa). Só usa o que está salvo neste navegador como reserva,
+// para o caso da API ainda não estar configurada.
+// O "Em Rota" salvo junto com as tratativas é só uma foto do dia em que o
+// texto foi processado — fica velho no dia seguinte. Aqui recalcula ao vivo,
+// com o que está nas bases Em Rota GFW / Baixa RTE de agora.
+async function atualizarEmRotaTratativas() {
+  if (!tratativasDadosAtuais.length || !API_URL || API_URL.indexOf('COLE_AQUI') === 0) return;
+  const idxNFBusca = COLUNAS_TRATATIVAS.indexOf('NF');
+  const nfs = Array.from(new Set(tratativasDadosAtuais.map(l => l[idxNFBusca]).filter(Boolean)));
+  const res = await buscarJsonComRetry(API_URL, 2, { action: 'getEmRotaFiltrado', nfs });
+  if (!res.ok) return; // mantém o que já estava salvo
+  const lookup = res.dados;
+  const idxNF = COLUNAS_TRATATIVAS.indexOf('NF');
+  const idxEmRota = COLUNAS_TRATATIVAS.indexOf('Em Rota');
+  tratativasDadosAtuais.forEach(l => {
+    const info = lookup[normalizarChaveNF(l[idxNF])];
+    l[idxEmRota] = info ? (info.emRota ? 'Em Rota' : (info.dataRomaneio || '')) : '';
+  });
+  aplicarFiltrosTratativas();
+}
+
+function aplicarLinhasSalvas(linhas) {
+  const idxHistorico = COLUNAS_TRATATIVAS.length; // coluna oculta, logo depois das visíveis
+  tratativasDadosAtuais = linhas.map(l => {
+    const linha = l.slice(0, COLUNAS_TRATATIVAS.length).map(v => fmtData(v));
+    linha.historico = expandirHistorico(l[idxHistorico]);
+    definirEdicaoOcorrencia(linha, infoEdicaoDoServidor(l[COLUNAS_TRATATIVAS.length + 1]));
+    linha.urgente = infoUrgenteDoServidor(l[COLUNAS_TRATATIVAS.length + 2]);
+    return linha;
+  });
+  document.getElementById('tratativasArea').style.display = 'block';
+  tratativasFiltroEspecial = null;
+  definirOrdenacaoInicialTratativas();
+  montarCabecalhoTratativas();
+  montarFiltrosTratativas();
+  montarPainelColunas();
+  aplicarFiltrosTratativas();
+  renderKpisOcorrenciasDeTratativas();
+}
+
+async function restaurarTratativasSalvas() {
+  inicializarColunasVisiveis();
+  const apiOk = API_URL && API_URL.indexOf('COLE_AQUI') !== 0;
+  if (apiOk) {
+    const cache = lerCacheLocal(CHAVE_CACHE_TRATATIVAS_LOCAL);
+    let mostrouCache = false;
+    if (cache && Array.isArray(cache.valor) && cache.valor.length > 0) {
+      try { aplicarLinhasSalvas(cache.valor); mostrouCache = true; } catch (e) { mostrouCache = false; }
+    }
+
+    const tokenCarga = progressoTratativas.iniciar();
+    progressoTratativas.etapa(tokenCarga, 5, 85);
+    const msgCarga = mostrouCache ? 'Atualizando as tratativas...' : 'Carregando as tratativas salvas...';
+    setStatus('statusTratativas', msgCarga, 'carregando');
+    const res = await buscarJsonComRetry(`${API_URL}?action=getTratativasDetalhe`);
+    registrarTempo('tratativas', res);
+    const limparMsgCarga = () => { // só apaga a mensagem se ainda for a nossa (outra operação pode ter escrito por cima)
+      const el = document.getElementById('statusTratativas');
+      if (el && el.textContent === msgCarga) setStatus('statusTratativas', '', '');
+    };
+
+    if (res.ok && Array.isArray(res.dados)) {
+      if (res.dados.length > 0) {
+        const igualAoCache = mostrouCache && JSON.stringify(res.dados) === JSON.stringify(cache.valor);
+        if (!igualAoCache) aplicarLinhasSalvas(res.dados); // só redesenha se mudou (evita zerar os filtros à toa)
+        gravarCacheLocal(CHAVE_CACHE_TRATATIVAS_LOCAL, res.dados);
+        progressoTratativas.concluir(tokenCarga);
+        limparMsgCarga();
+        return;
+      }
+      progressoTratativas.concluir(tokenCarga);
+      limparMsgCarga();
+      // O servidor respondeu que não há nada salvo ainda: aproveita o texto guardado
+      // neste navegador (caso de primeira vez / migração).
+      const salvoAntigo = localStorage.getItem(CHAVE_LOCALSTORAGE_TRATATIVAS);
+      if (salvoAntigo) processarOcorrenciasTexto(salvoAntigo);
+      return;
+    }
+
+    // A leitura FALHOU (tempo esgotado ou erro). Não reprocessa nem regrava nada:
+    // antes, isso reprocessava o texto local e sobrescrevia a tabela compartilhada
+    // (pesado, e podia gravar uma versão antiga por cima da atual).
+    progressoTratativas.falhar(tokenCarga);
+    const motivo = res.erro || 'erro desconhecido';
+    setStatus('statusTratativas', mostrouCache
+      ? `Não consegui atualizar as tratativas agora (${motivo}). Mostrando os dados de ${fmtQuando(cache.quando)}. Atualize a página (F5) pra tentar de novo.`
+      : `Não consegui carregar as tratativas salvas agora (${motivo}). Atualize a página (F5) pra tentar de novo.`, 'erro');
+    return;
+  }
+  const salvo = localStorage.getItem(CHAVE_LOCALSTORAGE_TRATATIVAS);
+  if (salvo) processarOcorrenciasTexto(salvo);
+}
+
+// ---------- Envio em lotes ----------
+// Estes importadores SUBSTITUEM a aba inteira a cada importação — se o
+// arquivo errado for colado e nenhuma linha for reconhecida, mandar um
+// lote vazio apagaria os dados atuais sem colocar nada no lugar. Por isso
+// nem chega a enviar nesse caso.
+const ACOES_QUE_SUBSTITUEM = ['importPedidosNaoRecebidos', 'importBaixaEntregaGFW', 'importBaixaEntregaRTE', 'importEmRotaGFW'];
+
+async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBarId) {
+  if (rows.length === 0) {
+    const aviso = ACOES_QUE_SUBSTITUEM.indexOf(action) !== -1
+      ? 'Nenhum registro reconhecido nesse arquivo — parece que não é o arquivo certo pra este importador. Nada foi enviado; os dados atuais continuam intactos.'
+      : 'Nenhum registro reconhecido nesse arquivo — confira se é o arquivo certo pra este importador.';
+    setStatus(statusId, aviso, 'erro');
+    return;
+  }
+
+  const wrap = document.getElementById(progressWrapId);
+  const bar = document.getElementById(progressBarId);
+  wrap.style.display = 'block';
+
+  const totalBatches = Math.max(1, Math.ceil(rows.length / BATCH_SIZE));
+  let totalNovos = 0;
+  let totalAtualizados = 0;
+  let totalCasaram = 0;
+
+  for (let i = 0; i < totalBatches; i++) {
+    const batch = rows.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
+    const isLast = i === totalBatches - 1;
+    setStatus(statusId, `Enviando lote ${i + 1} de ${totalBatches} (${batch.length} linhas)...`, 'carregando');
+    try {
+      const resp = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' }, // evita preflight CORS no Apps Script
+        body: JSON.stringify({ action, rows: batch, batchIndex: i, isLast })
+      });
+      const result = await resp.json();
+      if (result && (result.error || result.ok === false)) {
+        setStatus(statusId, 'A importação NÃO foi concluída: ' + (result.error || 'erro no servidor') +
+          (totalBatches > 1 ? ` (parou no lote ${i + 1} de ${totalBatches})` : ''), 'erro');
+        return;
+      }
+      if (typeof result.novos === 'number') totalNovos += result.novos;
+      if (typeof result.atualizados === 'number') totalAtualizados += result.atualizados;
+      if (typeof result.casaramPNR === 'number') totalCasaram += result.casaramPNR;
+    } catch (err) {
+      let dica = '';
+      if (err.name === 'AbortError') {
+        dica = ' — o servidor demorou demais pra responder esse lote (pode acontecer em lotes grandes/últimos). Tente importar de novo; se persistir, o arquivo pode precisar ser dividido.';
+      } else if (err instanceof SyntaxError) {
+        dica = ' — o servidor respondeu com erro; confira se o Code.gs mais novo foi implantado (nova versão) e tente de novo.';
+      }
+      setStatus(statusId, 'Erro no envio' + (totalBatches > 1 ? ` (lote ${i + 1} de ${totalBatches})` : '') + ': ' + err.message + dica, 'erro');
+      return;
+    }
+    bar.style.width = Math.round(((i + 1) / totalBatches) * 100) + '%';
+  }
+
+  if (action === 'importTabDinamica') {
+    setStatus(statusId, `Importação concluída: ${totalNovos} pedidos novos, ${totalAtualizados} atualizados.`, 'ok');
+  } else if (action === 'importEntregasWhatsApp') {
+    setStatus(statusId, `Importação concluída: ${rows.length} NFs lidas (${totalNovos} novas, ${totalAtualizados} já conhecidas). ${totalCasaram} constam em Pedidos Não Recebidos (já entregues); ${rows.length - totalCasaram} não constam (notas de outros clientes ou pedidos que já saíram da lista).`, 'ok');
+  } else {
+    setStatus(statusId, `Importação concluída: ${rows.length} linhas.`, 'ok');
+  }
+  return true;
+}
+
+// Passo separado, chamado depois que a importação da Tabela Dinâmica
+// termina: reconstrói a mini-tabela (TabDinamicaLookup) usada pelos
+// indicadores, por "Pedidos Recebidos" e pelo PROCV das Tratativas. Fica
+// de fora do próprio envio dos lotes pra não empilhar dois trabalhos
+// pesados no mesmo pedido (é exatamente isso que estava estourando o
+// tempo limite antes).
+async function reconstruirIndiceTabDinamica() {
+  setStatus('statusTabDinamica', 'Importação concluída. Atualizando índice de busca (pode levar um tempinho)...', 'carregando');
+  try {
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'reconstruirTabDinamicaLookup' })
+    });
+    const result = await resp.json();
+    if (result && (result.error || result.ok === false)) {
+      setStatus('statusTabDinamica', 'Importação concluída, mas não consegui atualizar o índice de busca: ' +
+        (result.error || 'erro no servidor') + '. Os indicadores podem ficar desatualizados até a próxima importação.', 'erro');
+      return;
+    }
+    setStatus('statusTabDinamica', 'Importação concluída e índice de busca atualizado.', 'ok');
+  } catch (err) {
+    setStatus('statusTabDinamica', 'Importação concluída, mas não consegui atualizar o índice de busca (' + err.message +
+      '). Os indicadores podem ficar desatualizados até a próxima importação.', 'erro');
+  }
+}
+
+function setStatus(id, msg, cls) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'status-line' + (cls ? ' ' + cls : '');
+}
+function toggleBtn(id, disabled) { document.getElementById(id).disabled = disabled; }
+
+// Busca um endpoint que devolve JSON, tentando de novo automaticamente se a
+// resposta vier cortada/incompleta (comum no Apps Script logo depois de uma
+// importação grande, com a planilha ainda ocupada).
+async function buscarJsonComRetry(url, tentativas, corpoPost) {
+  tentativas = tentativas || 2;
+  const inicio = Date.now();
+  let ultimoErro = null;
+  for (let i = 1; i <= tentativas; i++) {
+    try {
+      const resp = corpoPost
+        ? await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(corpoPost) })
+        : await fetch(url);
+      const texto = await resp.text();
+      const dados = JSON.parse(texto);
+      if (dados && dados.error) return { ok: false, erro: dados.error, ms: Date.now() - inicio };
+      return { ok: true, dados, ms: Date.now() - inicio, tentativas: i };
+    } catch (err) {
+      ultimoErro = err;
+      // Também tenta de novo depois de tempo esgotado: quando uma execução trava,
+      // a seguinte costuma responder normal (e a que ficou pra trás ainda
+      // termina e deixa o cache pronto).
+      if (i < tentativas) await new Promise(res => setTimeout(res, 1000));
+    }
+  }
+  const motivo = ultimoErro && ultimoErro.name === 'AbortError'
+    ? 'o servidor demorou demais pra responder (tempo esgotado)'
+    : 'resposta inválida';
+  return { ok: false, erro: motivo, ms: Date.now() - inicio };
+}
+
+// ---------- Cache local (mostra o último dado na hora e atualiza em seguida) ----------
+const CHAVE_CACHE_PAINEL_LOCAL = 'dis_painel_cache_v1';
+const CHAVE_CACHE_TRATATIVAS_LOCAL = 'dis_tratativas_cache_v1';
+
+function lerCacheLocal(chave) {
+  try { return JSON.parse(localStorage.getItem(chave) || 'null'); } catch (e) { return null; }
+}
+function gravarCacheLocal(chave, valor) {
+  try { localStorage.setItem(chave, JSON.stringify({ quando: Date.now(), valor })); } catch (e) { /* sem espaço: segue sem cache */ }
+}
+function fmtQuando(ms) {
+  return new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+function fmtSegundos(ms) { return (ms / 1000).toFixed(1).replace('.', ',') + ' s'; }
+
+// Medidor de tempo (fica discreto abaixo do título "Indicadores"): mostra quanto o
+// SITE esperou e quanto o SERVIDOR levou de fato — a diferença é o tempo perdido
+// no caminho até o Google, que o log do Apps Script não mostra.
+const _tempos = {};
+function registrarTempo(nome, res, extra) {
+  _tempos[nome] = { ms: res.ms, extra: extra || '', ok: res.ok };
+  const partes = Object.keys(_tempos).map(n => {
+    const t = _tempos[n];
+    return `${n} ${t.ok ? fmtSegundos(t.ms) : 'falhou após ' + fmtSegundos(t.ms)}${t.extra ? ' (' + t.extra + ')' : ''}`;
+  });
+  const el = document.getElementById('tempoCarregamento');
+  if (el) el.textContent = '⏱ ' + partes.join(' · ');
+}
+
+// ---------- Indicadores ----------
+function renderPainel(painel) {
+  const dados = painel.indicadores;
+  renderKpis(dados);
+  renderMeta(painel.status);
+  renderTabelaTransportadoras(dados.pedidosNaoRecebidos.porTransportadora);
+  renderKpisOcorrencias(dados);
+  renderTabelaOcorrencias(dados.ocorrencias.porTransportadora);
+}
+
+async function carregarIndicadores() {
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) return;
+  const token = progressoPainel.iniciar();
+  progressoPainel.etapa(token, 5, 85);
+  const cache = lerCacheLocal(CHAVE_CACHE_PAINEL_LOCAL);
+  let mostrouCache = false;
+  if (cache && cache.valor && cache.valor.indicadores) {
+    try {
+      renderPainel(cache.valor);
+      mostrouCache = true;
+      setStatus('statusPainel', `Mostrando os dados de ${fmtQuando(cache.quando)} — atualizando...`, 'carregando');
+    } catch (e) { mostrouCache = false; }
+  }
+  if (!mostrouCache) {
+    document.getElementById('kpis').innerHTML = '<p class="carregando">Carregando...</p>';
+    setStatus('statusPainel', '', '');
+  }
+
+  const res = await buscarJsonComRetry(`${API_URL}?action=getPainel`);
+  if (!progressoPainel.ativo(token)) return; // outra atualização começou depois desta: só a mais recente desenha
+  if (res.ok && res.dados && res.dados.indicadores) {
+    try {
+      renderPainel(res.dados);
+      gravarCacheLocal(CHAVE_CACHE_PAINEL_LOCAL, { indicadores: res.dados.indicadores, status: res.dados.status });
+      setStatus('statusPainel', `Atualizado às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.`, '');
+      const srv = typeof res.dados.servidorMs === 'number'
+        ? `servidor ${fmtSegundos(res.dados.servidorMs)}${res.dados.doCache ? ', do cache' : ''}` : '';
+      registrarTempo('painel', res, srv);
+      progressoPainel.concluir(token);
+      return;
+    } catch (err) {
+      console.error('Erro ao desenhar o painel:', err);
+    }
+  }
+
+  progressoPainel.falhar(token);
+  registrarTempo('painel', res);
+  const motivo = escapeHtml(res.erro || 'resposta inesperada');
+  const botao = '<button type="button" onclick="carregarIndicadores()" style="margin-left:8px">Tentar de novo</button>';
+  if (mostrouCache) {
+    const el = document.getElementById('statusPainel');
+    el.className = 'status-line erro';
+    el.innerHTML = `Não consegui atualizar agora (${motivo}). Mostrando os dados de ${fmtQuando(cache.quando)}. ${botao}`;
+  } else {
+    document.getElementById('kpis').innerHTML = `<p>Erro ao carregar indicadores: ${motivo} ${botao}</p>`;
+  }
+}
+
+function renderKpis(dados) {
+  const perf = dados.pedidosNaoRecebidos.performanceGeral;
+  const corPerf = perf >= 90 ? 'var(--verde)' : (perf >= 80 ? 'var(--laranja)' : 'var(--vermelho)');
+  const kpis = [
+    { valor: dados.pedidosNaoRecebidos.total, rotulo: 'Pedidos não recebidos',
+      onclick: `verPedidos('TODAS', false, 'Todos os pedidos não recebidos')` },
+    { valor: dados.pedidosNaoRecebidos.totalEmAtraso, rotulo: 'Em atraso',
+      onclick: `verPedidos('TODAS', true, 'Todos os pedidos em atraso')` },
+    { valor: perf.toFixed(1) + '%', rotulo: 'Performance geral', cor: corPerf }
+  ];
+  document.getElementById('kpis').innerHTML = kpis.map(k => {
+    const clicavel = k.onclick ? ' clicavel' : '';
+    const onclickAttr = k.onclick ? ` onclick="${k.onclick}"` : '';
+    return `<div class="kpi${clicavel}"${onclickAttr}><div class="valor"${k.cor ? ` style="color:${k.cor}"` : ''}>${k.valor}</div><div class="rotulo">${k.rotulo}</div></div>`;
+  }).join('');
+}
+
+function renderMeta(status) {
+  if (status.TabDinamica) {
+    document.getElementById('metaTabDinamica').textContent =
+      `Última importação: ${new Date(status.TabDinamica.ultimaImportacao).toLocaleString('pt-BR')} (${status.TabDinamica.totalLinhas} linhas)`;
+  }
+  if (status.PedidosNaoRecebidos) {
+    document.getElementById('metaPedidos').textContent =
+      `Última importação: ${new Date(status.PedidosNaoRecebidos.ultimaImportacao).toLocaleString('pt-BR')} (${status.PedidosNaoRecebidos.totalLinhas} linhas)`;
+  }
+  if (status.BaixaEntregaGFW) {
+    document.getElementById('metaBaixaGFW').textContent =
+      `Última importação: ${new Date(status.BaixaEntregaGFW.ultimaImportacao).toLocaleString('pt-BR')} (${status.BaixaEntregaGFW.totalLinhas} linhas)`;
+  }
+  if (status.BaixaEntregaRTE) {
+    document.getElementById('metaBaixaRTE').textContent =
+      `Última importação: ${new Date(status.BaixaEntregaRTE.ultimaImportacao).toLocaleString('pt-BR')} (${status.BaixaEntregaRTE.totalLinhas} linhas)`;
+  }
+  if (status.EmRotaGFW) {
+    document.getElementById('metaEmRotaGFW').textContent =
+      `Última importação: ${new Date(status.EmRotaGFW.ultimaImportacao).toLocaleString('pt-BR')} (${status.EmRotaGFW.totalLinhas} linhas)`;
+  }
+  if (status.EntregasWhatsApp) {
+    document.getElementById('metaEntregasWhats').textContent =
+      `Última importação: ${new Date(status.EntregasWhatsApp.ultimaImportacao).toLocaleString('pt-BR')} (${status.EntregasWhatsApp.totalLinhas} NFs no histórico)`;
+  }
+}
+
+let dadosTabelaTransportadoras = [];
+
+function renderTabelaTransportadoras(porTransportadora) {
+  const tbody = document.getElementById('tabelaTransportadorasBody');
+  // Ordena pela pior performance primeiro
+  const linhas = Object.entries(porTransportadora || {}).sort((a, b) => a[1].performance - b[1].performance);
+  dadosTabelaTransportadoras = linhas;
+  if (linhas.length === 0) { document.getElementById('tabelaTransportadoras').style.display = 'none'; return; }
+  document.getElementById('tabelaTransportadoras').style.display = 'table';
+  tbody.innerHTML = linhas.map(([nome, v]) => {
+    const cor = v.performance >= 90 ? 'var(--verde)' : (v.performance >= 80 ? 'var(--laranja)' : 'var(--vermelho)');
+    return `<tr>
+      <td>${nome}</td>
+      <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false)">${v.qtd}</a></td>
+      <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', true, false)">${v.emAtraso}</a></td>
+      <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, true)">${v.indefinidos}</a></td>
+      <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, false, false, true)">${v.emRota}</a></td>
+      <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, false, true)">${v.entregues}</a></td>
+      <td style="color:${cor};font-weight:600">${v.performance.toFixed(1)}%</td>
+    </tr>`;
+  }).join('');
+}
+
+function baixarIndicadoresExcel() {
+  if (!dadosTabelaTransportadoras.length) { alert('Não há dados para baixar.'); return; }
+  const colunas = ['Transportadora', 'Pedidos não recebidos', 'Em atraso', 'Indefinidos', 'Em Rota', 'Entregues', 'Performance'];
+  const linhas = dadosTabelaTransportadoras.map(([nome, v]) =>
+    [nome, v.qtd, v.emAtraso, v.indefinidos, v.emRota, v.entregues, v.performance.toFixed(1) + '%']);
+  exportarCSV(colunas, linhas, 'Indicadores por Transportadora');
+}
+
+// Filtro rápido da tabela de ocorrências pelos cartões: null | 'urgente' | 'hoje' | 'ontem'
+let tratativasFiltroEspecial = null;
+let _totalOcorrenciasAtual = 0;
+
+// Números calculados em cima da TABELA inteira (não só do que está filtrado):
+//  - urgentes: pedidos DIFERENTES com a caixinha marcada (o mesmo pedido pode ter 2 ocorrências)
+//  - hoje / ontem: ocorrências cuja abertura (1ª mensagem do histórico, mesma regra do selo NEW/Ontem) é desse dia
+function contagensOcorrencias() {
+  const hoje = new Date();
+  const idxPed = COLUNAS_TRATATIVAS.indexOf('Pedido');
+  const urgentes = new Set();
+  let abertasHoje = 0, abertasOntem = 0;
+  tratativasDadosAtuais.forEach(l => {
+    if (l.urgente) urgentes.add(chavePedidoFront(l[idxPed]));
+    const ab = aberturaDaLinha(l);
+    if (!ab) return;
+    const r = rotuloAbertura(ab.dia, hoje);
+    if (r === 'novo') abertasHoje++; else if (r === 'ontem') abertasOntem++;
+  });
+  return { urgentes: urgentes.size, hoje: abertasHoje, ontem: abertasOntem };
+}
+
+function linhaCasaFiltroEspecial(l, filtro, hoje) {
+  if (filtro === 'urgente') return !!l.urgente;
+  const ab = aberturaDaLinha(l);
+  return !!ab && rotuloAbertura(ab.dia, hoje) === (filtro === 'hoje' ? 'novo' : 'ontem');
+}
+
+function renderKpisOcorrencias(dados) {
+  _totalOcorrenciasAtual = dados.ocorrencias.total;
+  const kpis = [
+    { valor: dados.ocorrencias.total, rotulo: 'Total de ocorrências', onclick: 'limparFiltrosKpiOcorrencias()' }
+  ];
+  // Os cartões abaixo dependem da tabela; antes dela carregar não aparecem (em vez de mostrar 0 errado).
+  // Ficam aqui dentro (e não só no desenho "da tabela") porque este bloco também é redesenhado pelo painel,
+  // e quem terminasse por último apagaria os cartões novos.
+  if (tratativasDadosAtuais.length > 0) {
+    const c = contagensOcorrencias();
+    kpis.push(
+      { valor: c.urgentes, rotulo: 'Pedidos urgentes', cor: 'var(--vermelho)', filtro: 'urgente',
+        dica: 'Pedidos marcados com a caixinha URGENTE que estão na tabela. Clique para filtrar.' },
+      { valor: c.hoje, rotulo: 'Abertas hoje', cor: 'var(--azul)', filtro: 'hoje',
+        dica: 'Ocorrências abertas hoje (1ª mensagem de hoje) — as que ganham o selo NEW. Clique para filtrar.' },
+      { valor: c.ontem, rotulo: 'Abertas ontem', cor: 'var(--cinza)', filtro: 'ontem',
+        dica: 'Ocorrências abertas ontem (1ª mensagem de ontem). Clique para filtrar.' }
+    );
+  }
+  document.getElementById('kpisOcorrencias').innerHTML = kpis.map(k => {
+    const ativo = k.filtro && tratativasFiltroEspecial === k.filtro ? ' ativo' : '';
+    const acao = k.filtro ? `alternarFiltroEspecialTratativas('${k.filtro}')` : k.onclick;
+    const estiloValor = k.cor ? ` style="color:${k.cor}"` : '';
+    const estiloCartao = k.cor ? ` style="--kpi-ativo:${k.cor}"` : '';
+    const titulo = k.dica ? ` title="${escapeHtml(k.dica)}"` : '';
+    return `<div class="kpi clicavel${ativo}"${estiloCartao}${titulo} onclick="${acao}"><div class="valor"${estiloValor}>${k.valor}</div><div class="rotulo">${k.rotulo}</div></div>`;
+  }).join('');
+}
+
+// Redesenha só os cartões (ex: depois de marcar/desmarcar urgente), sem refazer o resto.
+function redesenharKpisOcorrencias() {
+  renderKpisOcorrencias({ ocorrencias: { total: _totalOcorrenciasAtual } });
+}
+
+// Clicar num cartão filtra a tabela; clicar de novo desliga.
+function alternarFiltroEspecialTratativas(filtro) {
+  tratativasFiltroEspecial = tratativasFiltroEspecial === filtro ? null : filtro;
+  aplicarFiltrosTratativas();
+  redesenharKpisOcorrencias();
+  if (tratativasFiltroEspecial) document.getElementById('tratativasArea').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// "Total de ocorrências": mostra tudo (desliga o filtro do cartão e o da transportadora)
+function limparFiltrosKpiOcorrencias() {
+  tratativasFiltroEspecial = null;
+  filtrarTratativasPorColuna('Transportadora', 'TODAS');
+  redesenharKpisOcorrencias();
+}
+
+let dadosTabelaOcorrencias = [];
+
+function renderTabelaOcorrencias(porTransportadora) {
+  const tbody = document.getElementById('tabelaOcorrenciasBody');
+  const linhas = Object.entries(porTransportadora || {}).sort((a, b) => b[1] - a[1]);
+  dadosTabelaOcorrencias = linhas;
+  if (linhas.length === 0) { document.getElementById('tabelaOcorrencias').style.display = 'none'; return; }
+  document.getElementById('tabelaOcorrencias').style.display = 'table';
+  tbody.innerHTML = linhas.map(([nome, qtd]) => `<tr>
+    <td>${nome}</td>
+    <td><a class="num-link" onclick="filtrarTratativasPorTransportadora('${encodeURIComponent(nome)}')">${qtd}</a></td>
+  </tr>`).join('');
+}
+
+function baixarOcorrenciasResumoExcel() {
+  if (!dadosTabelaOcorrencias.length) { alert('Não há dados para baixar.'); return; }
+  exportarCSV(['Transportadora', 'Ocorrências'], dadosTabelaOcorrencias, 'Ocorrencias por Transportadora');
+}
+
+function fmtData(v) {
+  if (!v) return '';
+  // Datas voltam da planilha como string ISO (ex: 2026-01-09T00:00:00.000Z)
+  if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) {
+    return new Date(v).toLocaleDateString('pt-BR');
+  }
+  return v;
+}
+
+// Mesma normalização usada no backend (Code.gs) pra bater a NF como chave
+// de cruzamento, ignorando pontuação/zeros à esquerda formatados diferente.
+function normalizarChaveNF(v) {
+  return String(v || '').trim().replace(/\D/g, '');
+}
+
+// ---------- Copiar coluna (Pedido/NF) para a área de transferência ----------
+async function copiarParaClipboard(texto, botaoEl) {
+  if (!texto) { alert('Não há registros para copiar.'); return; }
+  try {
+    await navigator.clipboard.writeText(texto);
+  } catch (err) {
+    window.prompt('Não consegui copiar automaticamente. Copie manualmente (Ctrl+C):', texto);
+    return;
+  }
+  if (botaoEl) {
+    const original = botaoEl.textContent;
+    botaoEl.textContent = '✅ Copiado!';
+    botaoEl.disabled = true;
+    setTimeout(() => { botaoEl.textContent = original; botaoEl.disabled = false; }, 1500);
+  }
+}
+
+function copiarColunaModal(nomeColuna, botaoEl) {
+  const idx = modalColunasAtuais.indexOf(nomeColuna);
+  if (idx === -1) return;
+  const valores = modalLinhasFiltradas.map(l => l[idx]).filter(v => v !== undefined && v !== null && v !== '');
+  copiarParaClipboard(valores.join('\n'), botaoEl);
+}
+
+function copiarColunaTratativas(nomeColuna, botaoEl) {
+  const idx = COLUNAS_TRATATIVAS.indexOf(nomeColuna);
+  if (idx === -1) return;
+  const valores = tratativasLinhasFiltradas.map(l => l[idx]).filter(v => v !== undefined && v !== null && v !== '');
+  copiarParaClipboard(valores.join('\n'), botaoEl);
+}
+
+// ---------- Exportar Excel (CSV com separador ";" — abre certinho no Excel BR) ----------
+function exportarCSV(colunas, linhas, nomeArquivo) {
+  const limpar = v => {
+    if (v === undefined || v === null) return '""';
+    // remove HTML embutido (ex: o lápis de editar da Prev Etg) antes de exportar
+    const texto = String(v).replace(/<[^>]*>/g, '').trim();
+    return '"' + texto.replace(/"/g, '""') + '"';
+  };
+  const linhasCSV = [colunas.map(limpar).join(';')]
+    .concat(linhas.map(l => colunas.map((_, idx) => limpar(l[idx])).join(';')));
+  const conteudo = '\uFEFF' + linhasCSV.join('\r\n'); // BOM pro Excel reconhecer acentos
+  const blob = new Blob([conteudo], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nomeArquivo.replace(/[^\w\-]+/g, '_') + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ---------- Modal de detalhamento (genérico, com busca, filtros e ordenação) ----------
+let modalColunasAtuais = [];
+let modalDadosAtuais = [];
+let modalLinhasFiltradas = [];
+let modalFiltrosSelecionados = {};
+let modalOrdenacao = { indice: null, direcao: 1 };
+
+// Colunas que, quando presentes, ganham um dropdown de filtro automático
+const COLUNAS_FILTRAVEIS = ['Transportadora', 'Status', 'Ocorrência', 'Entregue?', 'Entregue (GFW)', 'Entregue (RTE)', 'Entregue (WhatsApp)'];
+
+function mostrarModalCarregando(titulo, colunas) {
+  document.getElementById('modalTitulo').textContent = titulo;
+  document.getElementById('modalContador').textContent = '';
+  document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${colunas.length}" class="carregando">Carregando...</td></tr>`;
+  document.getElementById('modalBusca').value = '';
+  document.getElementById('modalFiltrosSelects').innerHTML = '';
+  document.getElementById('modalDataEntregaDe').value = '';
+  document.getElementById('modalDataEntregaAte').value = '';
+  modalColunasAtuais = colunas;
+  modalDadosAtuais = [];
+  modalLinhasFiltradas = [];
+  modalFiltrosSelecionados = {};
+  modalOrdenacao = { indice: null, direcao: 1 };
+  montarCabecalhoModal();
+  document.getElementById('modalOverlay').style.display = 'flex';
+}
+
+function montarCabecalhoModal() {
+  document.querySelector('#modalTabela thead tr').innerHTML = modalColunasAtuais
+    .map((c, idx) => `<th style="cursor:pointer;user-select:none" onclick="ordenarModal(${idx})">${c}${indicadorOrdenacao(modalOrdenacao, idx)}</th>`)
+    .join('');
+}
+
+function ordenarModal(idx) {
+  if (modalOrdenacao.indice === idx) {
+    modalOrdenacao.direcao *= -1;
+  } else {
+    modalOrdenacao = { indice: idx, direcao: 1 };
+  }
+  montarCabecalhoModal();
+  aplicarFiltrosModal();
+}
+
+function renderModalLinhas(linhas) {
+  modalDadosAtuais = linhas;
+  montarFiltrosModal();
+  aplicarFiltrosModal();
+}
+
+function montarFiltrosModal() {
+  const container = document.getElementById('modalFiltrosSelects');
+  container.innerHTML = '';
+  modalFiltrosSelecionados = {};
+
+  modalColunasAtuais.forEach((nome, idx) => {
+    if (COLUNAS_FILTRAVEIS.indexOf(nome) === -1) return;
+    const valores = Array.from(new Set(
+      modalDadosAtuais.map(l => l[idx]).filter(v => v !== undefined && v !== null && v !== '')
+    )).sort();
+    if (valores.length === 0) return;
+
+    modalFiltrosSelecionados[idx] = '';
+    const select = document.createElement('select');
+    select.innerHTML = `<option value="">${nome} (todos)</option>` +
+      valores.map(v => `<option value="${v}">${v}</option>`).join('');
+    select.onchange = () => { modalFiltrosSelecionados[idx] = select.value; aplicarFiltrosModal(); };
+    container.appendChild(select);
+  });
+
+  // O filtro por período de entrega (GFW e/ou RTE) só faz sentido nos
+  // relatórios que têm essas colunas (ex: Pedidos Não Recebidos).
+  const temColunaEntrega = modalColunasAtuais.indexOf('Data Entrega (GFW)') !== -1 ||
+    modalColunasAtuais.indexOf('Data Entrega (RTE)') !== -1 ||
+    modalColunasAtuais.indexOf('Data Entrega (WhatsApp)') !== -1;
+  document.getElementById('modalFiltroDataEntrega').style.display = temColunaEntrega ? 'flex' : 'none';
+}
+
+function limparFiltroDataEntregaModal() {
+  document.getElementById('modalDataEntregaDe').value = '';
+  document.getElementById('modalDataEntregaAte').value = '';
+  aplicarFiltrosModal();
+}
+
+function aplicarFiltrosModal() {
+  const busca = (document.getElementById('modalBusca').value || '').toLowerCase().trim();
+  let linhas = modalDadosAtuais;
+
+  Object.keys(modalFiltrosSelecionados).forEach(idxStr => {
+    const idx = Number(idxStr);
+    const valor = modalFiltrosSelecionados[idx];
+    if (valor) linhas = linhas.filter(l => String(l[idx] ?? '') === valor);
+  });
+
+  // Filtro por período de entrega — considera a data que estiver
+  // preenchida (baixa GFW, baixa RTE ou entrega informada no WhatsApp).
+  const dataDeStr = document.getElementById('modalDataEntregaDe').value;
+  const dataAteStr = document.getElementById('modalDataEntregaAte').value;
+  if (dataDeStr || dataAteStr) {
+    const idxGFW = modalColunasAtuais.indexOf('Data Entrega (GFW)');
+    const idxRTE = modalColunasAtuais.indexOf('Data Entrega (RTE)');
+    const idxWhats = modalColunasAtuais.indexOf('Data Entrega (WhatsApp)');
+    const dataDe = dataDeStr ? new Date(dataDeStr + 'T00:00:00') : null;
+    const dataAte = dataAteStr ? new Date(dataAteStr + 'T00:00:00') : null;
+    linhas = linhas.filter(l => {
+      const candidatas = [idxGFW, idxRTE, idxWhats]
+        .filter(idx => idx !== -1)
+        .map(idx => parseDataBR(l[idx]))
+        .filter(d => d !== null);
+      return candidatas.some(d => (!dataDe || d >= dataDe) && (!dataAte || d <= dataAte));
+    });
+  }
+
+  if (busca) {
+    linhas = linhas.filter(l => l.some(v => String(v ?? '').toLowerCase().includes(busca)));
+  }
+
+  if (modalOrdenacao.indice !== null) {
+    const idx = modalOrdenacao.indice;
+    const dir = modalOrdenacao.direcao;
+    linhas = linhas.slice().sort((a, b) => {
+      const va = ordenarValor(a[idx]);
+      const vb = ordenarValor(b[idx]);
+      if (va === null && vb === null) return 0;
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+  }
+
+  modalLinhasFiltradas = linhas;
+  document.getElementById('modalContador').textContent =
+    linhas.length === modalDadosAtuais.length
+      ? `${linhas.length} registro${linhas.length === 1 ? '' : 's'}`
+      : `${linhas.length} de ${modalDadosAtuais.length} registros`;
+
+  const numColunas = modalColunasAtuais.length;
+  const idxUltimaMsg = modalColunasAtuais.indexOf('Última Mensagem');
+  document.getElementById('modalTabelaBody').innerHTML = linhas.length
+    ? linhas.map((l, posicao) => `<tr>${l.map((v, idx) => {
+        const valor = v === undefined || v === null ? '' : v;
+        if (idx === idxUltimaMsg && (l.historico || []).length > 0) {
+          return `<td>${valor} <span class="hist-icone" data-idx="${posicao}" title="Ver tratativa completa">💬</span></td>`;
+        }
+        return `<td>${valor}</td>`;
+      }).join('')}</tr>`).join('')
+    : `<tr><td colspan="${numColunas}">Nenhum registro encontrado.</td></tr>`;
+}
+
+function baixarModalExcel() {
+  if (!modalLinhasFiltradas.length) { alert('Não há registros para baixar.'); return; }
+  exportarCSV(modalColunasAtuais, modalLinhasFiltradas, document.getElementById('modalTitulo').textContent);
+}
+
+const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)', 'Em Rota', 'Entregue (GFW)', 'Data Entrega (GFW)', 'Entregue (RTE)', 'Data Entrega (RTE)', 'Entregue (WhatsApp)', 'Data Entrega (WhatsApp)', 'Última Mensagem'];
+
+let ultimoFiltroPedidos = null;
+
+async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregue, apenasEmRota) {
+  ultimoFiltroPedidos = { transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregue, apenasEmRota };
+  mostrarModalCarregando(titulo, COLUNAS_PEDIDOS_NAO_RECEBIDOS);
+  const token = progressoModal.iniciar();
+  progressoModal.etapa(token, 5, 85);
+  const params = new URLSearchParams({
+    action: 'getPedidosDetalhe', transportadora,
+    apenasAtraso: apenasAtraso ? '1' : '0',
+    apenasIndefinido: apenasIndefinido ? '1' : '0',
+    apenasEntregue: apenasEntregue ? '1' : '0',
+    apenasEmRota: apenasEmRota ? '1' : '0'
+  });
+  const res = await buscarJsonComRetry(`${API_URL}?${params}`);
+  // Se a pessoa abriu outro relatório enquanto este carregava, este resultado
+  // é velho: descarta (antes ele aparecia por cima do relatório novo).
+  if (!progressoModal.ativo(token)) return;
+  if (!res.ok || !Array.isArray(res.dados)) {
+    progressoModal.falhar(token);
+    document.getElementById('modalTabelaBody').innerHTML =
+      `<tr><td colspan="${COLUNAS_PEDIDOS_NAO_RECEBIDOS.length}">Erro ao carregar pedidos (${escapeHtml(res.erro || 'resposta inesperada')}). Feche e abra o relatório de novo.</td></tr>`;
+    return;
+  }
+  try {
+    const linhas = res.dados.map(p => {
+      const linha = [
+        p.pedido, p.nf, p.cliente, p.cidade, p.loja, fmtData(p.dataColeta),
+        celulaPrevisaoEditavel(p.pedido, fmtData(p.prevEtg)), p.atraso,
+        p.emRota ? '<span style="color:var(--verde);font-weight:700">Em Rota</span>' : (p.dataRomaneio || ''),
+        p.entregueGFW ? 'Sim' : 'Não', fmtData(p.dataEntregaGFW),
+        p.entregueRTE ? 'Sim' : 'Não', fmtData(p.dataEntregaRTE),
+        p.entregueWhats ? 'Sim' : 'Não', p.dataEntregaWhats || '',
+        p.ultimaOcorrencia || ''
+      ];
+      linha.historico = expandirHistorico(p.ultimaOcorrenciaHistorico);
+      return linha;
+    });
+    renderModalLinhas(linhas);
+    progressoModal.concluir(token);
+  } catch (err) {
+    progressoModal.falhar(token);
+    document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_PEDIDOS_NAO_RECEBIDOS.length}">Erro ao montar o relatório.</td></tr>`;
+  }
+}
+
+// Monta a célula de Prev Etg como texto + lápis clicável para editar.
+// O valor retornado já é HTML (o modal genérico não escapa o conteúdo).
+function celulaPrevisaoEditavel(pedido, prevEtgFormatada) {
+  const pedidoAttr = String(pedido).replace(/"/g, '&quot;');
+  const texto = prevEtgFormatada || 'Indefinido';
+  return `${texto} <a class="num-link" title="Editar previsão" onclick="editarPrevisao('${pedidoAttr}')">✏️</a>`;
+}
+
+// ---------- Edição rápida de previsão (formulário abaixo dos importadores) ----------
+function alternarIndefinidoEditPrev() {
+  const indefinido = document.getElementById('editPrevIndefinido').checked;
+  const campoData = document.getElementById('editPrevData');
+  campoData.disabled = indefinido;
+  if (indefinido) campoData.value = '';
+}
+
+async function registrarPrevisaoRapida() {
+  const pedido = document.getElementById('editPrevPedido').value.trim().toUpperCase();
+  const indefinido = document.getElementById('editPrevIndefinido').checked;
+  const dataIso = document.getElementById('editPrevData').value; // yyyy-mm-dd
+
+  if (!pedido) { setStatus('statusEditPrev', 'Informe o número do pedido.', 'erro'); return; }
+  if (!indefinido && !dataIso) { setStatus('statusEditPrev', 'Escolha a data ou marque "Indefinido".', 'erro'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { setStatus('statusEditPrev', 'API não configurada.', 'erro'); return; }
+
+  let novaPrevisao = 'Indefinido';
+  if (!indefinido) {
+    const [ano, mes, dia] = dataIso.split('-');
+    novaPrevisao = `${dia}/${mes}/${ano}`;
+  }
+
+  setStatus('statusEditPrev', 'Salvando...', 'carregando');
+  toggleBtn('btnEditPrev', true);
+  try {
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'editarPrevisaoPedido', pedido, novaPrevisao })
+    }).then(r => r.json());
+
+    if (!resp.ok) {
+      setStatus('statusEditPrev', 'Não consegui salvar: ' + (resp.error || resp.erro || 'erro desconhecido'), 'erro');
+      return;
+    }
+    setStatus('statusEditPrev', `Pedido ${pedido}: previsão registrada como ${novaPrevisao}.`, 'ok');
+    document.getElementById('editPrevPedido').value = '';
+    document.getElementById('editPrevData').value = '';
+    document.getElementById('editPrevIndefinido').checked = false;
+    document.getElementById('editPrevData').disabled = false;
+    document.getElementById('editPrevPedido').focus(); // já pronto pro próximo pedido
+    carregarIndicadores(); // a mudança pode alterar as contagens (atraso/indefinido)
+  } catch (err) {
+    setStatus('statusEditPrev', 'Erro ao salvar a previsão: ' + err.message, 'erro');
+  } finally {
+    toggleBtn('btnEditPrev', false);
+  }
+}
+
+// ---------- Pedido URGENTE (caixinha na tabela de ocorrências) ----------
+function infoUrgenteDoServidor(json) { // '["quem","quando"]' -> { por, em } | null
+  if (!json) return null;
+  try { const a = JSON.parse(json); return { por: a[0] || '', em: a[1] || '' }; } catch (e) { return null; }
+}
+
+// Marca/desmarca TODAS as linhas desse pedido (o mesmo pedido pode ter mais de uma ocorrência) e redesenha.
+function aplicarUrgenteNaTabela(chave, info) {
+  const idxPed = COLUNAS_TRATATIVAS.indexOf('Pedido');
+  tratativasDadosAtuais.forEach(l => { if (chavePedidoFront(l[idxPed]) === chave) l.urgente = info; });
+  aplicarFiltrosTratativas();
+  redesenharKpisOcorrencias();
+}
+
+// Mantém a cópia guardada no navegador em dia (senão, na próxima abertura, apareceria por um
+// instante o estado antigo antes de chegar a resposta do servidor).
+function atualizarCacheLocalUrgente(chave, r) {
+  const cache = lerCacheLocal(CHAVE_CACHE_TRATATIVAS_LOCAL);
+  if (!cache || !Array.isArray(cache.valor)) return;
+  const idxPed = COLUNAS_TRATATIVAS.indexOf('Pedido');
+  cache.valor.forEach(l => {
+    if (chavePedidoFront(l[idxPed]) === chave) l[COLUNAS_TRATATIVAS.length + 2] = r.urgente ? JSON.stringify([r.por || '', r.em || '']) : '';
+  });
+  gravarCacheLocal(CHAVE_CACHE_TRATATIVAS_LOCAL, cache.valor);
+}
+
+const _urgentesEmEnvio = new Set();
+
+// A linha já fica vermelha (ou deixa de ficar) NA HORA; o servidor grava em seguida. Se ele recusar
+// ou não responder, volta ao que era e avisa — assim nunca fica marcado só na sua tela.
+async function alternarUrgente(pedido, marcado) {
+  const chave = chavePedidoFront(pedido);
+  if (_urgentesEmEnvio.has(chave)) return; // clique repetido enquanto envia
+  _urgentesEmEnvio.add(chave);
+  const idxPed = COLUNAS_TRATATIVAS.indexOf('Pedido');
+  const anterior = (tratativasDadosAtuais.find(l => chavePedidoFront(l[idxPed]) === chave) || {}).urgente || null;
+  aplicarUrgenteNaTabela(chave, marcado ? { por: '', em: '' } : null);
+  try {
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'marcarUrgente', pedido, urgente: marcado })
+    });
+    const r = await resp.json();
+    if (!r || r.error || r.ok !== true) throw new Error((r && r.error) || 'resposta inesperada do servidor');
+    aplicarUrgenteNaTabela(chave, r.urgente ? { por: r.por || '', em: r.em || '' } : null); // agora com quem marcou e quando
+    atualizarCacheLocalUrgente(chave, r);
+  } catch (err) {
+    aplicarUrgenteNaTabela(chave, anterior);
+    const motivo = err && err.name === 'AbortError' ? 'o servidor demorou demais pra responder' : (err && err.message) || 'erro de rede';
+    setStatus('statusTratativas', `Não consegui ${marcado ? 'marcar' : 'desmarcar'} o pedido ${pedido} como urgente (${motivo}). Voltou ao que era.`, 'erro');
+  } finally {
+    _urgentesEmEnvio.delete(chave);
+  }
+}
+
+// ---------- Editar tipo de ocorrência ----------
+function chavePedidoFront(p) { return String(p || '').trim().toUpperCase(); }
+
+function infoEdicaoDoServidor(json) { // '["original","quem","quando"]' -> objeto, ou null
+  if (!json) return null;
+  try { const a = JSON.parse(json); return { original: a[0] || '', por: a[1] || '', em: a[2] || '' }; } catch (e) { return null; }
+}
+
+// Guarda na linha quem/quando alterou. Se o tipo atual é igual ao original (a pessoa
+// voltou ao original), não marca como "alterada".
+function definirEdicaoOcorrencia(linha, info) {
+  const tipoAtual = linha[COLUNAS_TRATATIVAS.indexOf('Ocorrência')];
+  linha.edicaoOcorrencia = info && !(info.original && info.original === tipoAtual) ? info : null;
+}
+
+function preencherSelectTipos(select, atual, comPlaceholder) {
+  const lista = TIPOS_OCORRENCIA.slice();
+  if (atual && lista.indexOf(atual) === -1) lista.unshift(atual); // tipo que não está na lista ainda aparece, pra não perder
+  select.innerHTML = (comPlaceholder ? '<option value="">Escolha o tipo...</option>' : '') +
+    lista.map(t => `<option value="${escapeHtml(t)}"${t === atual ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('');
+}
+
+// Refaz os filtros da tabela (os tipos mudaram) sem perder o que a pessoa já tinha filtrado.
+function refazerFiltrosPreservandoSelecao() {
+  const anteriores = Object.assign({}, tratativasFiltrosSelecionados);
+  montarFiltrosTratativas();
+  Object.keys(anteriores).forEach(idxStr => {
+    const valor = anteriores[idxStr];
+    if (!valor) return;
+    const select = document.querySelector(`#tratativasFiltrosSelects select[data-coluna="${COLUNAS_TRATATIVAS[Number(idxStr)]}"]`);
+    if (select && Array.from(select.options).some(o => o.value === valor)) {
+      select.value = valor;
+      tratativasFiltrosSelecionados[idxStr] = valor;
+    }
+  });
+}
+
+// Mantém a cópia guardada no navegador em dia (senão, na próxima abertura, apareceria
+// por um instante o tipo antigo antes de chegar a resposta do servidor).
+function atualizarCacheLocalOcorrencia(chave, r) {
+  const cache = lerCacheLocal(CHAVE_CACHE_TRATATIVAS_LOCAL);
+  if (!cache || !Array.isArray(cache.valor)) return;
+  const idxPed = COLUNAS_TRATATIVAS.indexOf('Pedido'), idxOc = COLUNAS_TRATATIVAS.indexOf('Ocorrência');
+  cache.valor.forEach(l => {
+    if (chavePedidoFront(l[idxPed]) !== chave) return;
+    l[idxOc] = r.tipo;
+    l[COLUNAS_TRATATIVAS.length + 1] = JSON.stringify([r.original || '', r.por || '', r.em || '']);
+  });
+  gravarCacheLocal(CHAVE_CACHE_TRATATIVAS_LOCAL, cache.valor);
+}
+
+function aplicarEdicaoOcorrenciaNaTabela(r) {
+  const idxPed = COLUNAS_TRATATIVAS.indexOf('Pedido'), idxOc = COLUNAS_TRATATIVAS.indexOf('Ocorrência');
+  const chave = chavePedidoFront(r.pedido);
+  let mudou = false;
+  tratativasDadosAtuais.forEach(l => {
+    if (chavePedidoFront(l[idxPed]) !== chave) return;
+    l[idxOc] = r.tipo;
+    definirEdicaoOcorrencia(l, { original: r.original || '', por: r.por || '', em: r.em || '' });
+    mudou = true;
+  });
+  atualizarCacheLocalOcorrencia(chave, r);
+  if (mudou) {
+    refazerFiltrosPreservandoSelecao();
+    aplicarFiltrosTratativas();
+    renderKpisOcorrenciasDeTratativas(); // os indicadores por tipo recalculam na hora
+  }
+  return mudou;
+}
+
+// Envia a alteração ao servidor e, se deu certo, já atualiza a tabela desta tela.
+async function enviarEdicaoOcorrencia(pedido, tipo, tipoOriginal) {
+  try {
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'editarOcorrenciaPedido', pedido, tipo, tipoOriginal: tipoOriginal || '' })
+    });
+    const r = await resp.json();
+    if (!r || r.error || r.ok !== true) return { ok: false, erro: (r && r.error) || 'resposta inesperada do servidor' };
+    aplicarEdicaoOcorrenciaNaTabela(r);
+    return { ok: true, dados: r };
+  } catch (err) {
+    return { ok: false, erro: err && err.name === 'AbortError' ? 'o servidor demorou demais pra responder' : (err && err.message) || 'erro de rede' };
+  }
+}
+
+let _editorOcorrenciaPedido = '', _editorOcorrenciaTipoAtual = '';
+
+function abrirEditorOcorrencia(pedido, tipoAtual) {
+  _editorOcorrenciaPedido = pedido;
+  _editorOcorrenciaTipoAtual = tipoAtual || '';
+  document.getElementById('editorOcorrenciaInfo').innerHTML =
+    `Pedido <b>${escapeHtml(pedido)}</b> — tipo atual: <b>${escapeHtml(tipoAtual || '(vazio)')}</b>`;
+  preencherSelectTipos(document.getElementById('editorOcorrenciaSelect'), tipoAtual, false);
+  setStatus('statusEditorOcorrencia', '', '');
+  toggleBtn('btnSalvarEditorOcorrencia', false);
+  document.getElementById('editorOcorrenciaOverlay').style.display = 'flex';
+  document.getElementById('editorOcorrenciaSelect').focus();
+}
+
+function fecharEditorOcorrencia() { document.getElementById('editorOcorrenciaOverlay').style.display = 'none'; }
+
+async function salvarEditorOcorrencia() {
+  const tipo = document.getElementById('editorOcorrenciaSelect').value;
+  if (!tipo) { setStatus('statusEditorOcorrencia', 'Escolha o tipo.', 'erro'); return; }
+  if (tipo === _editorOcorrenciaTipoAtual) { setStatus('statusEditorOcorrencia', 'Esse já é o tipo atual.', 'erro'); return; }
+  setStatus('statusEditorOcorrencia', 'Salvando...', 'carregando');
+  toggleBtn('btnSalvarEditorOcorrencia', true);
+  const r = await enviarEdicaoOcorrencia(_editorOcorrenciaPedido, tipo, _editorOcorrenciaTipoAtual);
+  if (r.ok) { fecharEditorOcorrencia(); return; }
+  toggleBtn('btnSalvarEditorOcorrencia', false);
+  setStatus('statusEditorOcorrencia', 'Não consegui salvar: ' + r.erro, 'erro');
+}
+
+async function registrarOcorrenciaRapida() {
+  const pedido = document.getElementById('editOcorrPedido').value.trim().toUpperCase();
+  const tipo = document.getElementById('editOcorrTipo').value;
+  if (!pedido) { setStatus('statusEditOcorr', 'Informe o número do pedido.', 'erro'); return; }
+  if (!tipo) { setStatus('statusEditOcorr', 'Escolha o tipo de ocorrência.', 'erro'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { setStatus('statusEditOcorr', 'API não configurada.', 'erro'); return; }
+
+  // se o pedido está na tabela desta tela, o tipo que ele tem agora é o "original" a guardar
+  const idxPed = COLUNAS_TRATATIVAS.indexOf('Pedido'), idxOc = COLUNAS_TRATATIVAS.indexOf('Ocorrência');
+  const linha = tratativasDadosAtuais.find(l => chavePedidoFront(l[idxPed]) === chavePedidoFront(pedido));
+  setStatus('statusEditOcorr', 'Salvando...', 'carregando');
+  toggleBtn('btnEditOcorr', true);
+  const r = await enviarEdicaoOcorrencia(pedido, tipo, linha ? linha[idxOc] : '');
+  toggleBtn('btnEditOcorr', false);
+  if (!r.ok) { setStatus('statusEditOcorr', 'Não consegui salvar: ' + r.erro, 'erro'); return; }
+  if (r.dados.naTabelaAtual) {
+    setStatus('statusEditOcorr', `Pedido ${pedido}: tipo registrado como "${tipo}" e já atualizado na tabela de ocorrências.`, 'ok');
+  } else {
+    setStatus('statusEditOcorr', `Pedido ${pedido}: tipo registrado como "${tipo}". Atenção: esse pedido NÃO está na tabela de ocorrências atual — confira o número; o ajuste vale quando ele aparecer num próximo texto.`, 'erro');
+  }
+  document.getElementById('editOcorrPedido').value = '';
+  document.getElementById('editOcorrPedido').focus();
+}
+
+async function editarPrevisao(pedido) {
+  const entrada = prompt(`Nova previsão de entrega para o pedido ${pedido}\n(formato dd/mm/aaaa — deixe em branco para marcar como Indefinido):`);
+  if (entrada === null) return; // cancelou
+  const novaPrevisao = entrada.trim() === '' ? 'Indefinido' : entrada.trim();
+
+  try {
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'editarPrevisaoPedido', pedido, novaPrevisao })
+    }).then(r => r.json());
+
+    if (!resp.ok) { alert('Não consegui salvar: ' + (resp.error || 'erro desconhecido')); return; }
+
+    // Reabre a mesma lista que estava aberta, já com a previsão atualizada
+    if (ultimoFiltroPedidos) {
+      verPedidos(ultimoFiltroPedidos.transportadora, ultimoFiltroPedidos.apenasAtraso, ultimoFiltroPedidos.titulo, ultimoFiltroPedidos.apenasIndefinido, ultimoFiltroPedidos.apenasEntregue, ultimoFiltroPedidos.apenasEmRota);
+    }
+  } catch (err) {
+    alert('Erro ao salvar a previsão: ' + err.message);
+  }
+}
+
+function verPedidosPorNome(nomeEncoded, apenasAtraso, apenasIndefinido, apenasEntregue, apenasEmRota) {
+  const nome = decodeURIComponent(nomeEncoded);
+  const titulo = apenasEntregue ? 'Pedidos já entregues — ' + nome
+    : apenasEmRota ? 'Pedidos em rota — ' + nome
+    : apenasIndefinido ? 'Pedidos com previsão indefinida — ' + nome
+    : apenasAtraso ? 'Pedidos em atraso — ' + nome
+    : 'Pedidos não recebidos — ' + nome;
+  verPedidos(nome, !!apenasAtraso, titulo, !!apenasIndefinido, !!apenasEntregue, !!apenasEmRota);
+}
+
+const COLUNAS_RECEBIDOS = ['Data', 'Pedido', 'Transportadora'];
+
+async function verPedidosRecebidos() {
+  mostrarModalCarregando('Pedidos recebidos pelo cliente', COLUNAS_RECEBIDOS);
+  const token = progressoModal.iniciar();
+  progressoModal.etapa(token, 5, 85);
+  const res = await buscarJsonComRetry(`${API_URL}?action=getPedidosRecebidosDetalhe`);
+  if (!progressoModal.ativo(token)) return; // outro relatório foi aberto no meio: descarta este
+  if (!res.ok || !Array.isArray(res.dados)) {
+    progressoModal.falhar(token);
+    document.getElementById('modalTabelaBody').innerHTML =
+      `<tr><td colspan="${COLUNAS_RECEBIDOS.length}">Erro ao carregar pedidos (${escapeHtml(res.erro || 'resposta inesperada')}). Feche e abra o relatório de novo.</td></tr>`;
+    return;
+  }
+  try {
+    renderModalLinhas(res.dados.map(d => [fmtData(d.data), d.pedido, d.transportadora]));
+    progressoModal.concluir(token);
+  } catch (err) {
+    progressoModal.falhar(token);
+    document.getElementById('modalTabelaBody').innerHTML = `<tr><td colspan="${COLUNAS_RECEBIDOS.length}">Erro ao montar o relatório.</td></tr>`;
+  }
+}
+
+function fecharModal() { document.getElementById('modalOverlay').style.display = 'none'; }
+function fecharModalSeClicouFora(e) { if (e.target.id === 'modalOverlay') fecharModal(); }
+
+// ---------- Tema claro/escuro ----------
+const CHAVE_LOCALSTORAGE_TEMA = 'dis_tema_v1';
+
+function aplicarTema(tema) {
+  if (tema === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+    document.getElementById('temaBtn').textContent = '🌙 Tema escuro';
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    document.getElementById('temaBtn').textContent = '☀️ Tema claro';
+  }
+}
+
+function alternarTema() {
+  const atual = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  const novo = atual === 'light' ? 'dark' : 'light';
+  localStorage.setItem(CHAVE_LOCALSTORAGE_TEMA, novo);
+  aplicarTema(novo);
+}
+
+aplicarTema(localStorage.getItem(CHAVE_LOCALSTORAGE_TEMA) || 'dark');
+
+// ---------- Cor de destaque do site (escolha de cada aparelho) ----------
+const CHAVE_LOCALSTORAGE_COR = 'dis_cor_v1';
+const PALETAS_COR = [
+  { id: 'azul', nome: 'Azul', escuro: '#4c8dff', claro: '#1a5fb4' },
+  { id: 'verde', nome: 'Verde', escuro: '#24984e', claro: '#196936' },
+  { id: 'roxo', nome: 'Roxo', escuro: '#9b6aee', claro: '#6d27e7' },
+  { id: 'laranja', nome: 'Laranja', escuro: '#d16817', claro: '#904710' },
+  { id: 'rosa', nome: 'Rosa', escuro: '#de4f9b', claro: '#a92069' },
+  { id: 'turquesa', nome: 'Turquesa', escuro: '#119590', claro: '#0b6663' },
+  { id: 'grafite', nome: 'Grafite', escuro: '#79869a', claro: '#515c6c' }
+];
+
+function aplicarCor(id) {
+  const valida = PALETAS_COR.some(p => p.id === id) ? id : 'azul';
+  if (valida === 'azul') document.documentElement.removeAttribute('data-cor');
+  else document.documentElement.setAttribute('data-cor', valida);
+  document.querySelectorAll('#coresGrade .cor-bolinha').forEach(b => b.classList.toggle('ativa', b.dataset.cor === valida));
+  return valida;
+}
+
+function escolherCor(id) {
+  const valida = aplicarCor(id);
+  try { localStorage.setItem(CHAVE_LOCALSTORAGE_COR, valida); } catch (e) { /* sem espaço/sem permissão: vale só até fechar a página */ }
+}
+
+function montarPainelCores() {
+  const grade = document.getElementById('coresGrade');
+  grade.innerHTML = PALETAS_COR.map(p =>
+    `<button type="button" class="cor-bolinha" data-cor="${p.id}" title="${p.nome}" aria-label="${p.nome}" style="--c-escuro:${p.escuro};--c-claro:${p.claro}" onclick="escolherCor('${p.id}')"></button>`
+  ).join('');
+  let salva = 'azul';
+  try { salva = localStorage.getItem(CHAVE_LOCALSTORAGE_COR) || 'azul'; } catch (e) { /* ignora */ }
+  aplicarCor(salva);
+}
+
+function fecharPainelCores() { document.getElementById('painelCores').style.display = 'none'; }
+
+function alternarPainelCores(ev) {
+  if (ev) ev.stopPropagation();
+  const painel = document.getElementById('painelCores');
+  if (painel.style.display === 'block') { fecharPainelCores(); return; }
+  const r = document.getElementById('corBtn').getBoundingClientRect(); // abre logo abaixo do botão, sem sair da tela
+  painel.style.display = 'block';
+  painel.style.top = Math.round(r.bottom + 8) + 'px';
+  painel.style.right = Math.max(8, Math.round(window.innerWidth - r.right)) + 'px';
+}
+
+document.addEventListener('click', e => { if (!e.target.closest('#painelCores')) fecharPainelCores(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharPainelCores(); });
+montarPainelCores();
+
+// ---------- Importadores recolhíveis ----------
+const CHAVE_LOCALSTORAGE_IMPORTADORES = 'dis_importadores_abertos_v1';
+
+function toggleImportadores() {
+  const grid = document.getElementById('gridImportadores');
+  const aberto = grid.style.display !== 'none';
+  const novoEstado = !aberto;
+  grid.style.display = novoEstado ? '' : 'none';
+  document.getElementById('tituloImportadores').textContent = (novoEstado ? '▼' : '▶') + ' Importadores';
+  localStorage.setItem(CHAVE_LOCALSTORAGE_IMPORTADORES, novoEstado ? '1' : '0');
+}
+
+if (localStorage.getItem(CHAVE_LOCALSTORAGE_IMPORTADORES) === '1') toggleImportadores();
+
+preencherSelectTipos(document.getElementById('editOcorrTipo'), '', true);
+configurarColarComoTabela();
+configurarPopoverHistoricoTratativas();
+verificarLoginSalvo();
+</script>
+</body>
+</html>
