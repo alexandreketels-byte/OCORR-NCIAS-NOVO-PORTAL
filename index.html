@@ -80,7 +80,33 @@
   /* Estados de "em andamento" (Carregando..., Lendo arquivo..., Salvando...) em amarelo */
   .carregando, .status-line.carregando { color: var(--amarelo); font-weight: 600; }
   .meta { font-size: 0.8rem; color: var(--cinza); margin-top: 6px; }
-  .indicadores { margin-top: 28px; }
+  html { scroll-behavior: smooth; }
+  /* Cada assunto é um cartão com faixa de título (na cor do tema) — antes eram só títulos soltos, tudo misturado */
+  .indicadores {
+    --secao-pad: 18px; margin-top: 24px; padding: var(--secao-pad); scroll-margin-top: 62px;
+    background: var(--card-bg); border: 1px solid var(--borda); border-left: 5px solid var(--destaque);
+    border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+  }
+  .secao-titulo {
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+    margin: calc(var(--secao-pad) * -1) calc(var(--secao-pad) * -1) 14px; padding: 12px var(--secao-pad);
+    background: var(--destaque-claro); border-bottom: 1px solid var(--borda); border-radius: 7px 7px 0 0;
+  }
+  .secao-titulo h2 { margin: 0; font-size: 1.12rem; }
+  .indicadores.secao-recolhida { padding-bottom: 0; }
+  .indicadores.secao-recolhida .secao-titulo { margin-bottom: 0; border-bottom: none; border-radius: 7px; }
+  #tratativasArea { scroll-margin-top: 62px; }
+  /* menu fixo com um botão por assunto */
+  .menu-secoes {
+    position: sticky; top: 0; z-index: 60; display: flex; gap: 8px; overflow-x: auto; padding: 8px 32px;
+    background: var(--fundo); border-bottom: 1px solid var(--borda); scrollbar-width: none;
+  }
+  .menu-secoes::-webkit-scrollbar { display: none; }
+  .menu-secoes a {
+    flex: 0 0 auto; text-decoration: none; color: var(--texto); background: var(--card-bg); border: 1px solid var(--borda);
+    border-radius: 999px; padding: 6px 14px; font-size: 0.85rem; white-space: nowrap;
+  }
+  .menu-secoes a.ativo { background: var(--destaque); border-color: var(--destaque); color: #fff; font-weight: 600; }
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 14px; }
   .kpi { background: var(--card-bg); border: 1px solid var(--borda); border-radius: 10px; padding: 16px; text-align: center; }
   .kpi .valor { font-size: 1.6rem; font-weight: 600; color: var(--destaque); }
@@ -141,10 +167,14 @@
   @media (max-width: 700px) {
     header { padding: 12px; }
     header h1 { font-size: 1.15rem; }
-    main { padding: 10px 8px 40px; }
+    main { padding: 8px 6px 40px; }
     .card { padding: 12px; }
     .grid { grid-template-columns: 1fr; gap: 12px; }
-    .indicadores { margin-top: 20px; }
+    .indicadores { --secao-pad: 12px; margin-top: 18px; border-left-width: 4px; }
+    .menu-secoes { padding: 8px 10px; }
+    /* o cartão das tratativas usa a largura toda: a tabela encosta nas bordas do cartão (é a que mais precisa de espaço pra ler) */
+    #secTratativas { --secao-pad: 8px; }
+    #secTratativas .rolagem-tabela { margin-left: calc(var(--secao-pad) * -1); margin-right: calc(var(--secao-pad) * -1); }
     .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     .kpi { padding: 12px 6px; }
     .kpi .valor { font-size: 1.4rem; }
@@ -229,10 +259,18 @@
   <div class="cores-grade" id="coresGrade"></div>
 </div>
 
+<nav class="menu-secoes" id="menuSecoes" aria-label="Ir para a seção">
+  <a href="#secImportadores" data-sec="secImportadores" onclick="irParaSecao('secImportadores', event)">📥 Importadores</a>
+  <a href="#secPrevisao" data-sec="secPrevisao" onclick="irParaSecao('secPrevisao', event)">🗓️ Previsão</a>
+  <a href="#secTipo" data-sec="secTipo" onclick="irParaSecao('secTipo', event)">🏷️ Tipo de ocorrência</a>
+  <a href="#secIndicadores" data-sec="secIndicadores" onclick="irParaSecao('secIndicadores', event)">📊 Indicadores</a>
+  <a href="#secOcorrencias" data-sec="secOcorrencias" onclick="irParaSecao('secOcorrencias', event)">⚠️ Ocorrências</a>
+  <a href="#secTratativas" data-sec="secTratativas" onclick="irParaSecao('secTratativas', event)">📋 Tratativas</a>
+</nav>
+
 <main>
-  <div class="indicadores" style="margin-bottom:20px">
-    <h2 id="tituloImportadores" style="margin:0;cursor:pointer;user-select:none" onclick="toggleImportadores()">▶ Importadores</h2>
-  </div>
+  <div class="indicadores secao-recolhida" id="secImportadores">
+    <div class="secao-titulo"><h2 id="tituloImportadores" style="cursor:pointer;user-select:none" onclick="toggleImportadores()">▶ 📥 Importadores</h2></div>
 
   <div class="grid" id="gridImportadores" style="display:none">
     <div class="card">
@@ -295,9 +333,10 @@
       <div class="meta" id="metaEntregasWhats"></div>
     </div>
   </div>
+  </div>
 
-  <div class="indicadores" style="margin-bottom:20px">
-    <h2 style="margin:0 0 6px">Editar previsão de entrega</h2>
+  <div class="indicadores" id="secPrevisao">
+    <div class="secao-titulo"><h2>🗓️ Editar previsão de entrega</h2></div>
     <p class="desc">Digite o pedido e a nova data (ou marque "Indefinido") e clique em Registrar. Vale pra pedidos que estão em Pedidos Não Recebidos — é o mesmo efeito do lápis ✏️ da lista, só que direto daqui.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <input type="text" id="editPrevPedido" class="campo-simples" placeholder="Nº do pedido (ex: 474798N)" autocomplete="off"
@@ -311,8 +350,8 @@
     <div class="status-line" id="statusEditPrev"></div>
   </div>
 
-  <div class="indicadores" style="margin-bottom:20px">
-    <h2 style="margin:0 0 6px">Editar tipo de ocorrência</h2>
+  <div class="indicadores" id="secTipo">
+    <div class="secao-titulo"><h2>🏷️ Editar tipo de ocorrência</h2></div>
     <p class="desc">Se a ocorrência foi aberta com o motivo errado, digite o pedido, escolha o tipo certo e clique em Registrar. Fica guardado na aba <b>OcorrenciasManuais</b> e vale sempre que um texto novo for processado (é o mesmo efeito do lápis ✏️ na coluna Ocorrência).</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <input type="text" id="editOcorrPedido" class="campo-simples" placeholder="Nº do pedido (ex: 474798N)" autocomplete="off"
@@ -323,9 +362,9 @@
     <div class="status-line" id="statusEditOcorr"></div>
   </div>
 
-  <div class="indicadores">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-      <h2 style="margin:0">Indicadores</h2>
+  <div class="indicadores" id="secIndicadores">
+    <div class="secao-titulo">
+      <h2>📊 Indicadores</h2>
       <button type="button" onclick="baixarIndicadoresExcel()">⬇ Baixar Excel</button>
     </div>
     <div class="progress-wrap" id="progressPainel"><div class="progress-bar" id="progressBarPainel"></div></div>
@@ -344,9 +383,9 @@
     <button id="refreshBtn" onclick="carregarIndicadores()">Atualizar indicadores</button>
   </div>
 
-  <div class="indicadores">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-      <h2 style="margin:0">Ocorrências</h2>
+  <div class="indicadores" id="secOcorrencias">
+    <div class="secao-titulo">
+      <h2>⚠️ Ocorrências</h2>
       <button type="button" onclick="baixarOcorrenciasResumoExcel()">⬇ Baixar Excel</button>
     </div>
     <p class="desc">Calculado a partir do que estiver colado em "Tratativas de Ocorrências" mais abaixo. Clique num número para filtrar a tabela por aquela transportadora; os cartões de urgentes e de abertas hoje/ontem também filtram.</p>
@@ -373,8 +412,8 @@
     </div>
   </div>
 
-  <div class="indicadores">
-    <h2>Colar Tratativas de Ocorrências (texto)</h2>
+  <div class="indicadores" id="secTratativas">
+    <div class="secao-titulo"><h2>📋 Colar Tratativas de Ocorrências (texto)</h2></div>
     <p class="desc">Cole aqui direto da tela do sistema (com as mensagens de cada pedido) — não precisa mais passar pelo Excel antes, a caixa já reconhece a tabela colada e organiza as colunas sozinha. Fica salvo neste navegador até você processar um texto novo.</p>
     <textarea id="colarOcorrenciasTexto" rows="8" style="width:100%;font-family:inherit;font-size:0.9rem;padding:10px;border:1px solid var(--borda);border-radius:8px;"></textarea>
     <button id="btnProcessarTratativas" onclick="processarOcorrenciasTexto()" style="margin-top:10px">Processar texto</button>
@@ -405,7 +444,7 @@
           </div>
         </div>
       </div>
-      <div style="overflow-x:auto">
+      <div class="rolagem-tabela" style="overflow-x:auto">
         <table id="tratativasTabela" style="width:100%">
           <thead><tr id="tratativasThead"></tr></thead>
           <tbody id="tratativasTabelaBody"></tbody>
@@ -3238,9 +3277,53 @@ function toggleImportadores() {
   const aberto = grid.style.display !== 'none';
   const novoEstado = !aberto;
   grid.style.display = novoEstado ? '' : 'none';
-  document.getElementById('tituloImportadores').textContent = (novoEstado ? '▼' : '▶') + ' Importadores';
+  document.getElementById('secImportadores').classList.toggle('secao-recolhida', !novoEstado);
+  document.getElementById('tituloImportadores').textContent = (novoEstado ? '▼' : '▶') + ' 📥 Importadores';
   localStorage.setItem(CHAVE_LOCALSTORAGE_IMPORTADORES, novoEstado ? '1' : '0');
 }
+
+// ---------- Menu fixo de seções ----------
+// Clicar leva até o assunto (e, no caso dos importadores, abre o cartão se estiver fechado); enquanto você
+// rola a página, o botão do assunto em que você está fica destacado.
+const SECOES_MENU = ['secImportadores', 'secPrevisao', 'secTipo', 'secIndicadores', 'secOcorrencias', 'secTratativas'];
+
+function irParaSecao(id, ev) {
+  if (ev) ev.preventDefault();
+  if (id === 'secImportadores' && document.getElementById('gridImportadores').style.display === 'none') toggleImportadores();
+  const alvo = document.getElementById(id);
+  try { alvo.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { alvo.scrollIntoView(true); }
+}
+
+let _secaoAtivaMenu = '';
+let _menuAgendado = false;
+// O menu é só um apoio visual: qualquer falha nele (ex: navegador antigo sem "scrollTo" em elementos) é engolida aqui,
+// pra nunca derrubar o resto do site.
+function atualizarMenuSecoes() {
+  _menuAgendado = false;
+  try {
+    let ativa = SECOES_MENU[0];
+    SECOES_MENU.forEach(id => { if (document.getElementById(id).getBoundingClientRect().top <= 110) ativa = id; });
+    if (ativa === _secaoAtivaMenu) return;
+    _secaoAtivaMenu = ativa;
+    const menu = document.getElementById('menuSecoes');
+    menu.querySelectorAll('a').forEach(a => {
+      const eAtivo = a.dataset.sec === ativa;
+      a.classList.toggle('ativo', eAtivo);
+      if (eAtivo) { // mantém o botão ativo visível no celular
+        const alvo = Math.max(0, a.offsetLeft - (menu.clientWidth - a.offsetWidth) / 2);
+        if (typeof menu.scrollTo === 'function') menu.scrollTo({ left: alvo, behavior: 'smooth' }); else menu.scrollLeft = alvo;
+      }
+    });
+  } catch (e) { /* ignora: só o destaque do menu deixa de acompanhar */ }
+}
+function agendarAtualizacaoMenu() {
+  if (_menuAgendado) return;
+  _menuAgendado = true;
+  (window.requestAnimationFrame || (f => setTimeout(f, 16)))(atualizarMenuSecoes);
+}
+window.addEventListener('scroll', agendarAtualizacaoMenu, { passive: true });
+window.addEventListener('resize', agendarAtualizacaoMenu);
+atualizarMenuSecoes();
 
 if (localStorage.getItem(CHAVE_LOCALSTORAGE_IMPORTADORES) === '1') toggleImportadores();
 
