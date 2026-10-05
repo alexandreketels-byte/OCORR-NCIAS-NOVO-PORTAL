@@ -314,6 +314,16 @@
     </div>
 
     <div class="card">
+      <h2>Importar Entregas SSW (TG Transp)</h2>
+      <p class="desc">Arquivo .csv do relatório da SSW (TG Transp). A NF vem com a série na frente (ex.: 1 128736) e o site ignora esse 1. Cruza pela NF com Pedidos Não Recebidos: situação "MERCADORIA ENTREGUE" = entregue (com a data da coluna Data Entrega); situação "SAIDA PARA ENTREGA" com a data de hoje = em rota. Só guarda NF, situação e datas — CPF/CNPJ e nomes de clientes do arquivo não são guardados. Cada importação substitui os dados anteriores.</p>
+      <input type="file" id="fileBaixaSSW" accept=".csv,text/csv">
+      <button id="btnBaixaSSW" onclick="importarBaixaSSW()">Importar</button>
+      <div class="progress-wrap" id="progressBaixaSSW"><div class="progress-bar" id="progressBarBaixaSSW"></div></div>
+      <div class="status-line" id="statusBaixaSSW"></div>
+      <div class="meta" id="metaBaixaSSW"></div>
+    </div>
+
+    <div class="card">
       <h2>Importar Em Rota GFW</h2>
       <p class="desc">Arquivo .xlsx (relatório REL141) com os pedidos que já saíram para entrega (têm romaneio de emissão) mas ainda não foram baixados como entregues. Cruza pelo número da NF com Pedidos Não Recebidos. Cada importação substitui os dados anteriores (foto do momento).</p>
       <input type="file" id="fileEmRotaGFW">
@@ -846,6 +856,94 @@ function fmtDataHoraCelEmRota(v) {
   const p = n => String(n).padStart(2, '0');
   const dataFmt = `${p(v.getDate())}/${p(v.getMonth() + 1)}/${v.getFullYear()}`;
   return (v.getHours() === 0 && v.getMinutes() === 0) ? dataFmt : `${dataFmt} ${p(v.getHours())}:${p(v.getMinutes())}`;
+}
+
+// ---------- Importação: Entregas SSW (TG Transp) ----------
+// Do relatório só entram: NF (coluna F, sem a "série" da frente: "1 128736" -> 128736), Data/Hora da Ocorrência (L),
+// Situação (M) e Data Entrega (P). CPF/CNPJ e nomes de clientes NÃO são lidos nem enviados.
+
+// Lê um CSV separado por ";" (aceita campos entre aspas). Não depende de biblioteca nenhuma.
+function parseCSVPontoEVirgula(texto) {
+  const linhas = []; let campo = '', linha = [], aspas = false;
+  const fechaLinha = () => { linha.push(campo); campo = ''; if (linha.some(x => x !== '')) linhas.push(linha); linha = []; };
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto[i];
+    if (aspas) {
+      if (c === '"') { if (texto[i + 1] === '"') { campo += '"'; i++; } else aspas = false; } else campo += c;
+    } else if (c === '"') aspas = true;
+    else if (c === ';') { linha.push(campo); campo = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && texto[i + 1] === '\n') i++; fechaLinha(); }
+    else campo += c;
+  }
+  if (campo !== '' || linha.length) fechaLinha();
+  return linhas;
+}
+
+// Texto do arquivo: tenta UTF-8; se tiver acento "quebrado" (arquivo em ISO-8859-1), lê de novo nesse formato.
+async function lerTextoDoArquivo(file) {
+  const buf = await file.arrayBuffer();
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch (e) { return new TextDecoder('iso-8859-1').decode(buf); }
+}
+
+const semAcentoMin = t => String(t === null || t === undefined ? '' : t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+function limparNFSSW(v) { const t = String(v === null || v === undefined ? '' : v).trim(); const m = t.match(/^\d+\s+(\d+)$/); return m ? m[1] : t.replace(/\D/g, ''); }
+function dataSSW(v) { const m = String(v || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if (!m) return ''; return m[1].padStart(2, '0') + '/' + m[2].padStart(2, '0') + '/' + (m[3].length === 2 ? '20' + m[3] : m[3]); }
+function dataHoraSSW(v) { const d = dataSSW(v); if (!d) return ''; const h = String(v).match(/(\d{1,2}):(\d{2})/); return h ? d + ' ' + h[1].padStart(2, '0') + ':' + h[2] : d; }
+function timestampSSW(dh) { const m = String(dh || '').match(/^(\d{2})\/(\d{2})\/(\d{4})(?: (\d{2}):(\d{2}))?/); return m ? new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0)).getTime() : 0; }
+
+function parseBaixaSSW(texto) {
+  const linhas = parseCSVPontoEVirgula(String(texto || '').replace(/^\uFEFF/, ''));
+  if (linhas.length === 0) return { erro: 'O arquivo está vazio.' };
+  const cab = linhas[0].map(semAcentoMin);
+  let iNF = cab.findIndex(h => h.includes('nota fiscal')), iSit = cab.findIndex(h => h === 'situacao');
+  let iDH = cab.findIndex(h => h.startsWith('data/hora')), iDE = cab.findIndex(h => h === 'data entrega');
+  let inicio = 1, porPosicao = false;
+  if (iNF === -1 || iSit === -1) {
+    // Sem cabeçalho reconhecível: usa as colunas pela posição (F, L, M, P) — mas só aceita linhas com a NF no
+    // formato da SSW ("série + espaço + número"), pra não importar lixo se for o arquivo errado.
+    porPosicao = true; iNF = 5; iDH = 11; iSit = 12; iDE = 15;
+    inicio = /^\s*\d+\s+\d+\s*$/.test(linhas[0][5] || '') ? 0 : 1;
+  }
+  if (iDH === -1) iDH = 11;
+  if (iDE === -1) iDE = 15;
+
+  const melhor = new Map(); let lidas = 0;
+  for (let k = inicio; k < linhas.length; k++) {
+    const r = linhas[k]; const bruto = (r[iNF] || '').trim();
+    if (porPosicao && !/^\d+\s+\d+$/.test(bruto)) continue;
+    const nf = limparNFSSW(bruto); if (!nf) continue;
+    const situacao = (r[iSit] || '').trim();
+    lidas++;
+    const dh = dataHoraSSW(r[iDH]);
+    const item = { nf, situacao, dh, de: dataSSW(r[iDE]), entregue: semAcentoMin(situacao).includes('mercadoria entregue'), ts: timestampSSW(dh) };
+    // se a mesma NF aparecer mais de uma vez: vale a entregue; senão, a ocorrência mais recente
+    const atual = melhor.get(nf);
+    if (!atual || (item.entregue && !atual.entregue) || (item.entregue === atual.entregue && item.ts >= atual.ts)) melhor.set(nf, item);
+  }
+  if (melhor.size === 0) return { erro: 'Não reconheci as colunas da SSW (Nota Fiscal/Nro Coleta e Situacao) nesse arquivo — confira se é o relatório certo.' };
+  return { rows: Array.from(melhor.values()).map(i => [i.nf, i.situacao, i.dh, i.de]), lidas };
+}
+
+async function importarBaixaSSW() {
+  const input = document.getElementById('fileBaixaSSW');
+  const file = input.files[0];
+  if (!file) { alert('Selecione o arquivo CSV da SSW primeiro.'); return; }
+  if (/\.xlsx?$/i.test(file.name || '')) { alert('Este importador só lê arquivo .csv. O arquivo selecionado parece ser um Excel — exporte como .csv e tente de novo.'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
+
+  setStatus('statusBaixaSSW', 'Lendo arquivo...', 'carregando');
+  toggleBtn('btnBaixaSSW', true);
+  try {
+    const lido = parseBaixaSSW(await lerTextoDoArquivo(file));
+    if (lido.erro) { setStatus('statusBaixaSSW', lido.erro + ' Nada foi importado; os dados atuais continuam intactos.', 'erro'); return; }
+    await enviarEmLotes(lido.rows, 'importBaixaEntregaSSW', 'statusBaixaSSW', 'progressBaixaSSW', 'progressBarBaixaSSW');
+    carregarIndicadores();
+    atualizarEmRotaTratativas();
+  } catch (err) {
+    setStatus('statusBaixaSSW', 'Erro ao ler o arquivo: ' + err.message, 'erro');
+  } finally {
+    toggleBtn('btnBaixaSSW', false);
+  }
 }
 
 // ---------- Entregas GFW WhatsApp (exportação .md da conversa) ----------
@@ -2229,7 +2327,7 @@ async function restaurarTratativasSalvas() {
 // arquivo errado for colado e nenhuma linha for reconhecida, mandar um
 // lote vazio apagaria os dados atuais sem colocar nada no lugar. Por isso
 // nem chega a enviar nesse caso.
-const ACOES_QUE_SUBSTITUEM = ['importPedidosNaoRecebidos', 'importBaixaEntregaGFW', 'importBaixaEntregaRTE', 'importEmRotaGFW'];
+const ACOES_QUE_SUBSTITUEM = ['importPedidosNaoRecebidos', 'importBaixaEntregaGFW', 'importBaixaEntregaRTE', 'importBaixaEntregaSSW', 'importEmRotaGFW'];
 
 async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBarId) {
   if (rows.length === 0) {
@@ -2248,6 +2346,7 @@ async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBar
   let totalNovos = 0;
   let totalAtualizados = 0;
   let totalCasaram = 0;
+  let ultimoResultado = null;
 
   for (let i = 0; i < totalBatches; i++) {
     const batch = rows.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
@@ -2265,6 +2364,7 @@ async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBar
           (totalBatches > 1 ? ` (parou no lote ${i + 1} de ${totalBatches})` : ''), 'erro');
         return;
       }
+      ultimoResultado = result;
       if (typeof result.novos === 'number') totalNovos += result.novos;
       if (typeof result.atualizados === 'number') totalAtualizados += result.atualizados;
       if (typeof result.casaramPNR === 'number') totalCasaram += result.casaramPNR;
@@ -2283,6 +2383,11 @@ async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBar
 
   if (action === 'importTabDinamica') {
     setStatus(statusId, `Importação concluída: ${totalNovos} pedidos novos, ${totalAtualizados} atualizados.`, 'ok');
+  } else if (action === 'importBaixaEntregaSSW') {
+    const r = ultimoResultado && ultimoResultado.resumo;
+    setStatus(statusId, r
+      ? `Importação concluída: ${r.lidas} NFs lidas — ${r.entregues} entregues e ${r.emRotaHoje} saindo pra entrega hoje. ${r.noPNR} constam em Pedidos Não Recebidos (${r.entreguesNoPNR} entregues, ${r.emRotaNoPNR} em rota hoje); ${r.lidas - r.noPNR} não constam (outros clientes ou pedidos que já saíram da lista).`
+      : `Importação concluída: ${rows.length} NFs.`, 'ok');
   } else if (action === 'importEntregasWhatsApp') {
     setStatus(statusId, `Importação concluída: ${rows.length} NFs lidas (${totalNovos} novas, ${totalAtualizados} já conhecidas). ${totalCasaram} constam em Pedidos Não Recebidos (já entregues); ${rows.length - totalCasaram} não constam (notas de outros clientes ou pedidos que já saíram da lista).`, 'ok');
   } else {
@@ -2475,6 +2580,10 @@ function renderMeta(status) {
   if (status.BaixaEntregaRTE) {
     document.getElementById('metaBaixaRTE').textContent =
       `Última importação: ${new Date(status.BaixaEntregaRTE.ultimaImportacao).toLocaleString('pt-BR')} (${status.BaixaEntregaRTE.totalLinhas} linhas)`;
+  }
+  if (status.BaixaEntregaSSW) {
+    document.getElementById('metaBaixaSSW').textContent =
+      `Última importação: ${new Date(status.BaixaEntregaSSW.ultimaImportacao).toLocaleString('pt-BR')} (${status.BaixaEntregaSSW.totalLinhas} NFs)`;
   }
   if (status.EmRotaGFW) {
     document.getElementById('metaEmRotaGFW').textContent =
@@ -2689,7 +2798,7 @@ let modalFiltrosSelecionados = {};
 let modalOrdenacao = { indice: null, direcao: 1 };
 
 // Colunas que, quando presentes, ganham um dropdown de filtro automático
-const COLUNAS_FILTRAVEIS = ['Transportadora', 'Status', 'Ocorrência', 'Entregue?', 'Entregue (GFW)', 'Entregue (RTE)', 'Entregue (WhatsApp)'];
+const COLUNAS_FILTRAVEIS = ['Transportadora', 'Status', 'Ocorrência', 'Entregue?', 'Entregue (GFW)', 'Entregue (RTE)', 'Entregue (SSW)', 'Entregue (WhatsApp)'];
 
 function mostrarModalCarregando(titulo, colunas) {
   document.getElementById('modalTitulo').textContent = titulo;
@@ -2754,6 +2863,7 @@ function montarFiltrosModal() {
   // relatórios que têm essas colunas (ex: Pedidos Não Recebidos).
   const temColunaEntrega = modalColunasAtuais.indexOf('Data Entrega (GFW)') !== -1 ||
     modalColunasAtuais.indexOf('Data Entrega (RTE)') !== -1 ||
+    modalColunasAtuais.indexOf('Data Entrega (SSW)') !== -1 ||
     modalColunasAtuais.indexOf('Data Entrega (WhatsApp)') !== -1;
   document.getElementById('modalFiltroDataEntrega').style.display = temColunaEntrega ? 'flex' : 'none';
 }
@@ -2775,17 +2885,18 @@ function aplicarFiltrosModal() {
   });
 
   // Filtro por período de entrega — considera a data que estiver
-  // preenchida (baixa GFW, baixa RTE ou entrega informada no WhatsApp).
+  // preenchida (baixa GFW, baixa RTE, entrega da SSW ou entrega informada no WhatsApp).
   const dataDeStr = document.getElementById('modalDataEntregaDe').value;
   const dataAteStr = document.getElementById('modalDataEntregaAte').value;
   if (dataDeStr || dataAteStr) {
     const idxGFW = modalColunasAtuais.indexOf('Data Entrega (GFW)');
     const idxRTE = modalColunasAtuais.indexOf('Data Entrega (RTE)');
+    const idxSSW = modalColunasAtuais.indexOf('Data Entrega (SSW)');
     const idxWhats = modalColunasAtuais.indexOf('Data Entrega (WhatsApp)');
     const dataDe = dataDeStr ? new Date(dataDeStr + 'T00:00:00') : null;
     const dataAte = dataAteStr ? new Date(dataAteStr + 'T00:00:00') : null;
     linhas = linhas.filter(l => {
-      const candidatas = [idxGFW, idxRTE, idxWhats]
+      const candidatas = [idxGFW, idxRTE, idxSSW, idxWhats]
         .filter(idx => idx !== -1)
         .map(idx => parseDataBR(l[idx]))
         .filter(d => d !== null);
@@ -2836,7 +2947,7 @@ function baixarModalExcel() {
   exportarCSV(modalColunasAtuais, modalLinhasFiltradas, document.getElementById('modalTitulo').textContent);
 }
 
-const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)', 'Em Rota', 'Entregue (GFW)', 'Data Entrega (GFW)', 'Entregue (RTE)', 'Data Entrega (RTE)', 'Entregue (WhatsApp)', 'Data Entrega (WhatsApp)', 'Última Mensagem'];
+const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)', 'Em Rota', 'Entregue (GFW)', 'Data Entrega (GFW)', 'Entregue (RTE)', 'Data Entrega (RTE)', 'Entregue (SSW)', 'Data Entrega (SSW)', 'Entregue (WhatsApp)', 'Data Entrega (WhatsApp)', 'Última Mensagem'];
 
 let ultimoFiltroPedidos = null;
 
@@ -2870,6 +2981,7 @@ async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido
         p.emRota ? '<span style="color:var(--verde);font-weight:700">Em Rota</span>' : (p.dataRomaneio || ''),
         p.entregueGFW ? 'Sim' : 'Não', fmtData(p.dataEntregaGFW),
         p.entregueRTE ? 'Sim' : 'Não', fmtData(p.dataEntregaRTE),
+        p.entregueSSW ? 'Sim' : 'Não', p.dataEntregaSSW || '',
         p.entregueWhats ? 'Sim' : 'Não', p.dataEntregaWhats || '',
         p.ultimaOcorrencia || ''
       ];
