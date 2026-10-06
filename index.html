@@ -696,6 +696,8 @@
       <button type="button" class="hx-aba ativo" data-aba="transp" onclick="hxAba('transp')">🚚 Transportadoras por período</button>
       <button type="button" class="hx-aba" data-aba="vend" onclick="hxAba('vend')">🧑‍💼 Vendedores</button>
       <button type="button" class="hx-aba" data-aba="ocor" onclick="hxAba('ocor')">🧾 Ocorrências por vendedor</button>
+      <button type="button" class="hx-aba" data-aba="loja" onclick="hxAba('loja')">🏬 Lojas</button>
+      <button type="button" class="hx-aba" data-aba="ocorloja" onclick="hxAba('ocorloja')">🧾 Ocorrências por loja</button>
       <button type="button" class="hx-aba" data-aba="uf" onclick="hxAba('uf')">🗺️ Estados</button>
       <button type="button" class="hx-aba" data-aba="conferir" onclick="hxAba('conferir')">🔎 Conferir e regras</button>
     </div>
@@ -707,7 +709,7 @@
       <div class="hx-modal-topo"><h3 id="hxListaTitulo"></h3><button type="button" class="hx-chip" onclick="hxFecharLista()">✕ Fechar</button></div>
       <div class="hx-modal-ferr">
         <div class="hx-presets" id="hxListaChips"></div>
-        <input class="hx-campo" id="hxListaBusca" type="search" placeholder="Buscar pedido, vendedor, UF, tipo…" oninput="hxListaRender()">
+        <input class="hx-campo" id="hxListaBusca" type="search" placeholder="Buscar pedido, vendedor, loja, UF, tipo…" oninput="hxListaRender()">
         <button type="button" class="hx-chip" onclick="hxListaCsv()">⬇ Exportar CSV</button>
       </div>
       <div class="hx-wrap hx-modal-tabela"><table class="hx-tab" id="hxListaTab"></table></div>
@@ -1354,7 +1356,7 @@ const HX_MOTIVOS = {
   6: 'No prazo — tipos da estatística não são culpa da transportadora'
 };
 let hx = { dados: null, aba: 'transp', carregando: false, f: { de: '', ate: '', transp: '', uf: '', cob: true, preset: 'tudo' },
-  ord: { vend: { col: 'total', dir: -1 }, uf: { col: 'total', dir: -1 }, oc: { col: 'com', dir: -1 } }, minVend: 10, buscaVend: '',
+  ord: { vend: { col: 'total', dir: -1 }, uf: { col: 'total', dir: -1 }, oc: { col: 'com', dir: -1 }, loja: { col: 'total', dir: -1 } }, minVend: 10, buscaVend: '', minLoja: 1, buscaLoja: '',
   ocMin: 10, ocBusca: '', ocModo: 'qtd', ocFoco: '', links: [], lista: null };
 
 function hxAbrir() {
@@ -1474,6 +1476,8 @@ function hxRender() {
   if (hx.aba === 'transp') c.innerHTML = hxHtmlTransp(rows);
   else if (hx.aba === 'vend') c.innerHTML = hxHtmlVend(rows);
   else if (hx.aba === 'ocor') c.innerHTML = hxHtmlOcor(rows);
+  else if (hx.aba === 'loja') c.innerHTML = hxHtmlLoja(rows);
+  else if (hx.aba === 'ocorloja') c.innerHTML = hxHtmlOcorLoja(rows);
   else if (hx.aba === 'uf') c.innerHTML = hxHtmlUF(rows);
   else c.innerHTML = hxHtmlConferir(rows);
   hxRodape();
@@ -1689,13 +1693,13 @@ function hxLinhasLista() {
   const L = hx.lista, d = hx.dados, busca = semAcentoMin(document.getElementById('hxListaBusca').value);
   let itens = L.base.map(r => {
     const prev = r[6] || 0;
-    return { pedido: d.dic.ped[r[5]], transp: d.dic.transp[r[0]], vend: d.dic.vend[r[1]], uf: d.dic.uf[r[2]], prev, ent: r[3],
+    return { pedido: d.dic.ped[r[5]], transp: d.dic.transp[r[0]], vend: d.dic.vend[r[1]], loja: d.dic.loja && r[8] !== undefined ? d.dic.loja[r[8]] : '—', uf: d.dic.uf[r[2]], prev, ent: r[3],
       dias: prev ? Math.round((hxIntParaUTC(r[3]) - hxIntParaUTC(prev)) / 86400000) : null,
       atraso: hxEhAtraso(r), motivo: HX_MOTIVOS[r[4] & 7], tipos: (r[7] || []).map(i => d.dic.tipo[i]).join(' · ') };
   });
   const cont = { todos: itens.length, prazo: itens.filter(x => !x.atraso).length, atraso: itens.filter(x => x.atraso).length };
   if (L.filtro === 'prazo') itens = itens.filter(x => !x.atraso); else if (L.filtro === 'atraso') itens = itens.filter(x => x.atraso);
-  if (busca) itens = itens.filter(x => semAcentoMin([x.pedido, x.transp, x.vend, x.uf, x.tipos].join(' ')).indexOf(busca) !== -1);
+  if (busca) itens = itens.filter(x => semAcentoMin([x.pedido, x.transp, x.vend, x.loja, x.uf, x.tipos].join(' ')).indexOf(busca) !== -1);
   const o = L.ord;
   const val = x => { const v = x[o.col]; if (o.col === 'dias') return v === null ? -1e9 : v; if (o.col === 'atraso') return v ? 1 : 0; return typeof v === 'string' ? v.toLocaleLowerCase('pt-BR') : v; };
   itens.sort((a, b) => { const va = val(a), vb = val(b); return (va < vb ? -1 : va > vb ? 1 : 0) * o.dir || (a.pedido < b.pedido ? -1 : 1); });
@@ -1715,12 +1719,12 @@ function hxListaRender() {
   const seta = c => o.col === c ? (o.dir === 1 ? ' ▲' : ' ▼') : '';
   const th = (c, t) => `<th class="ord" onclick="hxListaOrd('${c}')">${t}${seta(c)}</th>`;
   const LIM = 300;
-  let h = '<thead><tr>' + th('pedido', 'Pedido') + th('transp', 'Transportadora') + th('vend', 'Vendedor') + th('uf', 'UF') + th('prev', 'Previsão') +
+  let h = '<thead><tr>' + th('pedido', 'Pedido') + th('transp', 'Transportadora') + th('vend', 'Vendedor') + th('loja', 'Loja') + th('uf', 'UF') + th('prev', 'Previsão') +
     th('ent', 'Recebido') + th('dias', 'Dias após a previsão') + th('atraso', 'Resultado') + '<th>Motivo</th><th>Tipos de ocorrência</th></tr></thead><tbody>';
-  if (itens.length === 0) h += '<tr><td colspan="10" class="hx-vazio">Nenhum pedido nesse filtro.</td></tr>';
+  if (itens.length === 0) h += '<tr><td colspan="11" class="hx-vazio">Nenhum pedido nesse filtro.</td></tr>';
   itens.slice(0, LIM).forEach(x => {
     h += `<tr><td><a href="#" class="hx-num" data-p="${escapeHtml(x.pedido)}" onclick="hxConferirDe(this.dataset.p);return false" title="Ver como foi classificado">${escapeHtml(x.pedido)}</a></td>` +
-      `<td class="txt">${escapeHtml(x.transp)}</td><td class="txt">${escapeHtml(x.vend)}</td><td class="txt">${escapeHtml(x.uf)}</td>` +
+      `<td class="txt">${escapeHtml(x.transp)}</td><td class="txt">${escapeHtml(x.vend)}</td><td class="txt">${escapeHtml(x.loja)}</td><td class="txt">${escapeHtml(x.uf)}</td>` +
       `<td>${x.prev ? hxIntParaBR(x.prev) : 'Indefinida'}</td><td>${hxIntParaBR(x.ent)}</td><td>${x.dias === null ? '—' : (x.dias > 0 ? '+' + x.dias : x.dias)}</td>` +
       `<td class="txt"><b style="color:var(${x.atraso ? '--vermelho' : '--verde'})">${x.atraso ? '✖ Atraso' : '✔ No prazo'}</b></td><td class="txt">${escapeHtml(x.motivo)}</td><td class="txt">${escapeHtml(x.tipos || '—')}</td></tr>`;
   });
@@ -1730,8 +1734,8 @@ function hxListaRender() {
 function hxListaCsv() {
   if (!hx.lista) return;
   const { itens } = hxLinhasLista();
-  const linhas = [['Pedido', 'Transportadora', 'Vendedor', 'UF', 'Previsão', 'Recebido pelo cliente', 'Dias após a previsão', 'Resultado', 'Motivo', 'Tipos de ocorrência']];
-  itens.forEach(x => linhas.push([x.pedido, x.transp, x.vend, x.uf, x.prev ? hxIntParaBR(x.prev) : 'Indefinida', hxIntParaBR(x.ent), x.dias === null ? '' : x.dias, x.atraso ? 'Atraso' : 'No prazo', x.motivo, x.tipos]));
+  const linhas = [['Pedido', 'Transportadora', 'Vendedor', 'Loja', 'UF', 'Previsão', 'Recebido pelo cliente', 'Dias após a previsão', 'Resultado', 'Motivo', 'Tipos de ocorrência']];
+  itens.forEach(x => linhas.push([x.pedido, x.transp, x.vend, x.loja, x.uf, x.prev ? hxIntParaBR(x.prev) : 'Indefinida', hxIntParaBR(x.ent), x.dias === null ? '' : x.dias, x.atraso ? 'Atraso' : 'No prazo', x.motivo, x.tipos]));
   const q = v => { const t = String(v === null || v === undefined ? '' : v); return /[";\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
   const csv = '﻿' + linhas.map(l => l.map(q).join(';')).join('\r\n');
   const a = document.createElement('a');
@@ -1747,6 +1751,46 @@ function hxConferirDe(ped) {
   hxConferirPedido();
 }
 
+
+// ---- aba: lojas ----
+function hxLojaFiltros() {
+  hx.minLoja = Math.max(1, Number(document.getElementById('hxMinLoja').value) || 1);
+  hx.buscaLoja = document.getElementById('hxBuscaLoja').value;
+  const pos = document.getElementById('hxBuscaLoja').selectionStart;
+  hxRender();
+  const campo = document.getElementById('hxBuscaLoja'); campo.focus(); try { campo.setSelectionRange(pos, pos); } catch (e) { /* ok */ }
+}
+function hxHtmlLoja(rows) {
+  const d = hx.dados;
+  if (!d.dic.loja) return '<div class="hx-secao"><div class="hx-vazio">Estes dados são de uma versão anterior. Clique em “↻ Atualizar” (e confirme que o Code.gs novo foi implantado).</div></div>';
+  const porL = hxAgrupar(rows, r => r[8]);
+  const porLT = hxAgrupar(rows, r => r[8] + '|' + r[0]);
+  const porT = hxAgrupar(rows, r => r[0]);
+  const transps = Array.from(porT.keys()).sort((a, b) => porT.get(b).total - porT.get(a).total).slice(0, 8);
+  const busca = semAcentoMin(hx.buscaLoja);
+  let lista = Array.from(porL.entries()).map(([l, g]) => ({ li: l, nome: d.dic.loja[l], total: g.total, atraso: g.atraso, prazo: hxPrazo(g), pct: hxPct(hxPrazo(g), g.total) }))
+    .filter(x => x.total >= hx.minLoja && (!busca || semAcentoMin(x.nome).indexOf(busca) !== -1));
+  const o = hx.ord.loja;
+  lista.sort((a, b) => { const va = o.col === 'nome' ? a.nome.toLocaleLowerCase('pt-BR') : a[o.col], vb = o.col === 'nome' ? b.nome.toLocaleLowerCase('pt-BR') : b[o.col]; return (va < vb ? -1 : va > vb ? 1 : 0) * o.dir; });
+  const LIM = 300, corte = lista.length > LIM;
+  const th = (col, txt) => `<th class="ord" onclick="hxOrdenar('loja','${col}')">${txt}${hxSeta('loja', col)}</th>`;
+  let h = '<div class="hx-secao"><h3>Lojas — performance das entregas</h3>' +
+    '<p class="hx-dica">Uma linha por loja (coluna Loja da Tabela Dinâmica). À direita, o % no prazo da loja em cada transportadora (as 8 com mais entregas no filtro; a quantidade fica embaixo). Clique nos títulos para ordenar e <b>em qualquer número para ver os pedidos</b>.</p>' +
+    `<div class="hx-conferir"><input class="hx-campo" id="hxBuscaLoja" type="search" placeholder="Buscar loja…" value="${escapeHtml(hx.buscaLoja)}" oninput="hxLojaFiltros()">` +
+    `<label class="hx-check" style="display:flex;gap:6px;align-items:center">Mínimo de entregas <input class="hx-campo" id="hxMinLoja" type="number" min="1" value="${hx.minLoja}" style="width:80px" onchange="hxLojaFiltros()"></label></div>` +
+    '<div class="hx-wrap"><table class="hx-tab"><thead><tr>' + th('nome', 'Loja') + th('total', 'Entregas') + th('prazo', 'No prazo') + th('atraso', 'Atraso') + th('pct', '% no prazo') +
+    transps.map(t => `<th>${escapeHtml(d.dic.transp[t])}</th>`).join('') + '</tr></thead><tbody>';
+  if (lista.length === 0) h += `<tr><td colspan="${5 + transps.length}" class="hx-vazio">Nenhuma loja com esse mínimo de entregas.</td></tr>`;
+  lista.slice(0, LIM).forEach(x => {
+    const f = r => r[8] === x.li, tit = 'Loja ' + x.nome;
+    h += `<tr><td>${escapeHtml(x.nome)}</td><td>${hxLink(tit + ' — todas', f, hxFmtN(x.total), 'todos', x.total)}</td>` +
+      `<td>${hxLink(tit + ' — no prazo', f, hxFmtN(x.prazo), 'prazo', x.prazo)}</td><td>${hxLink(tit + ' — em atraso', f, hxFmtN(x.atraso), 'atraso', x.atraso)}</td>` +
+      `<td style="${hxTint(x.pct)}">${hxFmtPct(x.pct)}${hxBarra(x.pct)}</td>` +
+      transps.map(t => hxCelula(porLT.get(x.li + '|' + t), tit + ' · ' + d.dic.transp[t], r => r[8] === x.li && r[0] === t)).join('') + '</tr>';
+  });
+  return h + '</tbody></table></div>' + (corte ? `<p class="hx-dica" style="margin-top:8px">Mostrando as primeiras ${LIM} de ${hxFmtN(lista.length)} lojas — use a busca para refinar.</p>` : `<p class="hx-dica" style="margin-top:8px">${hxFmtN(lista.length)} lojas.</p>`) + '</div>';
+}
+
 // ---- aba: ocorrências por vendedor ----
 function hxOcControles() {
   const ativo = document.activeElement && document.activeElement.id;
@@ -1759,13 +1803,15 @@ function hxOcControles() {
   hxRender();
   if (ativo === 'hxOcBusca') { const c = document.getElementById('hxOcBusca'); c.focus(); try { c.setSelectionRange(pos, pos); } catch (e) { /* ok */ } }
 }
-function hxHtmlOcor(rows) {
+function hxHtmlOcor(rows) { return hxHtmlOcorDim(rows, { col: 1, dic: 'vend', um: 'vendedor', plural: 'vendedores', Todos: 'Todos os vendedores', nenhum: 'Nenhum vendedor', totalRot: 'Todos (filtro)', titulo: 'Ocorrências por vendedor' }); }
+function hxHtmlOcorLoja(rows) { return hxHtmlOcorDim(rows, { col: 8, dic: 'loja', um: 'loja', plural: 'lojas', Todos: 'Todas as lojas', nenhum: 'Nenhuma loja', totalRot: 'Todas (filtro)', titulo: 'Ocorrências por loja' }); }
+function hxHtmlOcorDim(rows, D) {
   const d = hx.dados;
-  if (!d.dic.tipo || !d.dic.ped) return '<div class="hx-secao"><div class="hx-vazio">Estes dados são de uma versão anterior. Clique em “↻ Atualizar” (e confirme que o Code.gs novo foi implantado).</div></div>';
+  if (!d.dic.tipo || !d.dic.ped || (D.dic === 'loja' && !d.dic.loja)) return '<div class="hx-secao"><div class="hx-vazio">Estes dados são de uma versão anterior. Clique em “↻ Atualizar” (e confirme que o Code.gs novo foi implantado).</div></div>';
   const nT = d.dic.tipo.length, pct = hx.ocModo === 'pct';
   const porV = new Map(), totTipo = new Array(nT).fill(0); let totTotal = 0, totCom = 0;
   rows.forEach(r => {
-    let g = porV.get(r[1]); if (!g) { g = { total: 0, com: 0, t: new Array(nT).fill(0) }; porV.set(r[1], g); }
+    let g = porV.get(r[D.col]); if (!g) { g = { total: 0, com: 0, t: new Array(nT).fill(0) }; porV.set(r[D.col], g); }
     g.total++; totTotal++;
     const ts = r[7];
     if (ts && ts.length) { g.com++; totCom++; ts.forEach(i => { g.t[i]++; totTipo[i]++; }); }
@@ -1773,7 +1819,7 @@ function hxHtmlOcor(rows) {
   const tipos = []; for (let i = 0; i < nT; i++) if (totTipo[i] > 0) tipos.push(i);
   tipos.sort((a, b) => totTipo[b] - totTipo[a]);
   const busca = semAcentoMin(hx.ocBusca);
-  let lista = Array.from(porV.entries()).map(([v, g]) => ({ vi: v, nome: d.dic.vend[v], total: g.total, com: g.com, t: g.t }))
+  let lista = Array.from(porV.entries()).map(([v, g]) => ({ vi: v, nome: d.dic[D.dic][v], total: g.total, com: g.com, t: g.t }))
     .filter(x => x.total >= hx.ocMin && (!busca || semAcentoMin(x.nome).indexOf(busca) !== -1));
   const o = hx.ord.oc;
   const tx = (x, i) => pct ? (x.total ? 100 * x.t[i] / x.total : 0) : x.t[i];
@@ -1788,28 +1834,28 @@ function hxHtmlOcor(rows) {
     const v = tx(x, i), n = x.t[i], prim = pct ? hxFmtPct(v) : hxFmtN(n), sec = pct ? hxFmtN(n) : hxFmtPct(x.total ? 100 * n / x.total : 0);
     if (!n) return '<td style="color:var(--cinza)">—</td>';
     const a = (0.07 + 0.33 * (v / maxCol[i])).toFixed(2);
-    return `<td style="background:hsla(0,70%,50%,${a})">${hxLink(x.nome + ' — ' + d.dic.tipo[i], r => r[1] === x.vi && !!r[7] && r[7].indexOf(i) !== -1, prim + '<small>' + sec + '</small>', 'todos', n)}</td>`;
+    return `<td style="background:hsla(0,70%,50%,${a})">${hxLink(x.nome + ' — ' + d.dic.tipo[i], r => r[D.col] === x.vi && !!r[7] && r[7].indexOf(i) !== -1, prim + '<small>' + sec + '</small>', 'todos', n)}</td>`;
   };
-  let h = '<div class="hx-secao"><h3>Ocorrências por vendedor</h3>' +
-    '<p class="hx-dica">Mostra, para os pedidos entregues do filtro, quantos de cada vendedor tiveram cada tipo de ocorrência (coluna F da Estatística; a ocorrência manual substitui quando equivale a um tipo). Um pedido pode ter mais de um tipo. ' +
-    '<b>Para ver quem mais erra endereço</b>, escolha “Alteração de Local de Entrega” em “Destacar tipo”. Clique em qualquer número para ver os pedidos.</p>' +
+  let h = '<div class="hx-secao"><h3>' + D.titulo + '</h3>' +
+    '<p class="hx-dica">Mostra, para os pedidos entregues do filtro, quantos de cada ' + D.um + ' tiveram cada tipo de ocorrência (coluna F da Estatística; a ocorrência manual substitui quando equivale a um tipo). Um pedido pode ter mais de um tipo. ' +
+    '<b>Para ver ' + (D.dic === 'loja' ? 'quais lojas' : 'quem') + ' mais erra endereço</b>, escolha “Alteração de Local de Entrega” em “Destacar tipo”. Clique em qualquer número para ver os pedidos.</p>' +
     '<div class="hx-conferir">' +
     `<label class="hx-check" style="display:flex;gap:6px;align-items:center">Destacar tipo <select class="hx-campo" id="hxOcFoco" onchange="hxOcControles()">${opcoes}</select></label>` +
-    `<label class="hx-check" style="display:flex;gap:6px;align-items:center">Mostrar <select class="hx-campo" id="hxOcModo" onchange="hxOcControles()"><option value="qtd"${pct ? '' : ' selected'}>Quantidade</option><option value="pct"${pct ? ' selected' : ''}>% dos pedidos do vendedor</option></select></label>` +
-    `<input class="hx-campo" id="hxOcBusca" type="search" placeholder="Buscar vendedor…" value="${escapeHtml(hx.ocBusca)}" oninput="hxOcControles()">` +
+    `<label class="hx-check" style="display:flex;gap:6px;align-items:center">Mostrar <select class="hx-campo" id="hxOcModo" onchange="hxOcControles()"><option value="qtd"${pct ? '' : ' selected'}>Quantidade</option><option value="pct"${pct ? ' selected' : ''}>% dos pedidos d${D.dic === 'loja' ? 'a loja' : 'o vendedor'}</option></select></label>` +
+    `<input class="hx-campo" id="hxOcBusca" type="search" placeholder="Buscar ${D.um}…" value="${escapeHtml(hx.ocBusca)}" oninput="hxOcControles()">` +
     `<label class="hx-check" style="display:flex;gap:6px;align-items:center">Mínimo de entregas <input class="hx-campo" id="hxOcMin" type="number" min="1" value="${hx.ocMin}" style="width:80px" onchange="hxOcControles()"></label></div>` +
-    '<div class="hx-wrap"><table class="hx-tab"><thead><tr>' + th('nome', 'Vendedor') + th('total', 'Entregas') + th('com', 'Com ocorrência') +
+    '<div class="hx-wrap"><table class="hx-tab"><thead><tr>' + th('nome', D.dic === 'loja' ? 'Loja' : 'Vendedor') + th('total', 'Entregas') + th('com', 'Com ocorrência') +
     tipos.map(i => th('t' + i, escapeHtml(d.dic.tipo[i]), i === foco ? ' foco' : '')).join('') + '</tr></thead><tbody>';
-  if (lista.length === 0) h += `<tr><td colspan="${3 + tipos.length}" class="hx-vazio">Nenhum vendedor com esse mínimo de entregas.</td></tr>`;
+  if (lista.length === 0) h += `<tr><td colspan="${3 + tipos.length}" class="hx-vazio">${D.nenhum} com esse mínimo de entregas.</td></tr>`;
   lista.slice(0, LIM).forEach(x => {
-    h += `<tr><td>${escapeHtml(x.nome)}</td><td>${hxLink(x.nome + ' — todas as entregas', r => r[1] === x.vi, hxFmtN(x.total), 'todos', x.total)}</td>` +
-      `<td>${x.com ? hxLink(x.nome + ' — com ocorrência', r => r[1] === x.vi && !!r[7], hxFmtN(x.com) + '<small>' + hxFmtPct(100 * x.com / x.total) + '</small>', 'todos', x.com) : '—'}</td>` +
+    h += `<tr><td>${escapeHtml(x.nome)}</td><td>${hxLink(x.nome + ' — todas as entregas', r => r[D.col] === x.vi, hxFmtN(x.total), 'todos', x.total)}</td>` +
+      `<td>${x.com ? hxLink(x.nome + ' — com ocorrência', r => r[D.col] === x.vi && !!r[7], hxFmtN(x.com) + '<small>' + hxFmtPct(100 * x.com / x.total) + '</small>', 'todos', x.com) : '—'}</td>` +
       tipos.map(i => celula(x, i)).join('') + '</tr>';
   });
-  h += `<tr class="total"><td>Todos (filtro)</td><td>${hxLink('Todos os vendedores — todas as entregas', () => true, hxFmtN(totTotal), 'todos', totTotal)}</td>` +
-    `<td>${totCom ? hxLink('Todos os vendedores — com ocorrência', r => !!r[7], hxFmtN(totCom) + '<small>' + hxFmtPct(totTotal ? 100 * totCom / totTotal : 0) + '</small>', 'todos', totCom) : '—'}</td>` +
-    tipos.map(i => `<td>${hxLink('Todos os vendedores — ' + d.dic.tipo[i], r => !!r[7] && r[7].indexOf(i) !== -1, hxFmtN(totTipo[i]) + '<small>' + hxFmtPct(totTotal ? 100 * totTipo[i] / totTotal : 0) + '</small>', 'todos', totTipo[i])}</td>`).join('') + '</tr>';
-  h += '</tbody></table></div>' + (corte ? `<p class="hx-dica" style="margin-top:8px">Mostrando os primeiros ${LIM} de ${hxFmtN(lista.length)} vendedores — use a busca para refinar.</p>` : `<p class="hx-dica" style="margin-top:8px">${hxFmtN(lista.length)} vendedores.</p>`) +
+  h += `<tr class="total"><td>${D.totalRot}</td><td>${hxLink(D.Todos + ' — todas as entregas', () => true, hxFmtN(totTotal), 'todos', totTotal)}</td>` +
+    `<td>${totCom ? hxLink(D.Todos + ' — com ocorrência', r => !!r[7], hxFmtN(totCom) + '<small>' + hxFmtPct(totTotal ? 100 * totCom / totTotal : 0) + '</small>', 'todos', totCom) : '—'}</td>` +
+    tipos.map(i => `<td>${hxLink(D.Todos + ' — ' + d.dic.tipo[i], r => !!r[7] && r[7].indexOf(i) !== -1, hxFmtN(totTipo[i]) + '<small>' + hxFmtPct(totTotal ? 100 * totTipo[i] / totTotal : 0) + '</small>', 'todos', totTipo[i])}</td>`).join('') + '</tr>';
+  h += '</tbody></table></div>' + (corte ? `<p class="hx-dica" style="margin-top:8px">Mostrando os primeiros ${LIM} de ${hxFmtN(lista.length)} ${D.plural} — use a busca para refinar.</p>` : `<p class="hx-dica" style="margin-top:8px">${hxFmtN(lista.length)} ${D.plural}.</p>`) +
     '<p class="hx-dica">Atenção: só entram pedidos entregues (com data de recebimento) e dentro do período da estatística, conforme os filtros acima. Pedidos sem nenhuma ocorrência na estatística aparecem em “Entregas” mas não em “Com ocorrência”.</p></div>';
   return h;
 }
