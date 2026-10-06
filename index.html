@@ -660,8 +660,8 @@
   </div>
   <div class="hx-corpo">
     <div class="hx-filtros">
-      <label>Entregas de<input type="date" id="hxDe" onchange="hxLerFiltros()"></label>
-      <label>até<input type="date" id="hxAte" onchange="hxLerFiltros()"></label>
+      <label>Entregas de<input type="date" id="hxDe" autocomplete="off" onchange="hxLerFiltros()"></label>
+      <label>até<input type="date" id="hxAte" autocomplete="off" onchange="hxLerFiltros()"></label>
       <div class="hx-presets" aria-label="Períodos rápidos">
         <button type="button" class="hx-chip ativo" data-preset="tudo" onclick="hxPreset('tudo')">Tudo</button>
         <button type="button" class="hx-chip" data-preset="mes" onclick="hxPreset('mes')">Mês atual</button>
@@ -1343,7 +1343,7 @@ async function hxCarregar(fresh) {
   hx.carregando = true;
   document.getElementById('hxAtualizar').disabled = true;
   document.getElementById('hxConteudo').innerHTML = '<div class="hx-vazio">Carregando o histórico… na primeira vez pode levar alguns segundos.</div>';
-  const r = await buscarJsonComRetry(API_URL, 2, { action: 'historicoCalcular', fresh: !!fresh });
+  const r = await buscarJsonComRetry(API_URL, 2, { action: 'reconstruirHistorico', fresh: !!fresh });
   hx.carregando = false;
   document.getElementById('hxAtualizar').disabled = false;
   if (!r.ok) {
@@ -1419,6 +1419,7 @@ function hxRender() {
   if (!d) return;
   document.getElementById('hxSub').textContent = `Atualizado em ${d.geradoEm}${d.doCache ? ' (do cache)' : ''}`;
   document.getElementById('hxCob').checked = hx.f.cob;
+  document.getElementById('hxDe').value = hx.f.de; document.getElementById('hxAte').value = hx.f.ate; // o navegador pode ter restaurado datas antigas ao recarregar
   document.querySelectorAll('.hx-chip[data-preset]').forEach(b => b.classList.toggle('ativo', b.dataset.preset === hx.f.preset));
   document.querySelectorAll('.hx-aba').forEach(b => b.classList.toggle('ativo', b.dataset.aba === hx.aba));
   if (d.vazio || d.totalEntregas === 0) {
@@ -1483,7 +1484,8 @@ function hxRodape() {
   document.getElementById('hxRodape').innerHTML =
     `Data usada como “entrega”: <b>${escapeHtml(d.colunaData)}</b> (dia em que o cliente recebeu). ` +
     `${hxFmtN(d.semRecebimento)} pedidos da Tabela Dinâmica ainda sem essa data ficaram de fora; ${hxFmtN(d.ignoradas)} de transportadoras ignoradas (Retira / Só nota / sem transportadora). ` +
-    `Base: ${hxFmtN(d.estatisticaPedidos)} pedidos na estatística, ${hxFmtN(d.ocorrenciasManuais)} ocorrências manuais, ${hxFmtN(d.previsoesManuais)} previsões manuais.`;
+    `Base: ${hxFmtN(d.estatisticaPedidos)} pedidos na estatística, ${hxFmtN(d.ocorrenciasManuais)} ocorrências manuais, ${hxFmtN(d.previsoesManuais)} previsões manuais.` +
+    (d.tempos ? ` Servidor: ${(d.servidorMs / 1000).toFixed(1)}s (leitura ${(d.tempos.leituraMs / 1000).toFixed(1)}s, cálculo ${(d.tempos.calculoMs / 1000).toFixed(1)}s).` : '');
 }
 
 function hxAba(nome) { hx.aba = nome; hxRender(); }
