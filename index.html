@@ -1081,7 +1081,7 @@ async function lerTextoDoArquivo(file) {
 }
 
 const semAcentoMin = t => String(t === null || t === undefined ? '' : t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-function limparNFSSW(v) { const t = String(v === null || v === undefined ? '' : v).trim(); const m = t.match(/^\d+\s+(\d+)$/); return m ? m[1] : t.replace(/\D/g, ''); }
+function limparNFSSW(v) { const t = String(v === null || v === undefined ? '' : v).trim(); const m = t.match(/^\d+\s+(\d+)$/); return (m ? m[1] : t.replace(/\D/g, '')).replace(/^0+/, ''); } // sem série e sem zeros à esquerda ("1 003558" -> 3558)
 function dataSSW(v) { const m = String(v || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if (!m) return ''; return m[1].padStart(2, '0') + '/' + m[2].padStart(2, '0') + '/' + (m[3].length === 2 ? '20' + m[3] : m[3]); }
 function dataHoraSSW(v) { const d = dataSSW(v); if (!d) return ''; const h = String(v).match(/(\d{1,2}):(\d{2})/); return h ? d + ' ' + h[1].padStart(2, '0') + ':' + h[2] : d; }
 function timestampSSW(dh) { const m = String(dh || '').match(/^(\d{2})\/(\d{2})\/(\d{4})(?: (\d{2}):(\d{2}))?/); return m ? new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0)).getTime() : 0; }
