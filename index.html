@@ -244,6 +244,69 @@
     /* painel "Colunas": abre inteiro na tela, em vez de sair pela lateral */
     #tratativasColunasPanel { position: fixed !important; left: 8px !important; right: 8px !important; top: 12% !important; max-height: 70vh !important; z-index: 90 !important; }
   }
+
+  /* ===== Histórico (tela nova, por cima do portal) ===== */
+  .hx-abrir { background: rgba(255,255,255,0.22); color: #fff; border: 1px solid rgba(255,255,255,0.45); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.92rem; font-weight: 700; }
+  .hx-abrir:hover { background: rgba(255,255,255,0.34); }
+  .hx-view { position: fixed; inset: 0; z-index: 900; background: var(--fundo); color: var(--texto); overflow-y: auto; overflow-x: hidden; }
+  .hx-topo { position: sticky; top: 0; z-index: 5; background: var(--destaque); color: #fff; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .hx-topo h2 { margin: 0; font-size: 1.2rem; }
+  .hx-sub { font-size: 0.8rem; opacity: .85; margin-left: 10px; }
+  .hx-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+  .hx-btn { background: rgba(255,255,255,0.18); color: #fff; border: 1px solid rgba(255,255,255,0.35); padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 0.88rem; }
+  .hx-btn:hover { background: rgba(255,255,255,0.3); }
+  .hx-corpo { max-width: 1500px; margin: 0 auto; padding: 18px 24px 60px; }
+  .hx-filtros { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-end; background: var(--card-bg); border: 1px solid var(--borda); border-radius: 10px; padding: 14px 16px; }
+  .hx-filtros label { display: flex; flex-direction: column; gap: 4px; font-size: 0.74rem; color: var(--cinza); }
+  .hx-filtros select, .hx-filtros input[type=date], .hx-campo { padding: 7px 9px; border: 1px solid var(--borda); border-radius: 6px; background: var(--fundo); color: var(--texto); font-size: 0.88rem; max-width: 100%; }
+  .hx-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+  .hx-chip { background: var(--fundo); color: var(--texto); border: 1px solid var(--borda); border-radius: 999px; padding: 6px 12px; font-size: 0.8rem; cursor: pointer; }
+  .hx-chip:hover { border-color: var(--destaque); }
+  .hx-chip.ativo { background: var(--destaque); color: #fff; border-color: var(--destaque); }
+  .hx-check { flex-direction: row !important; align-items: center; gap: 6px !important; font-size: 0.84rem !important; color: var(--texto) !important; }
+  .hx-aviso { margin-top: 12px; border-radius: 10px; padding: 10px 14px; font-size: 0.85rem; line-height: 1.45; border: 1px solid var(--borda); background: var(--card-bg); }
+  .hx-aviso.alerta { border-color: var(--laranja); background: rgba(210,153,34,0.12); }
+  .hx-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-top: 14px; }
+  .hx-kpi { background: var(--card-bg); border: 1px solid var(--borda); border-left: 4px solid var(--destaque); border-radius: 10px; padding: 12px 14px; }
+  .hx-kpi .t { font-size: 0.74rem; color: var(--cinza); }
+  .hx-kpi .v { font-size: 1.7rem; font-weight: 800; line-height: 1.2; }
+  .hx-kpi .s { font-size: 0.78rem; color: var(--cinza); }
+  .hx-kpi.atraso { border-left-color: var(--vermelho); }
+  .hx-kpi.prazo { border-left-color: var(--verde); }
+  .hx-abas { display: flex; gap: 6px; flex-wrap: wrap; margin: 18px 0 10px; border-bottom: 1px solid var(--borda); padding-bottom: 8px; }
+  .hx-aba { background: transparent; color: var(--texto); border: 1px solid var(--borda); border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 0.9rem; }
+  .hx-aba.ativo { background: var(--destaque); border-color: var(--destaque); color: #fff; font-weight: 700; }
+  .hx-secao { background: var(--card-bg); border: 1px solid var(--borda); border-radius: 10px; padding: 14px 16px; }
+  .hx-secao h3 { margin: 0 0 4px; font-size: 1rem; }
+  .hx-dica { font-size: 0.8rem; color: var(--cinza); margin: 0 0 10px; }
+  .hx-wrap { overflow-x: auto; max-width: 100%; border: 1px solid var(--borda); border-radius: 8px; }
+  .hx-tab { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+  .hx-tab th, .hx-tab td { padding: 7px 10px; border-bottom: 1px solid var(--borda); text-align: right; white-space: nowrap; }
+  .hx-tab th { background: var(--fundo); color: var(--destaque); font-weight: 700; position: sticky; top: 0; }
+  .hx-tab th.ord { cursor: pointer; user-select: none; }
+  .hx-tab th:first-child, .hx-tab td:first-child { text-align: left; position: sticky; left: 0; background: var(--card-bg); z-index: 1; }
+  .hx-tab th:first-child { background: var(--fundo); z-index: 2; }
+  .hx-tab td.txt { text-align: left; }
+  .hx-tab tr.total td { font-weight: 800; background: var(--linha-par); }
+  .hx-tab td small { display: block; color: var(--cinza); font-size: 0.68rem; }
+  .hx-barra { display: inline-block; vertical-align: middle; width: 70px; height: 8px; border-radius: 4px; background: var(--borda); margin-left: 8px; overflow: hidden; }
+  .hx-barra i { display: block; height: 100%; background: var(--destaque); }
+  .hx-vazio { padding: 24px; text-align: center; color: var(--cinza); }
+  .hx-rodape { margin-top: 16px; font-size: 0.76rem; color: var(--cinza); line-height: 1.5; }
+  .hx-conferir { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 12px; }
+  .hx-resultado { border: 1px solid var(--borda); border-radius: 10px; padding: 12px 14px; margin-top: 8px; font-size: 0.88rem; line-height: 1.6; }
+  .hx-selo { display: inline-block; border-radius: 6px; padding: 2px 10px; font-weight: 800; color: #fff; }
+  .hx-selo.atraso { background: var(--vermelho); }
+  .hx-selo.prazo { background: var(--verde); }
+  @media (max-width: 700px) {
+    .hx-topo { padding: 10px 12px; }
+    .hx-corpo { padding: 12px 12px 50px; }
+    .hx-sub { display: block; margin: 2px 0 0; }
+    .hx-filtros { padding: 12px; }
+    .hx-filtros label, .hx-filtros select, .hx-filtros input[type=date] { width: 100%; }
+    .hx-kpi .v { font-size: 1.4rem; }
+    .hx-abrir { padding: 8px 12px; }
+  }
 </style>
 </head>
 <body>
@@ -280,6 +343,7 @@
       <button type="button" class="atalho-btn">Tecmar</button>
     </a>
   </div>
+  <div><button id="hxBtn" class="hx-abrir" type="button" onclick="hxAbrir()" title="Indicadores do passado: transportadoras por período, vendedores e estados">📈 Histórico</button></div>
   <div style="display:flex;align-items:center;gap:10px">
     <span id="usuarioLogado" style="color:var(--cinza);font-size:0.9rem"></span>
     <button id="logoutBtn" onclick="fazerLogout()" type="button">Sair</button>
@@ -374,6 +438,16 @@
       <div class="progress-wrap" id="progressBaixaTecmar"><div class="progress-bar" id="progressBarBaixaTecmar"></div></div>
       <div class="status-line" id="statusBaixaTecmar"></div>
       <div class="meta" id="metaBaixaTecmar"></div>
+    </div>
+
+    <div class="card card-logo logo-dis">
+      <h2>Importar Estatística de Ocorrências</h2>
+      <p class="desc">Arquivo .xlsx "Estatísticas de Ocorrências" do sistema (alimenta a tela 📈 Histórico). Exporte com todos os filtros em "Todos" — arquivo com filtro é recusado. Cada pedido vira uma linha com os tipos de ocorrência (coluna F); o período do cabeçalho define até quando a estatística vale. Esta importação NÃO apaga o que já foi importado: pedidos novos são adicionados e os que reaparecem são atualizados — dá pra importar mês a mês. Nomes de clientes não são guardados.</p>
+      <input type="file" id="fileEstatOcorr" accept=".xlsx,.xls">
+      <button id="btnEstatOcorr" onclick="importarEstatisticaOcorrencias()">Importar</button>
+      <div class="progress-wrap" id="progressEstatOcorr"><div class="progress-bar" id="progressBarEstatOcorr"></div></div>
+      <div class="status-line" id="statusEstatOcorr"></div>
+      <div class="meta" id="metaEstatOcorr"></div>
     </div>
 
     <div class="card card-logo logo-gfw">
@@ -573,6 +647,42 @@
         <tbody id="modalTabelaBody"></tbody>
       </table>
     </div>
+  </div>
+</div>
+
+<div id="hxView" class="hx-view" role="dialog" aria-label="Histórico" style="display:none">
+  <div class="hx-topo">
+    <h2>📈 Histórico<span class="hx-sub" id="hxSub"></span></h2>
+    <div class="hx-acoes">
+      <button type="button" class="hx-btn" id="hxAtualizar" onclick="hxCarregar(true)">↻ Atualizar</button>
+      <button type="button" class="hx-btn" onclick="hxFechar()">← Voltar ao portal</button>
+    </div>
+  </div>
+  <div class="hx-corpo">
+    <div class="hx-filtros">
+      <label>Entregas de<input type="date" id="hxDe" onchange="hxLerFiltros()"></label>
+      <label>até<input type="date" id="hxAte" onchange="hxLerFiltros()"></label>
+      <div class="hx-presets" aria-label="Períodos rápidos">
+        <button type="button" class="hx-chip ativo" data-preset="tudo" onclick="hxPreset('tudo')">Tudo</button>
+        <button type="button" class="hx-chip" data-preset="mes" onclick="hxPreset('mes')">Mês atual</button>
+        <button type="button" class="hx-chip" data-preset="mesant" onclick="hxPreset('mesant')">Mês anterior</button>
+        <button type="button" class="hx-chip" data-preset="30" onclick="hxPreset('30')">30 dias</button>
+        <button type="button" class="hx-chip" data-preset="90" onclick="hxPreset('90')">90 dias</button>
+      </div>
+      <label>Transportadora<select id="hxTransp" onchange="hxLerFiltros()"></select></label>
+      <label>Estado<select id="hxUF" onchange="hxLerFiltros()"></select></label>
+      <label class="hx-check"><input type="checkbox" id="hxCob" checked onchange="hxLerFiltros()"> Só entregas dentro do período da estatística</label>
+    </div>
+    <div id="hxAviso" class="hx-aviso" style="display:block"></div>
+    <div id="hxKpis" class="hx-kpis"></div>
+    <div class="hx-abas" role="tablist">
+      <button type="button" class="hx-aba ativo" data-aba="transp" onclick="hxAba('transp')">🚚 Transportadoras por período</button>
+      <button type="button" class="hx-aba" data-aba="vend" onclick="hxAba('vend')">🧑‍💼 Vendedores</button>
+      <button type="button" class="hx-aba" data-aba="uf" onclick="hxAba('uf')">🗺️ Estados</button>
+      <button type="button" class="hx-aba" data-aba="conferir" onclick="hxAba('conferir')">🔎 Conferir e regras</button>
+    </div>
+    <div id="hxConteudo"></div>
+    <div id="hxRodape" class="hx-rodape"></div>
   </div>
 </div>
 
@@ -1134,6 +1244,381 @@ async function importarBaixaTecmar() {
   } finally {
     toggleBtn('btnBaixaTecmar', false);
   }
+}
+
+// ---------- Importação: Estatística de Ocorrências (.xlsx) — base do Histórico ----------
+// Lê o relatório "Estatísticas de Ocorrências" e manda UMA linha por pedido (tipos da coluna F juntos por " | ").
+// Primeira linha enviada = '#PERIODO' (período do cabeçalho), pra tela saber de quando a estatística vale.
+// Recusa arquivo exportado com filtro (ex.: só uma transportadora): pedidos de fora ficariam "fora da estatística" e virariam atraso por engano.
+function parseEstatisticaOcorrencias(aoa) {
+  const letras = h => semAcentoMin(h).replace(/[^a-z]/g, '');
+  const limpar = s => String(s === null || s === undefined ? '' : s).replace(/\s+/g, ' ').replace(/\|/g, '/').trim();
+  let periodo = null, hdr = -1;
+  for (let i = 0; i < aoa.length && i < 40; i++) {
+    const linha = aoa[i] || [];
+    const texto = semAcentoMin(linha.filter(x => x !== '' && x !== null && x !== undefined).join(' '));
+    const mp = texto.match(/periodo da ocorrencia:\s*(\d{2}\/\d{2}\/\d{4})\s*a\s*(\d{2}\/\d{2}\/\d{4})/);
+    if (mp) periodo = [mp[1], mp[2]];
+    const mf = texto.match(/^(motivo abertura|tipo de ocorrencia|transportadora|vendedor|indicador|uf|loja\(s\)):\s*(.+)$/);
+    if (mf && !/^todos?$|^todas?$/.test(mf[2].trim())) {
+      return { erro: `O arquivo foi exportado com filtro (${mf[1]}: ${mf[2].trim()}). Exporte com TODOS os filtros em "Todos" — com filtro, os pedidos de fora ficariam "fora da estatística" e seriam contados como atraso por engano.` };
+    }
+    const cab = linha.map(letras);
+    if (hdr === -1 && cab.indexOf('pedido') !== -1 && cab.indexOf('tipodeocorrencia') !== -1) hdr = i;
+  }
+  if (hdr === -1) return { erro: 'Não reconheci as colunas (Pedido e Tipo de Ocorrência) — confira se é o relatório "Estatísticas de Ocorrências".' };
+  if (!periodo) return { erro: 'Não achei a linha "Período da Ocorrência: dd/mm/aaaa a dd/mm/aaaa" no topo do arquivo. Sem o período não dá pra saber até quando a estatística vale.' };
+  const cab = aoa[hdr].map(letras);
+  const iPed = cab.indexOf('pedido'), iTipo = cab.indexOf('tipodeocorrencia'), iOc = cab.indexOf('ocorrencia');
+  const porPedido = new Map(); let lidas = 0;
+  for (let k = hdr + 1; k < aoa.length; k++) {
+    const r = aoa[k] || [];
+    const ped = limpar(r[iPed]).toUpperCase();
+    if (!/^\d[0-9A-Z]*(-[0-9A-Z]+)*$/.test(ped)) continue; // pedido começa com número (ex.: 471065N, 471461N-A); pula vazias e a linha "TOTAL:"
+    lidas++;
+    const g = porPedido.get(ped) || { t: [], o: [] };
+    const t = limpar(r[iTipo]), o = iOc === -1 ? '' : limpar(r[iOc]);
+    if (t && g.t.indexOf(t) === -1) g.t.push(t);
+    if (o && g.o.indexOf(o) === -1) g.o.push(o);
+    porPedido.set(ped, g);
+  }
+  if (porPedido.size === 0) return { erro: 'Nenhum pedido reconhecido nesse arquivo.' };
+  const rows = [['#PERIODO', periodo[0], periodo[1]]];
+  porPedido.forEach((g, ped) => rows.push([ped, g.t.join(' | '), g.o.join(' | ')]));
+  return { rows, lidas, pedidos: porPedido.size, periodo };
+}
+
+async function importarEstatisticaOcorrencias() {
+  const input = document.getElementById('fileEstatOcorr');
+  const file = input.files[0];
+  if (!file) { alert('Selecione o arquivo .xlsx da Estatística de Ocorrências primeiro.'); return; }
+  if (/\.csv$/i.test(file.name || '')) { alert('Este importador lê o arquivo Excel (.xlsx) da Estatística de Ocorrências.'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
+  setStatus('statusEstatOcorr', 'Lendo arquivo...', 'carregando');
+  toggleBtn('btnEstatOcorr', true);
+  try {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+    const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: '' });
+    const lido = parseEstatisticaOcorrencias(aoa);
+    if (lido.erro) { setStatus('statusEstatOcorr', lido.erro + ' Nada foi importado; os dados atuais continuam intactos.', 'erro'); return; }
+    await enviarEmLotes(lido.rows, 'importEstatisticaOcorrencias', 'statusEstatOcorr', 'progressEstatOcorr', 'progressBarEstatOcorr');
+    hx.dados = null; // o Histórico recalcula na próxima abertura
+  } catch (err) {
+    setStatus('statusEstatOcorr', 'Erro ao ler o arquivo: ' + err.message, 'erro');
+  } finally {
+    toggleBtn('btnEstatOcorr', false);
+  }
+}
+
+// ---------- Histórico (indicadores do passado) ----------
+// Tela por cima do portal (não mexe em nada dele). Os dados vêm do servidor já classificados (no prazo/atraso);
+// os filtros e agrupamentos abaixo rodam aqui no navegador, então mudar período/transportadora/estado é instantâneo.
+const HX_ATRASO = [2, 3, 4];
+const HX_MOTIVOS = {
+  0: 'Recebido até a previsão',
+  1: 'Previsão indefinida (conta como no prazo)',
+  2: 'ATRASO — pedido fora da estatística de ocorrências',
+  3: 'ATRASO — tipo da estatística é culpa da transportadora',
+  4: 'ATRASO — ocorrência manual é culpa da transportadora',
+  5: 'No prazo — ocorrência manual não é culpa da transportadora',
+  6: 'No prazo — tipos da estatística não são culpa da transportadora'
+};
+let hx = { dados: null, aba: 'transp', carregando: false, f: { de: '', ate: '', transp: '', uf: '', cob: true, preset: 'tudo' },
+  ord: { vend: { col: 'total', dir: -1 }, uf: { col: 'total', dir: -1 } }, minVend: 10, buscaVend: '' };
+
+function hxAbrir() {
+  document.getElementById('hxView').style.display = 'block';
+  document.body.style.overflow = 'hidden';
+  if (!hx.dados && !hx.carregando) hxCarregar(false); else hxRender();
+}
+function hxFechar() {
+  document.getElementById('hxView').style.display = 'none';
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && document.getElementById('hxView').style.display === 'block') hxFechar();
+});
+
+async function hxCarregar(fresh) {
+  hx.carregando = true;
+  document.getElementById('hxAtualizar').disabled = true;
+  document.getElementById('hxConteudo').innerHTML = '<div class="hx-vazio">Carregando o histórico… na primeira vez pode levar alguns segundos.</div>';
+  const r = await buscarJsonComRetry(API_URL, 2, { action: 'historicoCalcular', fresh: !!fresh });
+  hx.carregando = false;
+  document.getElementById('hxAtualizar').disabled = false;
+  if (!r.ok) {
+    document.getElementById('hxConteudo').innerHTML = `<div class="hx-vazio">Não consegui carregar o histórico: ${escapeHtml(r.erro || 'erro')}.<br><br><button type="button" class="hx-chip" onclick="hxCarregar(true)">Tentar de novo</button></div>`;
+    return;
+  }
+  hx.dados = r.dados;
+  hxMontarSelects();
+  hxRender();
+}
+
+function hxMontarSelects() {
+  const d = hx.dados;
+  const opcoes = (lista, atual) => '<option value="">Todas</option>' + lista.map((n, i) => ({ n, i })).sort((a, b) => a.n.localeCompare(b.n, 'pt-BR'))
+    .map(o => `<option value="${o.i}"${String(o.i) === String(atual) ? ' selected' : ''}>${escapeHtml(o.n)}</option>`).join('');
+  document.getElementById('hxTransp').innerHTML = opcoes(d.dic.transp, hx.f.transp);
+  document.getElementById('hxUF').innerHTML = opcoes(d.dic.uf, hx.f.uf).replace('>Todas<', '>Todos<');
+}
+
+function hxIntParaBR(n) { const s = String(n); return s.slice(6, 8) + '/' + s.slice(4, 6) + '/' + s.slice(0, 4); }
+function hxDataParaInt(d) { return Number(d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate()); }
+function hxFmtN(n) { return Number(n).toLocaleString('pt-BR'); }
+function hxPct(a, t) { return t ? (100 * a / t) : null; }
+function hxFmtPct(p) { return p === null ? '—' : p.toFixed(1).replace('.', ',') + '%'; }
+function hxTint(p) { // fundo suave só como reforço — o número sempre aparece escrito
+  if (p === null) return '';
+  const h = Math.round(Math.max(0, Math.min(1, (p - 70) / 30)) * 120);
+  return `background:hsla(${h},65%,45%,.24)`;
+}
+const hxEhAtraso = r => HX_ATRASO.indexOf(r[4] & 7) !== -1;
+
+function hxLerFiltros() {
+  hx.f.de = document.getElementById('hxDe').value;
+  hx.f.ate = document.getElementById('hxAte').value;
+  hx.f.transp = document.getElementById('hxTransp').value;
+  hx.f.uf = document.getElementById('hxUF').value;
+  hx.f.cob = document.getElementById('hxCob').checked;
+  hx.f.preset = '';
+  hxRender();
+}
+function hxPreset(nome) {
+  const hoje = new Date(); const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  let de = '', ate = '';
+  if (nome === 'mes') { de = iso(new Date(hoje.getFullYear(), hoje.getMonth(), 1)); ate = iso(hoje); }
+  else if (nome === 'mesant') { de = iso(new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1)); ate = iso(new Date(hoje.getFullYear(), hoje.getMonth(), 0)); }
+  else if (nome === '30' || nome === '90') { const x = new Date(hoje); x.setDate(x.getDate() - Number(nome)); de = iso(x); ate = iso(hoje); }
+  document.getElementById('hxDe').value = de; document.getElementById('hxAte').value = ate;
+  hx.f.de = de; hx.f.ate = ate; hx.f.preset = nome;
+  hxRender();
+}
+
+// linhas depois dos filtros; semCob = filtros normais SEM a regra de cobertura (pra contar o que ficou oculto)
+function hxFiltrar(ignorarCob) {
+  const f = hx.f, d = hx.dados;
+  const de = f.de ? Number(f.de.replace(/-/g, '')) : 0, ate = f.ate ? Number(f.ate.replace(/-/g, '')) : 0;
+  const t = f.transp === '' ? -1 : Number(f.transp), u = f.uf === '' ? -1 : Number(f.uf);
+  return d.rows.filter(r => (!de || r[3] >= de) && (!ate || r[3] <= ate) && (t === -1 || r[0] === t) && (u === -1 || r[2] === u) &&
+    (ignorarCob || !f.cob || (r[4] & 8)));
+}
+function hxAgrupar(rows, chave) {
+  const m = new Map();
+  rows.forEach(r => {
+    const k = chave(r);
+    let g = m.get(k); if (!g) { g = { total: 0, atraso: 0 }; m.set(k, g); }
+    g.total++; if (hxEhAtraso(r)) g.atraso++;
+  });
+  return m;
+}
+const hxPrazo = g => g.total - g.atraso;
+
+function hxRender() {
+  const d = hx.dados;
+  if (!d) return;
+  document.getElementById('hxSub').textContent = `Atualizado em ${d.geradoEm}${d.doCache ? ' (do cache)' : ''}`;
+  document.getElementById('hxCob').checked = hx.f.cob;
+  document.querySelectorAll('.hx-chip[data-preset]').forEach(b => b.classList.toggle('ativo', b.dataset.preset === hx.f.preset));
+  document.querySelectorAll('.hx-aba').forEach(b => b.classList.toggle('ativo', b.dataset.aba === hx.aba));
+  if (d.vazio || d.totalEntregas === 0) {
+    document.getElementById('hxAviso').innerHTML = '';
+    document.getElementById('hxKpis').innerHTML = '';
+    document.getElementById('hxConteudo').innerHTML = '<div class="hx-vazio">Ainda não há entregas com data de recebimento do cliente na Tabela Dinâmica.</div>';
+    return;
+  }
+  const rows = hxFiltrar(false);
+  hxRenderAviso(rows);
+  hxRenderKpis(rows);
+  const c = document.getElementById('hxConteudo');
+  if (rows.length === 0 && hx.aba !== 'conferir') {
+    c.innerHTML = '<div class="hx-secao"><div class="hx-vazio">Nenhuma entrega nesse filtro. Ajuste o período ou desmarque “só entregas dentro do período da estatística”.</div></div>';
+    hxRodape();
+    return;
+  }
+  if (hx.aba === 'transp') c.innerHTML = hxHtmlTransp(rows);
+  else if (hx.aba === 'vend') c.innerHTML = hxHtmlVend(rows);
+  else if (hx.aba === 'uf') c.innerHTML = hxHtmlUF(rows);
+  else c.innerHTML = hxHtmlConferir(rows);
+  hxRodape();
+}
+
+function hxRenderAviso(rows) {
+  const d = hx.dados; const el = document.getElementById('hxAviso');
+  if (!d.cobertura || d.cobertura.length === 0) {
+    el.className = 'hx-aviso alerta';
+    el.innerHTML = '⚠️ <b>Nenhuma Estatística de Ocorrências importada ainda.</b> Sem ela, toda entrega depois da previsão vira “atraso” (pedido fora da estatística). Importe o arquivo em <b>📥 Importadores → Importar Estatística de Ocorrências</b>.';
+    return;
+  }
+  const cobTxt = d.cobertura.map(p => hxIntParaBR(p[0]) + ' a ' + hxIntParaBR(p[1])).join(' e ');
+  const todas = hxFiltrar(true).length;
+  const ocultas = hx.f.cob ? todas - rows.length : 0;
+  const foraSemOcultar = !hx.f.cob ? hxFiltrar(true).filter(r => !(r[4] & 8)).length : 0;
+  let html = `Estatística de Ocorrências importada para: <b>${escapeHtml(cobTxt)}</b>.`;
+  if (hx.f.cob && ocultas > 0) {
+    el.className = 'hx-aviso alerta';
+    html += ` <b>${hxFmtN(ocultas)} entregas ficaram de fora</b> por serem de antes/depois desse período — nelas, como não há estatística, todo atraso de data viraria “atraso” por falta de informação. Para incluí-las, importe a estatística daqueles meses (ou desmarque a opção acima).`;
+  } else if (!hx.f.cob && foraSemOcultar > 0) {
+    el.className = 'hx-aviso alerta';
+    html += ` ⚠️ <b>${hxFmtN(foraSemOcultar)} das entregas mostradas estão fora desse período</b>: nelas o atraso está inflado (pedido “fora da estatística”).`;
+  } else el.className = 'hx-aviso';
+  el.innerHTML = html;
+}
+
+function hxRenderKpis(rows) {
+  let atraso = 0, indef = 0;
+  rows.forEach(r => { if (hxEhAtraso(r)) atraso++; if ((r[4] & 7) === 1) indef++; });
+  const total = rows.length, prazo = total - atraso;
+  const kpi = (cls, t, v, s) => `<div class="hx-kpi ${cls}"><div class="t">${t}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
+  document.getElementById('hxKpis').innerHTML =
+    kpi('', 'Entregas analisadas', hxFmtN(total), 'recebidas pelo cliente') +
+    kpi('prazo', '✔ No prazo', hxFmtN(prazo), hxFmtPct(hxPct(prazo, total))) +
+    kpi('atraso', '✖ Em atraso', hxFmtN(atraso), hxFmtPct(hxPct(atraso, total))) +
+    kpi('', '% no prazo', hxFmtPct(hxPct(prazo, total)), 'meta: quanto maior, melhor') +
+    kpi('', 'Sem previsão', hxFmtN(indef), 'indefinidas — contam como no prazo');
+}
+
+function hxRodape() {
+  const d = hx.dados;
+  document.getElementById('hxRodape').innerHTML =
+    `Data usada como “entrega”: <b>${escapeHtml(d.colunaData)}</b> (dia em que o cliente recebeu). ` +
+    `${hxFmtN(d.semRecebimento)} pedidos da Tabela Dinâmica ainda sem essa data ficaram de fora; ${hxFmtN(d.ignoradas)} de transportadoras ignoradas (Retira / Só nota / sem transportadora). ` +
+    `Base: ${hxFmtN(d.estatisticaPedidos)} pedidos na estatística, ${hxFmtN(d.ocorrenciasManuais)} ocorrências manuais, ${hxFmtN(d.previsoesManuais)} previsões manuais.`;
+}
+
+function hxAba(nome) { hx.aba = nome; hxRender(); }
+
+function hxCelula(g) { // célula "% no prazo" com a quantidade embaixo
+  if (!g || !g.total) return '<td style="color:var(--cinza)">—</td>';
+  const p = hxPct(hxPrazo(g), g.total);
+  return `<td style="${hxTint(p)}" title="${hxFmtN(g.atraso)} atrasos em ${hxFmtN(g.total)} entregas">${hxFmtPct(p)}<small>${hxFmtN(g.total)}</small></td>`;
+}
+function hxBarra(p) { return p === null ? '' : `<span class="hx-barra" aria-hidden="true"><i style="width:${p.toFixed(0)}%"></i></span>`; }
+
+// ---- aba 1: transportadoras por período (mês) ----
+function hxHtmlTransp(rows) {
+  const d = hx.dados;
+  const ym = r => Math.floor(r[3] / 100);
+  const meses = Array.from(new Set(rows.map(ym))).sort((a, b) => a - b);
+  const porT = hxAgrupar(rows, r => r[0]);
+  const porTM = hxAgrupar(rows, r => r[0] + '|' + ym(r));
+  const porM = hxAgrupar(rows, ym);
+  const ordem = Array.from(porT.keys()).sort((a, b) => porT.get(b).total - porT.get(a).total);
+  const rotulo = m => String(m).slice(4) + '/' + String(m).slice(2, 4);
+  let h = '<div class="hx-secao"><h3>Performance de cada transportadora, mês a mês</h3>' +
+    '<p class="hx-dica">Cada célula mostra o % no prazo do mês (a quantidade de entregas fica embaixo). O mês é o do recebimento pelo cliente. Passe o mouse para ver os atrasos.</p>' +
+    '<div class="hx-wrap"><table class="hx-tab"><thead><tr><th>Transportadora</th><th>Entregas</th><th>No prazo</th><th>Atraso</th><th>% no prazo</th>' +
+    meses.map(m => `<th>${rotulo(m)}</th>`).join('') + '</tr></thead><tbody>';
+  ordem.forEach(t => {
+    const g = porT.get(t), p = hxPct(hxPrazo(g), g.total);
+    h += `<tr><td>${escapeHtml(d.dic.transp[t])}</td><td>${hxFmtN(g.total)}</td><td>${hxFmtN(hxPrazo(g))}</td><td>${hxFmtN(g.atraso)}</td><td>${hxFmtPct(p)}${hxBarra(p)}</td>` +
+      meses.map(m => hxCelula(porTM.get(t + '|' + m))).join('') + '</tr>';
+  });
+  const tot = { total: rows.length, atraso: rows.filter(hxEhAtraso).length }, pt = hxPct(hxPrazo(tot), tot.total);
+  h += `<tr class="total"><td>Todas</td><td>${hxFmtN(tot.total)}</td><td>${hxFmtN(hxPrazo(tot))}</td><td>${hxFmtN(tot.atraso)}</td><td>${hxFmtPct(pt)}${hxBarra(pt)}</td>` +
+    meses.map(m => hxCelula(porM.get(m))).join('') + '</tr></tbody></table></div></div>';
+  return h;
+}
+
+// ---- aba 2: vendedor de cada transportadora ----
+function hxOrdenar(aba, col) {
+  const o = hx.ord[aba];
+  if (o.col === col) o.dir = -o.dir; else { o.col = col; o.dir = (col === 'nome' || col === 'transp') ? 1 : -1; }
+  hxRender();
+}
+function hxSeta(aba, col) { const o = hx.ord[aba]; return o.col === col ? (o.dir === 1 ? ' ▲' : ' ▼') : ''; }
+function hxVendFiltros() {
+  hx.minVend = Math.max(1, Number(document.getElementById('hxMinVend').value) || 1);
+  hx.buscaVend = document.getElementById('hxBuscaVend').value;
+  const pos = document.getElementById('hxBuscaVend').selectionStart;
+  hxRender();
+  const campo = document.getElementById('hxBuscaVend'); campo.focus(); try { campo.setSelectionRange(pos, pos); } catch (e) { /* ok */ }
+}
+function hxHtmlVend(rows) {
+  const d = hx.dados;
+  const m = hxAgrupar(rows, r => r[0] + '|' + r[1]);
+  const busca = semAcentoMin(hx.buscaVend);
+  let lista = Array.from(m.entries()).map(([k, g]) => {
+    const [t, v] = k.split('|').map(Number);
+    return { transp: d.dic.transp[t], nome: d.dic.vend[v], total: g.total, atraso: g.atraso, prazo: hxPrazo(g), pct: hxPct(hxPrazo(g), g.total) };
+  }).filter(x => x.total >= hx.minVend && (!busca || semAcentoMin(x.nome).indexOf(busca) !== -1));
+  const o = hx.ord.vend;
+  lista.sort((a, b) => {
+    const va = (o.col === 'nome' || o.col === 'transp') ? String(a[o.col]).toLocaleLowerCase('pt-BR') : a[o.col];
+    const vb = (o.col === 'nome' || o.col === 'transp') ? String(b[o.col]).toLocaleLowerCase('pt-BR') : b[o.col];
+    return (va < vb ? -1 : va > vb ? 1 : 0) * o.dir;
+  });
+  const LIM = 300, corte = lista.length > LIM;
+  const th = (col, txt) => `<th class="ord" onclick="hxOrdenar('vend','${col}')">${txt}${hxSeta('vend', col)}</th>`;
+  let h = '<div class="hx-secao"><h3>Vendedores — performance das entregas de cada transportadora</h3>' +
+    '<p class="hx-dica">Uma linha por vendedor em cada transportadora. Clique no título da coluna para ordenar (ex.: “% no prazo” mostra quem mais sofre com atraso). Use o mínimo de entregas para esconder amostras pequenas.</p>' +
+    `<div class="hx-conferir"><input class="hx-campo" id="hxBuscaVend" type="search" placeholder="Buscar vendedor…" value="${escapeHtml(hx.buscaVend)}" oninput="hxVendFiltros()">` +
+    `<label class="hx-check" style="display:flex;gap:6px;align-items:center">Mínimo de entregas <input class="hx-campo" id="hxMinVend" type="number" min="1" value="${hx.minVend}" style="width:80px" onchange="hxVendFiltros()"></label></div>` +
+    '<div class="hx-wrap"><table class="hx-tab"><thead><tr>' + th('nome', 'Vendedor') + th('transp', 'Transportadora') + th('total', 'Entregas') + th('prazo', 'No prazo') + th('atraso', 'Atraso') + th('pct', '% no prazo') + '</tr></thead><tbody>';
+  if (lista.length === 0) h += '<tr><td colspan="6" class="hx-vazio">Nenhum vendedor com esse mínimo de entregas.</td></tr>';
+  lista.slice(0, LIM).forEach(x => {
+    h += `<tr><td>${escapeHtml(x.nome)}</td><td class="txt">${escapeHtml(x.transp)}</td><td>${hxFmtN(x.total)}</td><td>${hxFmtN(x.prazo)}</td><td>${hxFmtN(x.atraso)}</td><td style="${hxTint(x.pct)}">${hxFmtPct(x.pct)}${hxBarra(x.pct)}</td></tr>`;
+  });
+  h += '</tbody></table></div>' + (corte ? `<p class="hx-dica" style="margin-top:8px">Mostrando as primeiras ${LIM} de ${hxFmtN(lista.length)} linhas — use a busca ou o filtro de transportadora para refinar.</p>` : `<p class="hx-dica" style="margin-top:8px">${hxFmtN(lista.length)} linhas.</p>`) + '</div>';
+  return h;
+}
+
+// ---- aba 3: estados ----
+function hxHtmlUF(rows) {
+  const d = hx.dados;
+  const porU = hxAgrupar(rows, r => r[2]);
+  const porUT = hxAgrupar(rows, r => r[2] + '|' + r[0]);
+  const porT = hxAgrupar(rows, r => r[0]);
+  const transps = Array.from(porT.keys()).sort((a, b) => porT.get(b).total - porT.get(a).total).slice(0, 8);
+  let lista = Array.from(porU.entries()).map(([u, g]) => ({ u, nome: d.dic.uf[u], total: g.total, atraso: g.atraso, prazo: hxPrazo(g), pct: hxPct(hxPrazo(g), g.total) }));
+  const o = hx.ord.uf;
+  lista.sort((a, b) => { const va = o.col === 'nome' ? a.nome : a[o.col], vb = o.col === 'nome' ? b.nome : b[o.col]; return (va < vb ? -1 : va > vb ? 1 : 0) * o.dir; });
+  const th = (col, txt) => `<th class="ord" onclick="hxOrdenar('uf','${col}')">${txt}${hxSeta('uf', col)}</th>`;
+  let h = '<div class="hx-secao"><h3>Indicadores por estado (UF de entrega)</h3>' +
+    '<p class="hx-dica">À direita, o % no prazo de cada estado em cada transportadora (as 8 com mais entregas no filtro; a quantidade fica embaixo). Clique nos títulos para ordenar.</p>' +
+    '<div class="hx-wrap"><table class="hx-tab"><thead><tr>' + th('nome', 'UF') + th('total', 'Entregas') + th('prazo', 'No prazo') + th('atraso', 'Atraso') + th('pct', '% no prazo') +
+    transps.map(t => `<th>${escapeHtml(d.dic.transp[t])}</th>`).join('') + '</tr></thead><tbody>';
+  lista.forEach(x => {
+    h += `<tr><td>${escapeHtml(x.nome)}</td><td>${hxFmtN(x.total)}</td><td>${hxFmtN(x.prazo)}</td><td>${hxFmtN(x.atraso)}</td><td>${hxFmtPct(x.pct)}${hxBarra(x.pct)}</td>` +
+      transps.map(t => hxCelula(porUT.get(x.u + '|' + t))).join('') + '</tr>';
+  });
+  return h + '</tbody></table></div></div>';
+}
+
+// ---- aba 4: regras, como foi classificado e "Conferir pedido" ----
+function hxHtmlConferir(rows) {
+  const cont = {}; rows.forEach(r => { const c = r[4] & 7; cont[c] = (cont[c] || 0) + 1; });
+  let h = '<div class="hx-secao"><h3>Conferir um pedido</h3><p class="hx-dica">Digite o número do pedido (ex.: 470325N) para ver como ele foi classificado: previsão usada, tipos da estatística, ocorrência manual e a regra aplicada.</p>' +
+    '<div class="hx-conferir"><input class="hx-campo" id="hxPedido" placeholder="Pedido" onkeydown="if(event.key===\'Enter\')hxConferirPedido()"><button type="button" class="hx-chip ativo" onclick="hxConferirPedido()">Conferir</button></div>' +
+    '<div id="hxResultadoPedido"></div></div>' +
+    '<div class="hx-secao" style="margin-top:12px"><h3>Como as entregas do filtro foram classificadas</h3><div class="hx-wrap"><table class="hx-tab"><thead><tr><th>Motivo</th><th>Entregas</th></tr></thead><tbody>';
+  Object.keys(HX_MOTIVOS).forEach(c => { h += `<tr><td>${escapeHtml(HX_MOTIVOS[c])}</td><td>${hxFmtN(cont[c] || 0)}</td></tr>`; });
+  h += '</tbody></table></div></div>' +
+    '<div class="hx-secao" style="margin-top:12px"><h3>Regras usadas</h3><div style="font-size:.86rem;line-height:1.6">' +
+    '<b>1. Previsão:</b> vale a previsão manual do pedido, se existir; senão a “Previsão de Entrega (Transp)” da Tabela Dinâmica. Previsão vazia ou “Indefinido” = <b>no prazo</b>.<br>' +
+    '<b>2. Entrega:</b> data de recebimento do cliente (<i>Receb Cliente</i>). Até a previsão (inclusive) = <b>no prazo</b>.<br>' +
+    '<b>3. Depois da previsão</b> — olha o tipo da ocorrência:<br>&nbsp;&nbsp;• se o pedido tem <b>ocorrência manual</b>, ela prevalece sobre a estatística (só é atraso se for culpa da transportadora);<br>' +
+    '&nbsp;&nbsp;• senão, se está na estatística: <b>atraso</b> se tiver Atraso de Entrega, Reclamação - Transportadora, Produto Errado - Transportadora, Sinistro ou Avaria Durante o Transporte; qualquer outro tipo = no prazo;<br>' +
+    '&nbsp;&nbsp;• senão (pedido fora da estatística): <b>atraso</b>.</div></div>';
+  return h;
+}
+
+async function hxConferirPedido() {
+  const caixa = document.getElementById('hxResultadoPedido');
+  const ped = (document.getElementById('hxPedido').value || '').trim();
+  if (!ped) { caixa.innerHTML = ''; return; }
+  caixa.innerHTML = '<div class="hx-resultado">Consultando…</div>';
+  const r = await buscarJsonComRetry(`${API_URL}?action=getHistoricoPedido&pedido=${encodeURIComponent(ped)}`, 2);
+  if (!r.ok) { caixa.innerHTML = `<div class="hx-resultado">Não consegui consultar: ${escapeHtml(r.erro || 'erro')}</div>`; return; }
+  const x = r.dados;
+  if (!x.encontrado) { caixa.innerHTML = `<div class="hx-resultado">Pedido <b>${escapeHtml(x.pedido || ped)}</b> não encontrado na Tabela Dinâmica.</div>`; return; }
+  const selo = x.codigo === -1 ? '' : `<span class="hx-selo ${x.atraso ? 'atraso' : 'prazo'}">${x.atraso ? '✖ Em atraso' : '✔ No prazo'}</span> `;
+  const tipos = x.tiposEstatistica === null ? '<i>pedido fora da estatística</i>' : (x.tiposEstatistica.length ? escapeHtml(x.tiposEstatistica.join(' · ')) : '<i>sem tipo</i>');
+  caixa.innerHTML = `<div class="hx-resultado">${selo}<b>${escapeHtml(x.pedido)}</b> — ${escapeHtml(x.transportadora || '(sem transportadora)')} · ${escapeHtml(x.vendedor)} · ${escapeHtml(x.uf)}<br>` +
+    `Recebido pelo cliente: <b>${escapeHtml(x.dataRecebimento || '—')}</b> (saída: ${escapeHtml(x.dataSaida || '—')})<br>` +
+    `Previsão usada: <b>${escapeHtml(x.previsaoUsada)}</b> (${x.fontePrevisao === 'manual' ? 'previsão manual' : 'Tabela Dinâmica'}${x.previsaoTabela ? '; na tabela: ' + escapeHtml(x.previsaoTabela) : ''})<br>` +
+    `Tipos na estatística: ${tipos}<br>Ocorrência manual: ${x.ocorrenciaManual ? '<b>' + escapeHtml(x.ocorrenciaManual) + '</b>' : '—'}<br>` +
+    `<b>Regra:</b> ${escapeHtml(x.motivo)}</div>`;
 }
 
 // ---------- Entregas GFW WhatsApp (exportação .md da conversa) ----------
@@ -2588,6 +3073,10 @@ async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBar
     setStatus(statusId, r
       ? `Importação concluída: ${r.lidas} NFs lidas — ${r.entregues} entregues e ${r.emRotaHoje} em entrega (em rota hoje). ${r.noPNR} constam em Pedidos Não Recebidos (${r.entreguesNoPNR} entregues, ${r.emRotaNoPNR} em rota); ${r.lidas - r.noPNR} não constam (outros clientes ou pedidos que já saíram da lista).`
       : `Importação concluída: ${rows.length} NFs.`, 'ok');
+  } else if (action === 'importEstatisticaOcorrencias') {
+    const r = ultimoResultado && ultimoResultado.resumo;
+    setStatus(statusId, `Importação concluída: ${totalNovos} pedidos novos e ${totalAtualizados} que já existiam (atualizados).` +
+      (r ? ` Base agora: ${r.pedidos} pedidos; período coberto: ${(r.cobertura || []).join(' e ') || '—'}. Abra 📈 Histórico para ver.` : ''), 'ok');
   } else if (action === 'importEntregasWhatsApp') {
     setStatus(statusId, `Importação concluída: ${rows.length} NFs lidas (${totalNovos} novas, ${totalAtualizados} já conhecidas). ${totalCasaram} constam em Pedidos Não Recebidos (já entregues); ${rows.length - totalCasaram} não constam (notas de outros clientes ou pedidos que já saíram da lista).`, 'ok');
   } else {
@@ -2792,6 +3281,10 @@ function renderMeta(status) {
   if (status.BaixaEntregaTecmar) {
     document.getElementById('metaBaixaTecmar').textContent =
       `Última importação: ${new Date(status.BaixaEntregaTecmar.ultimaImportacao).toLocaleString('pt-BR')} (${status.BaixaEntregaTecmar.totalLinhas} NFs)`;
+  }
+  if (status.EstatisticaOcorrencias) {
+    document.getElementById('metaEstatOcorr').textContent =
+      `Última importação: ${new Date(status.EstatisticaOcorrencias.ultimaImportacao).toLocaleString('pt-BR')} (${status.EstatisticaOcorrencias.totalLinhas} pedidos)`;
   }
   if (status.EmRotaGFW) {
     document.getElementById('metaEmRotaGFW').textContent =
