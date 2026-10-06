@@ -324,6 +324,16 @@
     </div>
 
     <div class="card">
+      <h2>Importar Entregas NR Express</h2>
+      <p class="desc">Arquivo .csv do relatório "encomendas por nota fiscal" da NR Express. A NF vem com a série e zeros na frente (ex.: 1  000127179) e o site ignora isso, ficando só 127179. Cruza pela NF com Pedidos Não Recebidos: situação "Entregue" = entregue (com a data da coluna entregaRealizada); situação "Saiu para entrega" = em rota — como o arquivo não traz a data da saída, vale como em rota quando a importação é feita no próprio dia. Só guarda NF, situação e data de entrega (nomes e cidades de clientes não são guardados). Cada importação substitui os dados anteriores.</p>
+      <input type="file" id="fileBaixaNR" accept=".csv,text/csv">
+      <button id="btnBaixaNR" onclick="importarBaixaNR()">Importar</button>
+      <div class="progress-wrap" id="progressBaixaNR"><div class="progress-bar" id="progressBarBaixaNR"></div></div>
+      <div class="status-line" id="statusBaixaNR"></div>
+      <div class="meta" id="metaBaixaNR"></div>
+    </div>
+
+    <div class="card">
       <h2>Importar Em Rota GFW</h2>
       <p class="desc">Arquivo .xlsx (relatório REL141) com os pedidos que já saíram para entrega (têm romaneio de emissão) mas ainda não foram baixados como entregues. Cruza pelo número da NF com Pedidos Não Recebidos. Cada importação substitui os dados anteriores (foto do momento).</p>
       <input type="file" id="fileEmRotaGFW">
@@ -943,6 +953,85 @@ async function importarBaixaSSW() {
     setStatus('statusBaixaSSW', 'Erro ao ler o arquivo: ' + err.message, 'erro');
   } finally {
     toggleBtn('btnBaixaSSW', false);
+  }
+}
+
+// ---------- Importação: Entregas NR Express ----------
+// Do relatório só entram: NF (coluna B, sem a série e os zeros da frente: "1  000127179" -> 127179), Situação (F) e a data de
+// entrega (H, que vem em UTC e é convertida pro dia de Brasília). Nomes e cidades de clientes NÃO são lidos nem enviados.
+function limparNFNR(v) {
+  const t = String(v === null || v === undefined ? '' : v).trim();
+  const m = t.match(/^\d+\s*[\/\s]+\s*(\d+)$/);
+  return (m ? m[1] : t.replace(/\D/g, '')).replace(/^0+/, '');
+}
+
+// "2026-09-16T15:00:00.000Z" -> "16/09/2026" (horário de Brasília). Data pura, meia-noite exata ou carimbo sem fuso = só a data.
+// Também aceita dd/mm/aa e dd/mm/aaaa. (Mesma regra do servidor.)
+function dataBRDeISOouBR(v) {
+  const t = String(v === null || v === undefined ? '' : v).trim();
+  const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?\s*(Z|[+-]\d{2}:?\d{2})?)?$/);
+  if (iso) {
+    const [, a, m, d, hh, mi, ss, tz] = iso;
+    if (hh === undefined || !tz || (+hh === 0 && +mi === 0 && +(ss || 0) === 0)) return `${d}/${m}/${a}`;
+    let ms = Date.UTC(+a, +m - 1, +d, +hh, +mi, +(ss || 0));
+    if (tz !== 'Z') { const dig = tz.replace(/\D/g, ''); ms -= (tz[0] === '-' ? -1 : 1) * (+dig.slice(0, 2) * 60 + +dig.slice(2, 4)) * 60000; }
+    const b = new Date(ms - 3 * 3600000);
+    return String(b.getUTCDate()).padStart(2, '0') + '/' + String(b.getUTCMonth() + 1).padStart(2, '0') + '/' + b.getUTCFullYear();
+  }
+  return dataSSW(t);
+}
+
+function parseBaixaNR(texto) {
+  const linhas = parseCSVPontoEVirgula(String(texto || '').replace(/^\uFEFF/, ''));
+  if (linhas.length === 0) return { erro: 'O arquivo está vazio.' };
+  const letras = h => semAcentoMin(h).replace(/[^a-z]/g, '');
+  const cab = linhas[0].map(letras);
+  let iNF = cab.indexOf('notafiscal'), iSit = cab.indexOf('situacao'), iEnt = cab.findIndex(h => h === 'entregarealizada');
+  let inicio = 1, porPosicao = false;
+  if (iNF === -1 || iSit === -1) {
+    // Sem cabeçalho reconhecível: usa as colunas pela posição (B, F, H) — mas só aceita linhas com a NF no formato da NR
+    // ("série + espaço/barra + número"), pra não importar lixo se for o arquivo errado.
+    porPosicao = true; iNF = 1; iSit = 5; iEnt = 7;
+    inicio = /^\s*\d+\s*[\/\s]+\s*\d+\s*$/.test(linhas[0][1] || '') ? 0 : 1;
+  }
+  if (iEnt === -1) iEnt = 7;
+
+  const melhor = new Map(); let lidas = 0;
+  for (let k = inicio; k < linhas.length; k++) {
+    const r = linhas[k]; const bruto = (r[iNF] || '').trim();
+    if (porPosicao && !/^\d+\s*[\/\s]+\s*\d+$/.test(bruto)) continue;
+    const nf = limparNFNR(bruto); if (!nf) continue;
+    const situacao = (r[iSit] || '').trim(); const sit = semAcentoMin(situacao);
+    lidas++;
+    const prioridade = /^entregue\b/.test(sit) ? 2 : (sit.includes('saiu para entrega') ? 1 : 0);
+    const item = { nf, situacao, de: dataBRDeISOouBR(r[iEnt]), prioridade };
+    // se a mesma NF aparecer mais de uma vez: vale a entregue; depois a "saiu para entrega"; a mais abaixo no arquivo desempata
+    const atual = melhor.get(nf);
+    if (!atual || item.prioridade >= atual.prioridade) melhor.set(nf, item);
+  }
+  if (melhor.size === 0) return { erro: 'Não reconheci as colunas da NR Express (notaFiscal e situacao) nesse arquivo — confira se é o relatório certo.' };
+  return { rows: Array.from(melhor.values()).map(i => [i.nf, i.situacao, i.de]), lidas };
+}
+
+async function importarBaixaNR() {
+  const input = document.getElementById('fileBaixaNR');
+  const file = input.files[0];
+  if (!file) { alert('Selecione o arquivo CSV da NR Express primeiro.'); return; }
+  if (/\.xlsx?$/i.test(file.name || '')) { alert('Este importador só lê arquivo .csv. O arquivo selecionado parece ser um Excel — exporte como .csv e tente de novo.'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
+
+  setStatus('statusBaixaNR', 'Lendo arquivo...', 'carregando');
+  toggleBtn('btnBaixaNR', true);
+  try {
+    const lido = parseBaixaNR(await lerTextoDoArquivo(file));
+    if (lido.erro) { setStatus('statusBaixaNR', lido.erro + ' Nada foi importado; os dados atuais continuam intactos.', 'erro'); return; }
+    await enviarEmLotes(lido.rows, 'importBaixaEntregaNR', 'statusBaixaNR', 'progressBaixaNR', 'progressBarBaixaNR');
+    carregarIndicadores();
+    atualizarEmRotaTratativas();
+  } catch (err) {
+    setStatus('statusBaixaNR', 'Erro ao ler o arquivo: ' + err.message, 'erro');
+  } finally {
+    toggleBtn('btnBaixaNR', false);
   }
 }
 
@@ -2327,7 +2416,7 @@ async function restaurarTratativasSalvas() {
 // arquivo errado for colado e nenhuma linha for reconhecida, mandar um
 // lote vazio apagaria os dados atuais sem colocar nada no lugar. Por isso
 // nem chega a enviar nesse caso.
-const ACOES_QUE_SUBSTITUEM = ['importPedidosNaoRecebidos', 'importBaixaEntregaGFW', 'importBaixaEntregaRTE', 'importBaixaEntregaSSW', 'importEmRotaGFW'];
+const ACOES_QUE_SUBSTITUEM = ['importPedidosNaoRecebidos', 'importBaixaEntregaGFW', 'importBaixaEntregaRTE', 'importBaixaEntregaSSW', 'importBaixaEntregaNR', 'importEmRotaGFW'];
 
 async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBarId) {
   if (rows.length === 0) {
@@ -2387,6 +2476,11 @@ async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBar
     const r = ultimoResultado && ultimoResultado.resumo;
     setStatus(statusId, r
       ? `Importação concluída: ${r.lidas} NFs lidas — ${r.entregues} entregues e ${r.emRotaHoje} saindo pra entrega hoje. ${r.noPNR} constam em Pedidos Não Recebidos (${r.entreguesNoPNR} entregues, ${r.emRotaNoPNR} em rota hoje); ${r.lidas - r.noPNR} não constam (outros clientes ou pedidos que já saíram da lista).`
+      : `Importação concluída: ${rows.length} NFs.`, 'ok');
+  } else if (action === 'importBaixaEntregaNR') {
+    const r = ultimoResultado && ultimoResultado.resumo;
+    setStatus(statusId, r
+      ? `Importação concluída: ${r.lidas} NFs lidas — ${r.entregues} entregues e ${r.emRotaHoje} saiu para entrega (em rota hoje). ${r.noPNR} constam em Pedidos Não Recebidos (${r.entreguesNoPNR} entregues, ${r.emRotaNoPNR} em rota); ${r.lidas - r.noPNR} não constam (outros clientes ou pedidos que já saíram da lista).`
       : `Importação concluída: ${rows.length} NFs.`, 'ok');
   } else if (action === 'importEntregasWhatsApp') {
     setStatus(statusId, `Importação concluída: ${rows.length} NFs lidas (${totalNovos} novas, ${totalAtualizados} já conhecidas). ${totalCasaram} constam em Pedidos Não Recebidos (já entregues); ${rows.length - totalCasaram} não constam (notas de outros clientes ou pedidos que já saíram da lista).`, 'ok');
@@ -2584,6 +2678,10 @@ function renderMeta(status) {
   if (status.BaixaEntregaSSW) {
     document.getElementById('metaBaixaSSW').textContent =
       `Última importação: ${new Date(status.BaixaEntregaSSW.ultimaImportacao).toLocaleString('pt-BR')} (${status.BaixaEntregaSSW.totalLinhas} NFs)`;
+  }
+  if (status.BaixaEntregaNR) {
+    document.getElementById('metaBaixaNR').textContent =
+      `Última importação: ${new Date(status.BaixaEntregaNR.ultimaImportacao).toLocaleString('pt-BR')} (${status.BaixaEntregaNR.totalLinhas} NFs)`;
   }
   if (status.EmRotaGFW) {
     document.getElementById('metaEmRotaGFW').textContent =
@@ -2798,7 +2896,7 @@ let modalFiltrosSelecionados = {};
 let modalOrdenacao = { indice: null, direcao: 1 };
 
 // Colunas que, quando presentes, ganham um dropdown de filtro automático
-const COLUNAS_FILTRAVEIS = ['Transportadora', 'Status', 'Ocorrência', 'Entregue?', 'Entregue (GFW)', 'Entregue (RTE)', 'Entregue (SSW)', 'Entregue (WhatsApp)'];
+const COLUNAS_FILTRAVEIS = ['Transportadora', 'Status', 'Ocorrência', 'Entregue?', 'Entregue (GFW)', 'Entregue (RTE)', 'Entregue (SSW)', 'Entregue (NR Express)', 'Entregue (WhatsApp)'];
 
 function mostrarModalCarregando(titulo, colunas) {
   document.getElementById('modalTitulo').textContent = titulo;
@@ -2864,6 +2962,7 @@ function montarFiltrosModal() {
   const temColunaEntrega = modalColunasAtuais.indexOf('Data Entrega (GFW)') !== -1 ||
     modalColunasAtuais.indexOf('Data Entrega (RTE)') !== -1 ||
     modalColunasAtuais.indexOf('Data Entrega (SSW)') !== -1 ||
+    modalColunasAtuais.indexOf('Data Entrega (NR Express)') !== -1 ||
     modalColunasAtuais.indexOf('Data Entrega (WhatsApp)') !== -1;
   document.getElementById('modalFiltroDataEntrega').style.display = temColunaEntrega ? 'flex' : 'none';
 }
@@ -2885,18 +2984,19 @@ function aplicarFiltrosModal() {
   });
 
   // Filtro por período de entrega — considera a data que estiver
-  // preenchida (baixa GFW, baixa RTE, entrega da SSW ou entrega informada no WhatsApp).
+  // preenchida (baixa GFW, baixa RTE, entrega da SSW, da NR Express ou entrega informada no WhatsApp).
   const dataDeStr = document.getElementById('modalDataEntregaDe').value;
   const dataAteStr = document.getElementById('modalDataEntregaAte').value;
   if (dataDeStr || dataAteStr) {
     const idxGFW = modalColunasAtuais.indexOf('Data Entrega (GFW)');
     const idxRTE = modalColunasAtuais.indexOf('Data Entrega (RTE)');
     const idxSSW = modalColunasAtuais.indexOf('Data Entrega (SSW)');
+    const idxNR = modalColunasAtuais.indexOf('Data Entrega (NR Express)');
     const idxWhats = modalColunasAtuais.indexOf('Data Entrega (WhatsApp)');
     const dataDe = dataDeStr ? new Date(dataDeStr + 'T00:00:00') : null;
     const dataAte = dataAteStr ? new Date(dataAteStr + 'T00:00:00') : null;
     linhas = linhas.filter(l => {
-      const candidatas = [idxGFW, idxRTE, idxSSW, idxWhats]
+      const candidatas = [idxGFW, idxRTE, idxSSW, idxNR, idxWhats]
         .filter(idx => idx !== -1)
         .map(idx => parseDataBR(l[idx]))
         .filter(d => d !== null);
@@ -2947,7 +3047,7 @@ function baixarModalExcel() {
   exportarCSV(modalColunasAtuais, modalLinhasFiltradas, document.getElementById('modalTitulo').textContent);
 }
 
-const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)', 'Em Rota', 'Entregue (GFW)', 'Data Entrega (GFW)', 'Entregue (RTE)', 'Data Entrega (RTE)', 'Entregue (SSW)', 'Data Entrega (SSW)', 'Entregue (WhatsApp)', 'Data Entrega (WhatsApp)', 'Última Mensagem'];
+const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)', 'Em Rota', 'Entregue (GFW)', 'Data Entrega (GFW)', 'Entregue (RTE)', 'Data Entrega (RTE)', 'Entregue (SSW)', 'Data Entrega (SSW)', 'Entregue (NR Express)', 'Data Entrega (NR Express)', 'Entregue (WhatsApp)', 'Data Entrega (WhatsApp)', 'Última Mensagem'];
 
 let ultimoFiltroPedidos = null;
 
@@ -2982,6 +3082,7 @@ async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido
         p.entregueGFW ? 'Sim' : 'Não', fmtData(p.dataEntregaGFW),
         p.entregueRTE ? 'Sim' : 'Não', fmtData(p.dataEntregaRTE),
         p.entregueSSW ? 'Sim' : 'Não', p.dataEntregaSSW || '',
+        p.entregueNR ? 'Sim' : 'Não', p.dataEntregaNR || '',
         p.entregueWhats ? 'Sim' : 'Não', p.dataEntregaWhats || '',
         p.ultimaOcorrencia || ''
       ];
