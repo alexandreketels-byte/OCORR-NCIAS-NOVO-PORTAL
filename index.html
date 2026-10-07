@@ -1992,7 +1992,7 @@ async function importarRomaneioGFW() {
 
 // ---------- 📅 Previsões (NFs sem previsão que a transportadora já informou) ----------
 // Tela por cima do portal, igual ao Histórico. Os dados vêm calculados do servidor; o arquivo para o sistema da empresa é montado aqui.
-const pv = { dados: null, carregando: false, fonte: '', busca: '', baixa: true, semPrev: false };
+const pv = { dados: null, carregando: false, fonte: '', busca: '', baixa: true };
 const PV_CABECALHO = ['CNPJ/CPF Remetente', 'Remetente', 'CNPJ/CPF Destinatario', 'Destinatario', 'CTRC', 'Nota Fiscal/Nro Coleta', 'Nro Pedido', 'Data Inclusao', 'Cidade Destino', 'UF Destino', 'Unidade', 'Data/Hora da Ocorrencia', 'Situacao', 'Empresa', 'Detalhe', 'Data Entrega', 'Previsao de Entrega', 'CTe'];
 // NF com 6 dígitos = CNPJ 0012-23; NF com 4 dígitos = CNPJ 0011-42
 const PV_EMPRESAS = {
@@ -2050,8 +2050,7 @@ async function pvCarregar() {
 
 function pvItensFiltrados() {
   const d = pv.dados; if (!d) return [];
-  let lista = d.itens.slice();
-  if (pv.semPrev) lista = lista.concat(d.entreguesSemPrevisao);
+  let lista = d.itens.filter(i => pv.baixa || i.tipo !== 'baixa'); // sem "levar a baixa", as NFs que só têm baixa não têm o que lançar
   const q = semAcentoMin(pv.busca);
   return lista.filter(i => (!pv.fonte || i.fonte === pv.fonte) &&
     (!q || semAcentoMin([i.nf, i.pedido, i.cidade, i.transp, i.origem].join(' ')).indexOf(q) !== -1))
@@ -2062,7 +2061,6 @@ function pvChaveData(t) { const m = String(t || '').match(/^(\d{2})\/(\d{2})\/(\
 function pvControles() {
   pv.busca = document.getElementById('pvBusca').value;
   pv.baixa = document.getElementById('pvBaixa').checked;
-  pv.semPrev = document.getElementById('pvSemPrev').checked;
   const naBusca = document.activeElement && document.activeElement.id === 'pvBusca';
   const pos = document.getElementById('pvBusca').selectionStart;
   pvRender();
@@ -2076,11 +2074,12 @@ function pvRender() {
   const c = document.getElementById('pvConteudo'), kp = document.getElementById('pvKpis');
   if (d.vazio) { kp.innerHTML = ''; c.innerHTML = '<div class="hx-vazio">Ainda não há Pedidos Não Recebidos importados.</div>'; return; }
   const fmt = n => Number(n).toLocaleString('pt-BR');
-  const totalItens = d.itens.length, totalBaixa = d.itens.filter(i => i.entrega).length;
+  const tPrev = i => i.tipo === 'prev' || i.tipo === 'prevbaixa', tBaixa = i => i.tipo === 'baixa' || i.tipo === 'prevbaixa';
+  const todos = d.itens.filter(i => pv.baixa || i.tipo !== 'baixa');
   kp.innerHTML =
-    `<div class="hx-kpi"><div class="t">Previsões a lançar</div><div class="v">${fmt(totalItens)}</div><div class="s">${fmt(totalBaixa)} já com data de entrega (baixa)</div></div>` +
-    d.fontes.filter(f => f.pnrSemPrevisao > 0 || f.comPrevisao > 0).map(f =>
-      `<button type="button" class="hx-kpi pv-kpi${pv.fonte === f.fonte ? ' ativo' : ''}" onclick="pvFonte('${f.fonte}')" title="Clique para filtrar só ${escapeHtml(f.nome)}"><div class="t">${escapeHtml(f.nome)}</div><div class="v">${fmt(f.comPrevisao)}</div><div class="s">de ${fmt(f.pnrSemPrevisao)} sem previsão no Pedidos Não Recebidos</div></button>`).join('');
+    `<div class="hx-kpi"><div class="t">NFs no arquivo</div><div class="v">${fmt(todos.length)}</div><div class="s">${fmt(todos.filter(tPrev).length)} previsões novas · ${fmt(todos.filter(i => pv.baixa && tBaixa(i)).length)} baixas</div></div>` +
+    d.fontes.map(f => ({ f, l: todos.filter(i => i.fonte === f.fonte) })).filter(x => x.l.length > 0 || x.f.pnrSemPrevisao > 0).map(({ f, l }) =>
+      `<button type="button" class="hx-kpi pv-kpi${pv.fonte === f.fonte ? ' ativo' : ''}" onclick="pvFonte('${f.fonte}')" title="Clique para filtrar só ${escapeHtml(f.nome)}"><div class="t">${escapeHtml(f.nome)}</div><div class="v">${fmt(l.length)}</div><div class="s">${fmt(l.filter(tPrev).length)} previsões · ${fmt(l.filter(i => pv.baixa && tBaixa(i)).length)} baixas<br>(${fmt(f.pnrSemPrevisao)} sem previsão no Pedidos Não Recebidos)</div></button>`).join('');
 
   const itens = pvItensFiltrados();
   const { ignoradas } = pvMontarCsv(itens, pv.baixa);
@@ -2096,23 +2095,21 @@ function pvRender() {
   if (semBase.length) avisos.push(`<b>GFW</b>: ${fmt(semBase.length)} NFs sem agendamento ficaram de fora por não terem "Data Coleta" no Pedidos Não Recebidos.`);
   if (d.semFonte > 0) avisos.push(`${fmt(d.semFonte)} NFs sem previsão são de transportadoras sem arquivo de previsão (${Object.keys(d.semFonteNomes || {}).map(n => escapeHtml(n) + ': ' + d.semFonteNomes[n]).join(', ')}).`);
   if (ignoradas > 0) avisos.push(`<b>${fmt(ignoradas)} NFs não entram no arquivo</b> porque o número não tem 4 nem 6 dígitos (não sei qual CNPJ usar): ${itens.filter(i => !pvEmpresaDaNF(i.nf)).slice(0, 6).map(i => escapeHtml(i.nf)).join(', ')}${ignoradas > 6 ? '…' : ''}.`);
-  if (d.entreguesSemPrevisao.length && !pv.semPrev) avisos.push(`${fmt(d.entreguesSemPrevisao.length)} NFs já constam como entregues no arquivo da transportadora mas sem previsão (marque "Incluir entregues sem previsão" para listá-las; no arquivo a coluna de previsão fica vazia).`);
 
   const LIM = 500;
-  let h = '<div class="hx-secao"><h3>NFs com previsão a lançar</h3>' +
-    '<p class="hx-dica">Estão em Pedidos Não Recebidos <b>sem previsão</b> e a transportadora já informou a data. Depois de lançar no sistema da empresa e importar o novo Pedidos Não Recebidos, elas saem desta lista sozinhas.</p>' +
+  let h = '<div class="hx-secao"><h3>Previsões e baixas a lançar</h3>' +
+    '<p class="hx-dica"><b>Previsão</b>: NF sem previsão no Pedidos Não Recebidos e que a transportadora já informou a data. <b>Baixa</b>: NF que a transportadora já entregou e ainda está no Pedidos Não Recebidos (vai com a data de entrega; se já tinha previsão, ela segue igual). Depois de lançar no sistema da empresa e importar o novo Pedidos Não Recebidos, elas saem desta lista sozinhas.</p>' +
     '<div class="hx-conferir">' +
     `<input class="hx-campo" id="pvBusca" type="search" style="min-width:240px" placeholder="Buscar NF, pedido ou cidade…" value="${escapeHtml(pv.busca)}" oninput="pvControles()">` +
-    `<label class="hx-check" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pvBaixa" ${pv.baixa ? 'checked' : ''} onchange="pvControles()"> Levar a data de entrega (baixa) no arquivo</label>` +
-    `<label class="hx-check" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pvSemPrev" ${pv.semPrev ? 'checked' : ''} onchange="pvControles()"> Incluir entregues sem previsão</label>` +
+    `<label class="hx-check" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pvBaixa" ${pv.baixa ? 'checked' : ''} onchange="pvControles()"> Levar a baixa (data de entrega) no arquivo</label>` +
     `<button type="button" class="hx-chip ativo" onclick="pvBaixar()" ${itens.length ? '' : 'disabled'}>⬇ Baixar arquivo para lançar (${fmt(itens.length - ignoradas)} linhas)</button>` +
     (pv.fonte ? '<button type="button" class="hx-chip" onclick="pvFonte(pv.fonte)">✕ Limpar filtro de transportadora</button>' : '') + '</div>' +
-    '<div class="hx-wrap"><table class="hx-tab"><thead><tr><th style="text-align:left">Transportadora</th><th>NF</th><th style="text-align:left">Pedido</th><th style="text-align:left">Cidade</th><th>Previsão</th><th style="text-align:left">De onde vem</th><th>Entrega (baixa)</th><th style="text-align:left">Remetente</th></tr></thead><tbody>';
-  if (itens.length === 0) h += '<tr><td colspan="8" class="hx-vazio">Nenhuma previsão a lançar agora.</td></tr>';
+    '<div class="hx-wrap"><table class="hx-tab"><thead><tr><th style="text-align:left">Transportadora</th><th>NF</th><th style="text-align:left">Pedido</th><th style="text-align:left">Cidade</th><th>Previsão</th><th style="text-align:left">O que lançar</th><th style="text-align:left">De onde vem</th><th>Entrega (baixa)</th><th style="text-align:left">Remetente</th></tr></thead><tbody>';
+  if (itens.length === 0) h += '<tr><td colspan="9" class="hx-vazio">Nada a lançar agora.</td></tr>';
   itens.slice(0, LIM).forEach(i => {
     const e = pvEmpresaDaNF(i.nf);
     h += `<tr><td class="txt">${escapeHtml(i.transp)}</td><td>${escapeHtml(e ? e.nfArquivo : i.nf)}</td><td class="txt">${escapeHtml(i.pedido)}</td><td class="txt">${escapeHtml(i.cidade)}</td>` +
-      `<td>${i.previsao ? escapeHtml(i.previsao) : '—'}</td><td class="txt">${escapeHtml(i.origem || '—')}</td><td>${i.entrega ? escapeHtml(i.entrega) : '—'}</td><td class="txt">${e ? escapeHtml(e.cnpj.slice(-7)) : '<b style="color:var(--vermelho)">?</b>'}</td></tr>`;
+      `<td>${i.previsao ? escapeHtml(i.previsao) : '—'}</td><td class="txt">${({ prev: 'Previsão', prevbaixa: 'Previsão + baixa', baixa: 'Só baixa' })[i.tipo] || ''}</td><td class="txt">${escapeHtml(i.origem || '—')}</td><td>${i.entrega ? escapeHtml(i.entrega) : '—'}</td><td class="txt">${e ? escapeHtml(e.cnpj.slice(-7)) : '<b style="color:var(--vermelho)">?</b>'}</td></tr>`;
   });
   h += '</tbody></table></div>' + `<p class="hx-dica" style="margin-top:8px">${fmt(itens.length)} NFs${itens.length > LIM ? ` — a tela mostra as primeiras ${LIM}; o arquivo leva todas` : ''}. Remetente: NF de 6 dígitos = CNPJ …0012-23; NF de 4 dígitos = CNPJ …0011-42.</p></div>`;
   if (avisos.length) h += '<div class="hx-aviso alerta" style="margin-top:12px"><b>Atenção</b><ul style="margin:6px 0 0 18px;padding:0">' + avisos.map(a => `<li>${a}</li>`).join('') + '</ul></div>';
