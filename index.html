@@ -324,6 +324,9 @@
     .hx-modal { padding: 0; }
     .hx-modal-caixa { border-radius: 0; max-height: 100vh; height: 100vh; width: 100%; padding: 10px 12px; }
   }
+  .pv-kpi { text-align: left; cursor: pointer; font: inherit; color: inherit; }
+  .pv-kpi:hover { border-color: var(--destaque); }
+  .pv-kpi.ativo { background: var(--destaque-claro); outline: 2px solid var(--destaque); }
 </style>
 </head>
 <body>
@@ -360,7 +363,7 @@
       <button type="button" class="atalho-btn">Tecmar</button>
     </a>
   </div>
-  <div><button id="hxBtn" class="hx-abrir" type="button" onclick="hxAbrir()" title="Indicadores do passado: transportadoras por período, vendedores e estados">📈 Histórico</button></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap"><button id="hxBtn" class="hx-abrir" type="button" onclick="hxAbrir()" title="Indicadores do passado: transportadoras por período, vendedores e estados">📈 Histórico</button><button id="pvBtn" class="hx-abrir" type="button" onclick="pvAbrir()" title="Previsões de entrega a lançar no sistema da empresa (NFs sem previsão que a transportadora já informou)">📅 Previsões</button></div>
   <div style="display:flex;align-items:center;gap:10px">
     <span id="usuarioLogado" style="color:var(--cinza);font-size:0.9rem"></span>
     <button id="logoutBtn" onclick="fazerLogout()" type="button">Sair</button>
@@ -465,6 +468,26 @@
       <div class="progress-wrap" id="progressEstatOcorr"><div class="progress-bar" id="progressBarEstatOcorr"></div></div>
       <div class="status-line" id="statusEstatOcorr"></div>
       <div class="meta" id="metaEstatOcorr"></div>
+    </div>
+
+    <div class="card card-logo logo-gfw">
+      <h2>Importar Prazos GFW</h2>
+      <p class="desc">Planilha .xlsx com as colunas <b>cidade</b>, <b>uf</b> e <b>prazo</b> (dias úteis). Fica gravada no sistema e serve para calcular a previsão das NFs da GFW cuja entrega não está agendada no romaneio (alimenta 📅 Previsões). Cada importação substitui a tabela anterior.</p>
+      <input type="file" id="filePrazosGFW" accept=".xlsx,.xls">
+      <button id="btnPrazosGFW" onclick="importarPrazosGFW()">Importar</button>
+      <div class="progress-wrap" id="progressPrazosGFW"><div class="progress-bar" id="progressBarPrazosGFW"></div></div>
+      <div class="status-line" id="statusPrazosGFW"></div>
+      <div class="meta" id="metaPrazosGFW"></div>
+    </div>
+
+    <div class="card card-logo logo-gfw">
+      <h2>Importar Romaneio GFW</h2>
+      <p class="desc">Romaneio de entrega da GFW (.xlsx). Usa a coluna <b>N.F.</b> e a <b>OBS</b>: quando a OBS traz uma data (ex.: "ENTREGA LIBERADA PELO VENDEDOR PARA O DIA 14/10/2026") ela vira a previsão; quando não traz ("N/A ENTREGA NÃO AGENDADA") vale o prazo da GFW por cidade, em dias úteis. Os romaneios se acumulam (um novo atualiza as NFs que já estavam). Alimenta 📅 Previsões.</p>
+      <input type="file" id="fileRomaneioGFW" accept=".xlsx,.xls">
+      <button id="btnRomaneioGFW" onclick="importarRomaneioGFW()">Importar</button>
+      <div class="progress-wrap" id="progressRomaneioGFW"><div class="progress-bar" id="progressBarRomaneioGFW"></div></div>
+      <div class="status-line" id="statusRomaneioGFW"></div>
+      <div class="meta" id="metaRomaneioGFW"></div>
     </div>
 
     <div class="card card-logo logo-gfw">
@@ -664,6 +687,20 @@
         <tbody id="modalTabelaBody"></tbody>
       </table>
     </div>
+  </div>
+</div>
+
+<div id="pvView" class="hx-view" role="dialog" aria-label="Previsões" style="display:none">
+  <div class="hx-topo">
+    <h2>📅 Previsões<span class="hx-sub" id="pvSub"></span></h2>
+    <div class="hx-acoes">
+      <button type="button" class="hx-btn" id="pvAtualizar" onclick="pvCarregar()">↻ Atualizar</button>
+      <button type="button" class="hx-btn" onclick="pvFechar()">← Voltar ao portal</button>
+    </div>
+  </div>
+  <div class="hx-corpo">
+    <div class="hx-kpis" id="pvKpis"></div>
+    <div id="pvConteudo" style="margin-top:14px"></div>
   </div>
 </div>
 
@@ -1101,6 +1138,8 @@ function parseBaixaSSW(texto) {
   }
   if (iDH === -1) iDH = 11;
   if (iDE === -1) iDE = 15;
+  let iPV = cab.findIndex(h => h.startsWith('previsao')); // "Previsao de Entrega" (coluna Q)
+  if (iPV === -1) iPV = 16;
 
   const melhor = new Map(); let lidas = 0;
   for (let k = inicio; k < linhas.length; k++) {
@@ -1110,13 +1149,13 @@ function parseBaixaSSW(texto) {
     const situacao = (r[iSit] || '').trim();
     lidas++;
     const dh = dataHoraSSW(r[iDH]);
-    const item = { nf, situacao, dh, de: dataSSW(r[iDE]), entregue: semAcentoMin(situacao).includes('mercadoria entregue'), ts: timestampSSW(dh) };
+    const item = { nf, situacao, dh, de: dataSSW(r[iDE]), pv: dataSSW(r[iPV]), entregue: semAcentoMin(situacao).includes('mercadoria entregue'), ts: timestampSSW(dh) };
     // se a mesma NF aparecer mais de uma vez: vale a entregue; senão, a ocorrência mais recente
     const atual = melhor.get(nf);
     if (!atual || (item.entregue && !atual.entregue) || (item.entregue === atual.entregue && item.ts >= atual.ts)) melhor.set(nf, item);
   }
   if (melhor.size === 0) return { erro: 'Não reconheci as colunas da SSW (Nota Fiscal/Nro Coleta e Situacao) nesse arquivo — confira se é o relatório certo.' };
-  return { rows: Array.from(melhor.values()).map(i => [i.nf, i.situacao, i.dh, i.de]), lidas };
+  return { rows: Array.from(melhor.values()).map(i => [i.nf, i.situacao, i.dh, i.de, i.pv]), lidas };
 }
 
 async function importarBaixaSSW() {
@@ -1180,6 +1219,7 @@ function parseBaixaNR(texto) {
     inicio = /^\s*\d+\s*[\/\s]+\s*\d+\s*$/.test(linhas[0][1] || '') ? 0 : 1;
   }
   if (iEnt === -1) iEnt = 7;
+  const iPV = cab.findIndex(h => h.includes('previsao')); // coluna de previsão de entrega (se o relatório tiver; -1 = sem previsão)
 
   const melhor = new Map(); let lidas = 0;
   for (let k = inicio; k < linhas.length; k++) {
@@ -1189,13 +1229,13 @@ function parseBaixaNR(texto) {
     const situacao = (r[iSit] || '').trim(); const sit = semAcentoMin(situacao);
     lidas++;
     const prioridade = /^entregue\b/.test(sit) ? 2 : (sit.includes('saiu para entrega') ? 1 : 0);
-    const item = { nf, situacao, de: dataBRDeISOouBR(r[iEnt]), prioridade };
+    const item = { nf, situacao, de: dataBRDeISOouBR(r[iEnt]), pv: iPV === -1 ? '' : dataBRDeISOouBR(r[iPV]), prioridade };
     // se a mesma NF aparecer mais de uma vez: vale a entregue; depois a "saiu para entrega"; a mais abaixo no arquivo desempata
     const atual = melhor.get(nf);
     if (!atual || item.prioridade >= atual.prioridade) melhor.set(nf, item);
   }
   if (melhor.size === 0) return { erro: 'Não reconheci as colunas da NR Express (notaFiscal e situacao) nesse arquivo — confira se é o relatório certo.' };
-  return { rows: Array.from(melhor.values()).map(i => [i.nf, i.situacao, i.de]), lidas };
+  return { rows: Array.from(melhor.values()).map(i => [i.nf, i.situacao, i.de, i.pv]), lidas };
 }
 
 async function importarBaixaNR() {
@@ -1236,6 +1276,8 @@ function parseBaixaTecmar(texto) {
     inicio = /^\s*\d+\s*$/.test(linhas[0][0] || '') ? 0 : 1;
   }
   if (iEnt === -1) iEnt = 4;
+  let iPV = cab.findIndex(h => h.startsWith('prev')); // "Prev. Entrega" (coluna D)
+  if (iPV === -1) iPV = 3;
 
   const melhor = new Map(); let lidas = 0;
   for (let k = inicio; k < linhas.length; k++) {
@@ -1247,13 +1289,13 @@ function parseBaixaTecmar(texto) {
     const sit = semAcentoMin(situacao);
     lidas++;
     const prioridade = /^entregue\b/.test(sit) ? 2 : (/^em entrega\b/.test(sit) ? 1 : 0);
-    const item = { nf, situacao, de: dataBRDeISOouBR(r[iEnt]), prioridade };
+    const item = { nf, situacao, de: dataBRDeISOouBR(r[iEnt]), pv: dataBRDeISOouBR(r[iPV]), prioridade };
     // se a mesma NF aparecer mais de uma vez: vale a entregue; depois a "em entrega"; a mais abaixo no arquivo desempata
     const atual = melhor.get(nf);
     if (!atual || item.prioridade >= atual.prioridade) melhor.set(nf, item);
   }
   if (melhor.size === 0) return { erro: 'Não reconheci as colunas da Tecmar (Nota e Status) nesse arquivo — confira se é o relatório certo.' };
-  return { rows: Array.from(melhor.values()).map(i => [i.nf, i.situacao, i.de]), lidas };
+  return { rows: Array.from(melhor.values()).map(i => [i.nf, i.situacao, i.de, i.pv]), lidas };
 }
 
 async function importarBaixaTecmar() {
@@ -1858,6 +1900,235 @@ function hxHtmlOcorDim(rows, D) {
   h += '</tbody></table></div>' + (corte ? `<p class="hx-dica" style="margin-top:8px">Mostrando os primeiros ${LIM} de ${hxFmtN(lista.length)} ${D.plural} — use a busca para refinar.</p>` : `<p class="hx-dica" style="margin-top:8px">${hxFmtN(lista.length)} ${D.plural}.</p>`) +
     '<p class="hx-dica">Atenção: só entram pedidos entregues (com data de recebimento) e dentro do período da estatística, conforme os filtros acima. Pedidos sem nenhuma ocorrência na estatística aparecem em “Entregas” mas não em “Com ocorrência”.</p></div>';
   return h;
+}
+
+// ---------- Importação: Prazos GFW e Romaneio GFW (.xlsx) — base da tela 📅 Previsões ----------
+const letrasMin = h => semAcentoMin(h).replace(/[^a-z]/g, '');
+
+// Planilha "cidade | uf | prazo". Só usa cidade e prazo (a coluna uf não é confiável: a capital vem como "SP CAPITAL").
+function parsePrazosGFW(aoa) {
+  const h = aoa.findIndex(r => r.some(c => letrasMin(c) === 'cidade') && r.some(c => letrasMin(c) === 'prazo'));
+  if (h === -1) return { erro: 'Não achei as colunas "cidade" e "prazo" na primeira aba desse arquivo — confira se é a planilha de prazos da GFW.' };
+  const iC = aoa[h].findIndex(c => letrasMin(c) === 'cidade'), iP = aoa[h].findIndex(c => letrasMin(c) === 'prazo');
+  const rows = []; let ignoradas = 0;
+  for (let k = h + 1; k < aoa.length; k++) {
+    const cid = String(aoa[k][iC] === undefined ? '' : aoa[k][iC]).trim();
+    const pz = String(aoa[k][iP] === undefined ? '' : aoa[k][iP]).trim();
+    if (!cid) continue;
+    if (!/^\d+$/.test(pz)) { ignoradas++; continue; }
+    rows.push([cid, Number(pz)]);
+  }
+  if (rows.length === 0) return { erro: 'Nenhuma cidade com prazo numérico (em dias úteis) nesse arquivo.' };
+  return { rows, ignoradas };
+}
+
+// dd/mm/aaaa dentro de um texto ("ENTREGA LIBERADA ... PARA O DIA 14/10/2026 EM HORARIO COMERCIAL") -> "14/10/2026" ('' se não houver data válida)
+function dataNoTextoRomaneio(t) {
+  const m = String(t === null || t === undefined ? '' : t).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!m) return '';
+  const d = +m[1], mo = +m[2], a = +m[3];
+  const dt = new Date(Date.UTC(a, mo - 1, d));
+  if (dt.getUTCFullYear() !== a || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return '';
+  return String(d).padStart(2, '0') + '/' + String(mo).padStart(2, '0') + '/' + a;
+}
+
+// Romaneio da GFW: linha com NF numérica na coluna "N.F." (as linhas de produto logo abaixo e o rodapé são ignorados)
+function parseRomaneioGFW(aoa) {
+  const h = aoa.findIndex(r => r.some(c => letrasMin(c) === 'nf') && r.some(c => letrasMin(c) === 'pedido') && r.some(c => letrasMin(c) === 'obs'));
+  if (h === -1) return { erro: 'Não reconheci o romaneio (colunas N.F., PEDIDO e OBS) — confira se é o romaneio da GFW.' };
+  const col = n => aoa[h].findIndex(c => letrasMin(c) === n);
+  const iNF = col('nf'), iPed = col('pedido'), iCid = col('cidade'), iObs = col('obs');
+  const rows = []; let comData = 0;
+  for (let k = h + 1; k < aoa.length; k++) {
+    const r = aoa[k]; const nf = String(r[iNF] === undefined ? '' : r[iNF]).trim();
+    if (!/^\d+$/.test(nf)) continue;
+    const data = dataNoTextoRomaneio(r[iObs]); if (data) comData++;
+    rows.push([nf, String(r[iPed] || '').trim(), iCid === -1 ? '' : String(r[iCid] || '').trim(), data]);
+  }
+  if (rows.length === 0) return { erro: 'Não achei nenhuma NF nesse romaneio.' };
+  return { rows, comData, semData: rows.length - comData };
+}
+
+async function lerPlanilhaXlsx(file) {
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+  return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: '' });
+}
+
+async function importarPrazosGFW() {
+  const file = document.getElementById('filePrazosGFW').files[0];
+  if (!file) { alert('Selecione a planilha de prazos da GFW (.xlsx) primeiro.'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
+  setStatus('statusPrazosGFW', 'Lendo arquivo...', 'carregando');
+  toggleBtn('btnPrazosGFW', true);
+  try {
+    const lido = parsePrazosGFW(await lerPlanilhaXlsx(file));
+    if (lido.erro) { setStatus('statusPrazosGFW', lido.erro + ' Nada foi importado; os prazos atuais continuam intactos.', 'erro'); return; }
+    await enviarEmLotes(lido.rows, 'importPrazosGFW', 'statusPrazosGFW', 'progressPrazosGFW', 'progressBarPrazosGFW');
+    pv.dados = null;
+  } catch (err) {
+    setStatus('statusPrazosGFW', 'Erro ao ler o arquivo: ' + err.message, 'erro');
+  } finally {
+    toggleBtn('btnPrazosGFW', false);
+  }
+}
+
+async function importarRomaneioGFW() {
+  const file = document.getElementById('fileRomaneioGFW').files[0];
+  if (!file) { alert('Selecione o romaneio da GFW (.xlsx) primeiro.'); return; }
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
+  setStatus('statusRomaneioGFW', 'Lendo arquivo...', 'carregando');
+  toggleBtn('btnRomaneioGFW', true);
+  try {
+    const lido = parseRomaneioGFW(await lerPlanilhaXlsx(file));
+    if (lido.erro) { setStatus('statusRomaneioGFW', lido.erro + ' Nada foi importado.', 'erro'); return; }
+    await enviarEmLotes(lido.rows, 'importRomaneioGFW', 'statusRomaneioGFW', 'progressRomaneioGFW', 'progressBarRomaneioGFW');
+    pv.dados = null;
+  } catch (err) {
+    setStatus('statusRomaneioGFW', 'Erro ao ler o arquivo: ' + err.message, 'erro');
+  } finally {
+    toggleBtn('btnRomaneioGFW', false);
+  }
+}
+
+// ---------- 📅 Previsões (NFs sem previsão que a transportadora já informou) ----------
+// Tela por cima do portal, igual ao Histórico. Os dados vêm calculados do servidor; o arquivo para o sistema da empresa é montado aqui.
+const pv = { dados: null, carregando: false, fonte: '', busca: '', baixa: true, semPrev: false };
+const PV_CABECALHO = ['CNPJ/CPF Remetente', 'Remetente', 'CNPJ/CPF Destinatario', 'Destinatario', 'CTRC', 'Nota Fiscal/Nro Coleta', 'Nro Pedido', 'Data Inclusao', 'Cidade Destino', 'UF Destino', 'Unidade', 'Data/Hora da Ocorrencia', 'Situacao', 'Empresa', 'Detalhe', 'Data Entrega', 'Previsao de Entrega', 'CTe'];
+// NF com 6 dígitos = CNPJ 0012-23; NF com 4 dígitos = CNPJ 0011-42
+const PV_EMPRESAS = {
+  6: { cnpj: '23.209.013/0012-23', nome: 'Dis Comercio De Eletrodomesticos Eireli' },
+  4: { cnpj: '23.209.013/0011-42', nome: 'Dis Comercio De Eletrodomesticos S.A' }
+};
+function pvEmpresaDaNF(nf) {
+  const d = String(nf === null || nf === undefined ? '' : nf).replace(/\D/g, '').replace(/^0+/, '');
+  const e = PV_EMPRESAS[d.length];
+  return e ? { cnpj: e.cnpj, nome: e.nome, nfArquivo: '1 ' + d.padStart(6, '0') } : null; // "1 " + NF (a SSW usa 6 posições: 1 003558)
+}
+// Uma linha do arquivo (18 colunas, no layout do "formato do arquivo para previsões")
+function pvLinhaCsv(item, incluirBaixa) {
+  const e = pvEmpresaDaNF(item.nf); if (!e) return null;
+  const c = new Array(18).fill('');
+  c[0] = e.cnpj; c[1] = e.nome; c[5] = e.nfArquivo;
+  c[12] = 'MERCADORIA ENTREGUE'; c[14] = 'MERCADORIA AGENDADA'; // iguais ao arquivo-modelo
+  c[15] = incluirBaixa ? (item.entrega || '') : '';           // P: data de entrega (baixa)
+  c[16] = item.previsao || '';                                // Q: previsão de entrega
+  return c.join(';');
+}
+function pvMontarCsv(itens, incluirBaixa) {
+  const linhas = [PV_CABECALHO.join(';')]; let ignoradas = 0;
+  itens.forEach(it => { const l = pvLinhaCsv(it, incluirBaixa); if (l === null) ignoradas++; else linhas.push(l); });
+  return { csv: linhas.join('\r\n') + '\r\n', ignoradas, linhas: linhas.length - 1 };
+}
+
+function pvAbrir() {
+  document.getElementById('pvView').style.display = 'block';
+  document.body.style.overflow = 'hidden';
+  if (!pv.dados && !pv.carregando) pvCarregar(); else pvRender();
+}
+function pvFechar() {
+  document.getElementById('pvView').style.display = 'none';
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && document.getElementById('pvView').style.display === 'block') pvFechar();
+});
+
+async function pvCarregar() {
+  pv.carregando = true;
+  document.getElementById('pvAtualizar').disabled = true;
+  document.getElementById('pvConteudo').innerHTML = '<div class="hx-vazio">Procurando previsões a lançar…</div>';
+  const r = await buscarJsonComRetry(API_URL, 2, { action: 'reconstruirPrevisoes' });
+  pv.carregando = false;
+  document.getElementById('pvAtualizar').disabled = false;
+  if (!r.ok) {
+    document.getElementById('pvConteudo').innerHTML = `<div class="hx-vazio">Não consegui carregar as previsões: ${escapeHtml(r.erro || 'erro')}.<br>Se acabou de colar o Code.gs novo, confira se criou uma nova versão da implantação.<br><br><button type="button" class="hx-chip" onclick="pvCarregar()">Tentar de novo</button></div>`;
+    return;
+  }
+  pv.dados = r.dados;
+  pvRender();
+}
+
+function pvItensFiltrados() {
+  const d = pv.dados; if (!d) return [];
+  let lista = d.itens.slice();
+  if (pv.semPrev) lista = lista.concat(d.entreguesSemPrevisao);
+  const q = semAcentoMin(pv.busca);
+  return lista.filter(i => (!pv.fonte || i.fonte === pv.fonte) &&
+    (!q || semAcentoMin([i.nf, i.pedido, i.cidade, i.transp, i.origem].join(' ')).indexOf(q) !== -1))
+    .sort((a, b) => a.fonte.localeCompare(b.fonte) || (pvChaveData(a.previsao) - pvChaveData(b.previsao)) || a.nf.localeCompare(b.nf, undefined, { numeric: true }));
+}
+function pvChaveData(t) { const m = String(t || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return m ? +(m[3] + m[2] + m[1]) : 99999999; }
+
+function pvControles() {
+  pv.busca = document.getElementById('pvBusca').value;
+  pv.baixa = document.getElementById('pvBaixa').checked;
+  pv.semPrev = document.getElementById('pvSemPrev').checked;
+  const naBusca = document.activeElement && document.activeElement.id === 'pvBusca';
+  const pos = document.getElementById('pvBusca').selectionStart;
+  pvRender();
+  if (naBusca) { const c = document.getElementById('pvBusca'); c.focus(); try { c.setSelectionRange(pos, pos); } catch (e) { /* ok */ } }
+}
+function pvFonte(f) { pv.fonte = pv.fonte === f ? '' : f; pvRender(); }
+
+function pvRender() {
+  const d = pv.dados; if (!d) return;
+  document.getElementById('pvSub').textContent = `Atualizado em ${d.geradoEm}`;
+  const c = document.getElementById('pvConteudo'), kp = document.getElementById('pvKpis');
+  if (d.vazio) { kp.innerHTML = ''; c.innerHTML = '<div class="hx-vazio">Ainda não há Pedidos Não Recebidos importados.</div>'; return; }
+  const fmt = n => Number(n).toLocaleString('pt-BR');
+  const totalItens = d.itens.length, totalBaixa = d.itens.filter(i => i.entrega).length;
+  kp.innerHTML =
+    `<div class="hx-kpi"><div class="t">Previsões a lançar</div><div class="v">${fmt(totalItens)}</div><div class="s">${fmt(totalBaixa)} já com data de entrega (baixa)</div></div>` +
+    d.fontes.filter(f => f.pnrSemPrevisao > 0 || f.comPrevisao > 0).map(f =>
+      `<button type="button" class="hx-kpi pv-kpi${pv.fonte === f.fonte ? ' ativo' : ''}" onclick="pvFonte('${f.fonte}')" title="Clique para filtrar só ${escapeHtml(f.nome)}"><div class="t">${escapeHtml(f.nome)}</div><div class="v">${fmt(f.comPrevisao)}</div><div class="s">de ${fmt(f.pnrSemPrevisao)} sem previsão no Pedidos Não Recebidos</div></button>`).join('');
+
+  const itens = pvItensFiltrados();
+  const { ignoradas } = pvMontarCsv(itens, pv.baixa);
+  const avisos = [];
+  d.fontes.forEach(f => {
+    if (f.semPrevisaoNaPlanilha > 0) avisos.push(`<b>${escapeHtml(f.nome)}</b>: ${fmt(f.semPrevisaoNaPlanilha)} NFs sem previsão estão no arquivo importado, mas o arquivo não traz data de previsão para elas.`);
+    if (f.foraDoArquivo > 0) avisos.push(f.fonte === 'GFW'
+      ? `<b>GFW</b>: ${fmt(f.foraDoArquivo)} NFs sem previsão não estão em nenhum romaneio importado (importe o romaneio para prever).`
+      : `<b>${escapeHtml(f.nome)}</b>: ${fmt(f.foraDoArquivo)} NFs sem previsão não aparecem no arquivo importado da transportadora (importe o arquivo mais recente).`);
+  });
+  const semPrazo = d.avisos.filter(a => a.tipo === 'semPrazo'), semBase = d.avisos.filter(a => a.tipo === 'semBase');
+  if (semPrazo.length) avisos.push(`<b>GFW</b>: ${fmt(semPrazo.length)} NFs sem agendamento ficaram de fora porque a cidade não tem prazo cadastrado (${semPrazo.slice(0, 5).map(a => escapeHtml(a.cidade) + ' · NF ' + escapeHtml(a.nf)).join('; ')}${semPrazo.length > 5 ? '…' : ''}). Atualize a planilha de Prazos GFW.`);
+  if (semBase.length) avisos.push(`<b>GFW</b>: ${fmt(semBase.length)} NFs sem agendamento ficaram de fora por não terem "Data Coleta" no Pedidos Não Recebidos.`);
+  if (d.semFonte > 0) avisos.push(`${fmt(d.semFonte)} NFs sem previsão são de transportadoras sem arquivo de previsão (${Object.keys(d.semFonteNomes || {}).map(n => escapeHtml(n) + ': ' + d.semFonteNomes[n]).join(', ')}).`);
+  if (ignoradas > 0) avisos.push(`<b>${fmt(ignoradas)} NFs não entram no arquivo</b> porque o número não tem 4 nem 6 dígitos (não sei qual CNPJ usar): ${itens.filter(i => !pvEmpresaDaNF(i.nf)).slice(0, 6).map(i => escapeHtml(i.nf)).join(', ')}${ignoradas > 6 ? '…' : ''}.`);
+  if (d.entreguesSemPrevisao.length && !pv.semPrev) avisos.push(`${fmt(d.entreguesSemPrevisao.length)} NFs já constam como entregues no arquivo da transportadora mas sem previsão (marque "Incluir entregues sem previsão" para listá-las; no arquivo a coluna de previsão fica vazia).`);
+
+  const LIM = 500;
+  let h = '<div class="hx-secao"><h3>NFs com previsão a lançar</h3>' +
+    '<p class="hx-dica">Estão em Pedidos Não Recebidos <b>sem previsão</b> e a transportadora já informou a data. Depois de lançar no sistema da empresa e importar o novo Pedidos Não Recebidos, elas saem desta lista sozinhas.</p>' +
+    '<div class="hx-conferir">' +
+    `<input class="hx-campo" id="pvBusca" type="search" style="min-width:240px" placeholder="Buscar NF, pedido ou cidade…" value="${escapeHtml(pv.busca)}" oninput="pvControles()">` +
+    `<label class="hx-check" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pvBaixa" ${pv.baixa ? 'checked' : ''} onchange="pvControles()"> Levar a data de entrega (baixa) no arquivo</label>` +
+    `<label class="hx-check" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pvSemPrev" ${pv.semPrev ? 'checked' : ''} onchange="pvControles()"> Incluir entregues sem previsão</label>` +
+    `<button type="button" class="hx-chip ativo" onclick="pvBaixar()" ${itens.length ? '' : 'disabled'}>⬇ Baixar arquivo para lançar (${fmt(itens.length - ignoradas)} linhas)</button>` +
+    (pv.fonte ? '<button type="button" class="hx-chip" onclick="pvFonte(pv.fonte)">✕ Limpar filtro de transportadora</button>' : '') + '</div>' +
+    '<div class="hx-wrap"><table class="hx-tab"><thead><tr><th style="text-align:left">Transportadora</th><th>NF</th><th style="text-align:left">Pedido</th><th style="text-align:left">Cidade</th><th>Previsão</th><th style="text-align:left">De onde vem</th><th>Entrega (baixa)</th><th style="text-align:left">Remetente</th></tr></thead><tbody>';
+  if (itens.length === 0) h += '<tr><td colspan="8" class="hx-vazio">Nenhuma previsão a lançar agora.</td></tr>';
+  itens.slice(0, LIM).forEach(i => {
+    const e = pvEmpresaDaNF(i.nf);
+    h += `<tr><td class="txt">${escapeHtml(i.transp)}</td><td>${escapeHtml(e ? e.nfArquivo : i.nf)}</td><td class="txt">${escapeHtml(i.pedido)}</td><td class="txt">${escapeHtml(i.cidade)}</td>` +
+      `<td>${i.previsao ? escapeHtml(i.previsao) : '—'}</td><td class="txt">${escapeHtml(i.origem || '—')}</td><td>${i.entrega ? escapeHtml(i.entrega) : '—'}</td><td class="txt">${e ? escapeHtml(e.cnpj.slice(-7)) : '<b style="color:var(--vermelho)">?</b>'}</td></tr>`;
+  });
+  h += '</tbody></table></div>' + `<p class="hx-dica" style="margin-top:8px">${fmt(itens.length)} NFs${itens.length > LIM ? ` — a tela mostra as primeiras ${LIM}; o arquivo leva todas` : ''}. Remetente: NF de 6 dígitos = CNPJ …0012-23; NF de 4 dígitos = CNPJ …0011-42.</p></div>`;
+  if (avisos.length) h += '<div class="hx-aviso alerta" style="margin-top:12px"><b>Atenção</b><ul style="margin:6px 0 0 18px;padding:0">' + avisos.map(a => `<li>${a}</li>`).join('') + '</ul></div>';
+  c.innerHTML = h;
+}
+
+function pvBaixar() {
+  const itens = pvItensFiltrados(); if (!itens.length) return;
+  const { csv, linhas } = pvMontarCsv(itens, pv.baixa);
+  if (linhas === 0) { alert('Nenhuma NF com 4 ou 6 dígitos para gerar o arquivo.'); return; }
+  const a = document.createElement('a');
+  const hoje = new Date();
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `previsoes-${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 // ---------- Entregas GFW WhatsApp (exportação .md da conversa) ----------
@@ -3241,7 +3512,7 @@ async function restaurarTratativasSalvas() {
 // arquivo errado for colado e nenhuma linha for reconhecida, mandar um
 // lote vazio apagaria os dados atuais sem colocar nada no lugar. Por isso
 // nem chega a enviar nesse caso.
-const ACOES_QUE_SUBSTITUEM = ['importPedidosNaoRecebidos', 'importBaixaEntregaGFW', 'importBaixaEntregaRTE', 'importBaixaEntregaSSW', 'importBaixaEntregaNR', 'importBaixaEntregaTecmar', 'importEmRotaGFW'];
+const ACOES_QUE_SUBSTITUEM = ['importPedidosNaoRecebidos', 'importBaixaEntregaGFW', 'importBaixaEntregaRTE', 'importBaixaEntregaSSW', 'importBaixaEntregaNR', 'importBaixaEntregaTecmar', 'importEmRotaGFW', 'importPrazosGFW'];
 
 async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBarId) {
   if (rows.length === 0) {
@@ -3316,6 +3587,12 @@ async function enviarEmLotes(rows, action, statusId, progressWrapId, progressBar
     const r = ultimoResultado && ultimoResultado.resumo;
     setStatus(statusId, `Importação concluída: ${totalNovos} pedidos novos e ${totalAtualizados} que já existiam (atualizados).` +
       (r ? ` Base agora: ${r.pedidos} pedidos; período coberto: ${(r.cobertura || []).join(' e ') || '—'}. Abra 📈 Histórico para ver.` : ''), 'ok');
+  } else if (action === 'importPrazosGFW') {
+    setStatus(statusId, `Importação concluída: ${rows.length} cidades com prazo (dias úteis). A tabela anterior foi substituída.`, 'ok');
+  } else if (action === 'importRomaneioGFW') {
+    const r = ultimoResultado && ultimoResultado.resumo;
+    setStatus(statusId, `Importação concluída: ${totalNovos} NFs novas e ${totalAtualizados} que já estavam (atualizadas).` +
+      (r ? ` Base do romaneio: ${r.total} NFs (${r.comData} com data agendada, ${r.semData} sem agendamento → vale o prazo da GFW). Abra 📅 Previsões para ver.` : ''), 'ok');
   } else if (action === 'importEntregasWhatsApp') {
     setStatus(statusId, `Importação concluída: ${rows.length} NFs lidas (${totalNovos} novas, ${totalAtualizados} já conhecidas). ${totalCasaram} constam em Pedidos Não Recebidos (já entregues); ${rows.length - totalCasaram} não constam (notas de outros clientes ou pedidos que já saíram da lista).`, 'ok');
   } else {
@@ -3524,6 +3801,14 @@ function renderMeta(status) {
   if (status.EstatisticaOcorrencias) {
     document.getElementById('metaEstatOcorr').textContent =
       `Última importação: ${new Date(status.EstatisticaOcorrencias.ultimaImportacao).toLocaleString('pt-BR')} (${status.EstatisticaOcorrencias.totalLinhas} pedidos)`;
+  }
+  if (status.PrazosGFW) {
+    document.getElementById('metaPrazosGFW').textContent =
+      `Última importação: ${new Date(status.PrazosGFW.ultimaImportacao).toLocaleString('pt-BR')} (${status.PrazosGFW.totalLinhas} cidades)`;
+  }
+  if (status.RomaneioGFW) {
+    document.getElementById('metaRomaneioGFW').textContent =
+      `Última importação: ${new Date(status.RomaneioGFW.ultimaImportacao).toLocaleString('pt-BR')} (${status.RomaneioGFW.totalLinhas} NFs guardadas)`;
   }
   if (status.EmRotaGFW) {
     document.getElementById('metaEmRotaGFW').textContent =
