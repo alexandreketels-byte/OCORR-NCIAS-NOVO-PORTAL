@@ -1567,7 +1567,7 @@ function hxRenderAviso(rows) {
   if (hxPorPrev()) {
     const semPrev = d.rows.filter(r => !r[9] && !r[6]).length, pend = d.rows.filter(r => r[9]).length;
     html += ` <b>Modo “por previsão”:</b> o mês é o da previsão de entrega. ${hxFmtN(semPrev)} entregas sem previsão ficam de fora (não há mês para elas).` +
-      (hx.f.pend ? ` Estão somados ${hxFmtN(pend)} pedidos com previsão vencida que ainda não foram recebidos — contam como atraso conforme a regra de sempre.` : ' Os pedidos vencidos e ainda não recebidos NÃO estão somados (caixa desmarcada) — isso deixa as transportadoras com números melhores do que são.');
+      (hx.f.pend ? ` Estão somados ${hxFmtN(pend)} pedidos com previsão vencida que ainda não foram recebidos — contam como atraso conforme a regra de sempre.` + (d.pendentesSemTabela ? ` Destes, ${hxFmtN(d.pendentesSemTabela)} ainda não estão na Tabela Dinâmica importada, por isso aparecem sem vendedor e com UF “??” (importe a Tabela Dinâmica mais recente para preencher).` : '') : ' Os pedidos vencidos e ainda não recebidos NÃO estão somados (caixa desmarcada) — isso deixa as transportadoras com números melhores do que são.');
   }
   el.innerHTML = html;
 }
