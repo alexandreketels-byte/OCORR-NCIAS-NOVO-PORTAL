@@ -2027,7 +2027,7 @@ async function importarRomaneioGFW() {
 
 // ---------- 📅 Previsões (NFs sem previsão que a transportadora já informou) ----------
 // Tela por cima do portal, igual ao Histórico. Os dados vêm calculados do servidor; o arquivo para o sistema da empresa é montado aqui.
-const pv = { dados: null, carregando: false, fonte: '', busca: '', baixa: true };
+const pv = { dados: null, carregando: false, fonte: '', busca: '', baixa: true, sel: {}, coletaData: '', msg: '', salvando: false };
 const PV_CABECALHO = ['CNPJ/CPF Remetente', 'Remetente', 'CNPJ/CPF Destinatario', 'Destinatario', 'CTRC', 'Nota Fiscal/Nro Coleta', 'Nro Pedido', 'Data Inclusao', 'Cidade Destino', 'UF Destino', 'Unidade', 'Data/Hora da Ocorrencia', 'Situacao', 'Empresa', 'Detalhe', 'Data Entrega', 'Previsao de Entrega', 'CTe'];
 // NF com 6 dígitos = CNPJ 0012-23; NF com 4 dígitos = CNPJ 0011-42
 const PV_EMPRESAS = {
@@ -2080,6 +2080,8 @@ async function pvCarregar() {
     return;
   }
   pv.dados = r.dados;
+  const aindaEditaveis = {}; (pv.dados.itens || []).forEach(i => { if (i.ajustaColeta && pv.sel[i.nf]) aindaEditaveis[i.nf] = true; });
+  pv.sel = aindaEditaveis;
   pvRender();
 }
 
@@ -2102,6 +2104,61 @@ function pvControles() {
   if (naBusca) { const c = document.getElementById('pvBusca'); c.focus(); try { c.setSelectionRange(pos, pos); } catch (e) { /* ok */ } }
 }
 function pvFonte(f) { pv.fonte = pv.fonte === f ? '' : f; pvRender(); }
+
+// ---- coleta da GFW corrigida à mão (quadradinhos) ----
+const pvEditaveis = () => pvItensFiltrados().filter(i => i.ajustaColeta);
+function pvDataBR(iso) { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; }
+function pvBarraHtml() {
+  const n = Object.keys(pv.sel).length, hojeIso = new Date().toISOString().slice(0, 10);
+  return `<div class="hx-conferir" id="pvBarraColeta" style="margin-top:10px;padding:10px 12px;border:1px dashed var(--borda);border-radius:8px">` +
+    `<span style="font-size:.84rem"><b>GFW — coleta diferente do sistema?</b> Marque as NFs na coluna <b>Coleta</b>, informe o dia em que a mercadoria realmente saiu e aplique: a previsão é recalculada a partir dessa data.</span>` +
+    `<label>Data real da coleta<input type="date" id="pvColetaData" class="hx-campo" max="${hojeIso}" value="${escapeHtml(pv.coletaData)}" oninput="pv.coletaData=this.value;pvBarraAtualizar()"></label>` +
+    `<button type="button" class="hx-chip ativo" id="pvBtnAplicar" onclick="pvAplicarColeta(false)"></button>` +
+    `<button type="button" class="hx-chip" id="pvBtnRemover" onclick="pvAplicarColeta(true)" title="Apaga a correção e volta a usar a Data Coleta do sistema"></button>` +
+    `<button type="button" class="hx-chip" id="pvBtnLimpar" onclick="pvSelLimpar()">Desmarcar tudo</button>` +
+    `<span id="pvMsgColeta" role="status" style="font-size:.84rem;font-weight:700">${escapeHtml(pv.msg)}</span></div>`;
+}
+function pvBarraAtualizar() {
+  const b = document.getElementById('pvBtnAplicar'); if (!b) return;
+  const n = Object.keys(pv.sel).length, ok = n > 0 && !pv.salvando;
+  b.textContent = `Aplicar a ${n} marcada${n === 1 ? '' : 's'}`; b.disabled = !(ok && pv.coletaData);
+  const r = document.getElementById('pvBtnRemover'); r.textContent = `Voltar ${n === 1 ? 'a marcada' : 'as ' + n + ' marcadas'} à data do sistema`; r.disabled = !ok;
+  document.getElementById('pvBtnLimpar').disabled = n === 0;
+  const todos = document.getElementById('pvSelTodos');
+  if (todos) { const ed = pvEditaveis(); const marc = ed.filter(i => pv.sel[i.nf]).length; todos.checked = ed.length > 0 && marc === ed.length; todos.indeterminate = marc > 0 && marc < ed.length; }
+}
+function pvSel(nf, marcado) { if (marcado) pv.sel[nf] = true; else delete pv.sel[nf]; pv.msg = ''; const m = document.getElementById('pvMsgColeta'); if (m) m.textContent = ''; pvBarraAtualizar(); }
+function pvSelTodos(marcado) {
+  pvEditaveis().forEach(i => { if (marcado) pv.sel[i.nf] = true; else delete pv.sel[i.nf]; });
+  document.querySelectorAll('#pvConteudo input.pv-chk').forEach(c => { c.checked = !!pv.sel[c.dataset.nf]; });
+  pvBarraAtualizar();
+}
+function pvSelLimpar() { pv.sel = {}; document.querySelectorAll('#pvConteudo input.pv-chk').forEach(c => { c.checked = false; }); pvBarraAtualizar(); }
+async function pvAplicarColeta(remover) {
+  const nfs = Object.keys(pv.sel); if (!nfs.length || pv.salvando) return;
+  const coleta = remover ? '' : pvDataBR(pv.coletaData);
+  if (!remover) {
+    if (!coleta) { alert('Informe a data real da coleta.'); return; }
+    if (pv.coletaData > new Date().toISOString().slice(0, 10)) { alert('A data de coleta não pode ser futura.'); return; }
+  }
+  pv.salvando = true; pv.msg = 'Salvando…'; pvBarraAtualizar(); document.getElementById('pvMsgColeta').textContent = pv.msg;
+  const r = await buscarJsonComRetry(API_URL, 1, { action: 'salvarColetaManualGFW', nfs, coleta, por: localStorage.getItem(CHAVE_LOCALSTORAGE_NOME) || '' });
+  pv.salvando = false;
+  if (!r.ok || !r.dados || r.dados.ok === false) {
+    pv.msg = 'Não salvou: ' + ((r.dados && r.dados.error) || r.erro || 'erro'); const m = document.getElementById('pvMsgColeta'); if (m) m.textContent = pv.msg; pvBarraAtualizar(); return;
+  }
+  pv.msg = remover ? `${r.dados.apagadas} NF(s) voltaram à data do sistema. Recalculando…` : `Coleta ${coleta} salva em ${r.dados.salvas} NF(s). Recalculando as previsões…`;
+  pv.sel = {};
+  const m = document.getElementById('pvMsgColeta'); if (m) m.textContent = pv.msg;
+  const msgFinal = remover ? `${r.dados.apagadas} NF(s) voltaram à data do sistema — previsões recalculadas.` : `Coleta ${coleta} salva em ${r.dados.salvas} NF(s) — previsões recalculadas.`;
+  await pvCarregar();
+  pv.msg = msgFinal; const m2 = document.getElementById('pvMsgColeta'); if (m2) m2.textContent = pv.msg;
+}
+function pvCelulaColeta(i) {
+  if (!i.ajustaColeta) return '<td>—</td>';
+  const manual = i.coletaManual ? ` <span title="Coleta corrigida à mão. No sistema: ${escapeHtml(i.coletaSistema || '—')}" style="font-size:.7rem;font-weight:800;color:#fff;background:var(--laranja);border-radius:8px;padding:0 6px">✎ manual</span>` : '';
+  return `<td><label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;white-space:nowrap"><input type="checkbox" class="pv-chk" data-nf="${escapeHtml(i.nf)}" ${pv.sel[i.nf] ? 'checked' : ''} onchange="pvSel(this.dataset.nf,this.checked)" aria-label="Marcar NF ${escapeHtml(i.nf)} para corrigir a coleta">${escapeHtml(i.coleta || '—')}</label>${manual}</td>`;
+}
 
 function pvRender() {
   const d = pv.dados; if (!d) return;
@@ -2139,16 +2196,18 @@ function pvRender() {
     `<label class="hx-check" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pvBaixa" ${pv.baixa ? 'checked' : ''} onchange="pvControles()"> Levar a baixa (data de entrega) no arquivo</label>` +
     `<button type="button" class="hx-chip ativo" onclick="pvBaixar()" ${itens.length ? '' : 'disabled'}>⬇ Baixar arquivo para lançar (${fmt(itens.length - ignoradas)} linhas)</button>` +
     (pv.fonte ? '<button type="button" class="hx-chip" onclick="pvFonte(pv.fonte)">✕ Limpar filtro de transportadora</button>' : '') + '</div>' +
-    '<div class="hx-wrap"><table class="hx-tab"><thead><tr><th style="text-align:left">Transportadora</th><th>NF</th><th style="text-align:left">Pedido</th><th style="text-align:left">Cidade</th><th>Previsão</th><th style="text-align:left">O que lançar</th><th style="text-align:left">De onde vem</th><th>Entrega (baixa)</th><th style="text-align:left">Remetente</th></tr></thead><tbody>';
-  if (itens.length === 0) h += '<tr><td colspan="9" class="hx-vazio">Nada a lançar agora.</td></tr>';
+    (pvEditaveis().length ? pvBarraHtml() : '') +
+    '<div class="hx-wrap"><table class="hx-tab"><thead><tr><th style="text-align:left">Transportadora</th><th>NF</th><th style="text-align:left">Pedido</th><th style="text-align:left">Cidade</th><th title="Data de coleta usada no prazo da GFW (marque para corrigir)" style="white-space:nowrap">' + (pvEditaveis().length ? '<input type="checkbox" id="pvSelTodos" title="Marcar todas as NFs da GFW por prazo que estão na lista" onchange="pvSelTodos(this.checked)"> ' : '') + 'Coleta (GFW)</th><th>Previsão</th><th style="text-align:left">O que lançar</th><th style="text-align:left">De onde vem</th><th>Entrega (baixa)</th><th style="text-align:left">Remetente</th></tr></thead><tbody>';
+  if (itens.length === 0) h += '<tr><td colspan="10" class="hx-vazio">Nada a lançar agora.</td></tr>';
   itens.slice(0, LIM).forEach(i => {
     const e = pvEmpresaDaNF(i.nf);
-    h += `<tr><td class="txt">${escapeHtml(i.transp)}</td><td>${escapeHtml(e ? e.nfArquivo : i.nf)}</td><td class="txt">${escapeHtml(i.pedido)}</td><td class="txt">${escapeHtml(i.cidade)}</td>` +
+    h += `<tr><td class="txt">${escapeHtml(i.transp)}</td><td>${escapeHtml(e ? e.nfArquivo : i.nf)}</td><td class="txt">${escapeHtml(i.pedido)}</td><td class="txt">${escapeHtml(i.cidade)}</td>` + pvCelulaColeta(i) +
       `<td>${i.previsao ? escapeHtml(i.previsao) : '—'}</td><td class="txt">${({ prev: 'Previsão', prevbaixa: 'Previsão + baixa', baixa: 'Só baixa' })[i.tipo] || ''}</td><td class="txt">${escapeHtml(i.origem || '—')}</td><td>${i.entrega ? escapeHtml(i.entrega) : '—'}</td><td class="txt">${e ? escapeHtml(e.cnpj.slice(-7)) : '<b style="color:var(--vermelho)">?</b>'}</td></tr>`;
   });
   h += '</tbody></table></div>' + `<p class="hx-dica" style="margin-top:8px">${fmt(itens.length)} NFs${itens.length > LIM ? ` — a tela mostra as primeiras ${LIM}; o arquivo leva todas` : ''}. Remetente: NF de 6 dígitos = CNPJ …0012-23; NF de 4 dígitos = CNPJ …0011-42.</p></div>`;
   if (avisos.length) h += '<div class="hx-aviso alerta" style="margin-top:12px"><b>Atenção</b><ul style="margin:6px 0 0 18px;padding:0">' + avisos.map(a => `<li>${a}</li>`).join('') + '</ul></div>';
   c.innerHTML = h;
+  pvBarraAtualizar();
 }
 
 function pvBaixar() {
