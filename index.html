@@ -131,6 +131,13 @@
      citada), então não precisa de uma animação por combinação possível. */
   @keyframes piscaMencaoAnim { 0%, 100% { background-color: transparent; } 50% { background-color: var(--pisca-cor, transparent); } }
   .pisca-mencao { font-weight: 600; animation: piscaMencaoAnim 0.5s ease-in-out infinite; }
+  /* Entregues com ocorrência em aberto: a célula pisca (e traz o aviso escrito: nunca só cor/movimento) */
+  @keyframes piscaEntregueOcor { 0%, 100% { background-color: transparent; box-shadow: 0 0 0 0 transparent; } 50% { background-color: rgba(239,68,68,.34); box-shadow: 0 0 0 2px var(--vermelho); } }
+  td.cel-entregue-ocor { animation: piscaEntregueOcor 1s ease-in-out infinite; }
+  td.cel-entregue-ocor .aviso-ocor { display: inline-block; margin-left: 8px; font-size: 0.72rem; font-weight: 800; color: #fff; background: var(--vermelho); border-radius: 10px; padding: 1px 8px; white-space: nowrap; cursor: pointer; vertical-align: middle; }
+  tr.linha-ocor-aberta td { background: rgba(239,68,68,.16); }
+  tr.linha-ocor-aberta td:first-child { box-shadow: inset 4px 0 0 var(--vermelho); }
+  @media (prefers-reduced-motion: reduce) { td.cel-entregue-ocor { animation: none; background-color: rgba(239,68,68,.34); box-shadow: 0 0 0 2px var(--vermelho); } }
   #refreshBtn { margin-top: 14px; }
   .kpi.clicavel { cursor: pointer; }
   .kpi.clicavel:hover { box-shadow: 0 0 0 2px var(--destaque-claro); }
@@ -3847,6 +3854,17 @@ function renderMeta(status) {
 
 let dadosTabelaTransportadoras = [];
 
+// Coluna "Entregues": se algum pedido entregue ainda tem ocorrência em aberto, a célula pisca e mostra quantos são.
+// Clicar abre a lista dos entregues, com esses pedidos no topo e marcados em vermelho.
+function celulaEntregues(nome, v) {
+  const n = Number(v.entreguesComOcorrencia) || 0;
+  const acao = `verPedidosPorNome('${encodeURIComponent(nome)}', false, false, true)`;
+  const num = `<a class="num-link" onclick="${acao}">${v.entregues}</a>`;
+  if (n <= 0) return `<td>${num}</td>`;
+  const dica = `${n} ${n === 1 ? 'pedido entregue ainda tem' : 'pedidos entregues ainda têm'} ocorrência em aberto — é só finalizar. Clique para ver.`;
+  return `<td class="cel-entregue-ocor" title="${escapeHtml(dica)}">${num}<span class="aviso-ocor" onclick="${acao}" role="button">🔔 ${n} com ocorrência</span></td>`;
+}
+
 function renderTabelaTransportadoras(porTransportadora) {
   const tbody = document.getElementById('tabelaTransportadorasBody');
   // Ordena pela pior performance primeiro
@@ -3862,7 +3880,7 @@ function renderTabelaTransportadoras(porTransportadora) {
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', true, false)">${v.emAtraso}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, true)">${v.indefinidos}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, false, false, true)">${v.emRota}</a></td>
-      <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, false, true)">${v.entregues}</a></td>
+      ${celulaEntregues(nome, v)}
       <td style="color:${cor};font-weight:600">${v.performance.toFixed(1)}%</td>
     </tr>`;
   }).join('');
@@ -4186,7 +4204,7 @@ function aplicarFiltrosModal() {
   const numColunas = modalColunasAtuais.length;
   const idxUltimaMsg = modalColunasAtuais.indexOf('Última Mensagem');
   document.getElementById('modalTabelaBody').innerHTML = linhas.length
-    ? linhas.map((l, posicao) => `<tr>${l.map((v, idx) => {
+    ? linhas.map((l, posicao) => `<tr${l.destaque ? ' class="linha-ocor-aberta" title="Entregue e com ocorrência em aberto — finalize a ocorrência"' : ''}>${l.map((v, idx) => {
         const valor = v === undefined || v === null ? '' : v;
         if (idx === idxUltimaMsg && (l.historico || []).length > 0) {
           return `<td>${valor} <span class="hist-icone" data-idx="${posicao}" title="Ver tratativa completa">💬</span></td>`;
@@ -4242,8 +4260,10 @@ async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido
         p.ultimaOcorrencia || ''
       ];
       linha.historico = expandirHistorico(p.ultimaOcorrenciaHistorico);
+      linha.destaque = !!(apenasEntregue && p.ocorrenciaAberta); // entregue + ocorrência em aberto: vermelho e no topo
       return linha;
     });
+    if (apenasEntregue) linhas.sort((a, b) => (b.destaque ? 1 : 0) - (a.destaque ? 1 : 0)); // sort estável: o resto mantém a ordem
     renderModalLinhas(linhas);
     progressoModal.concluir(token);
   } catch (err) {
