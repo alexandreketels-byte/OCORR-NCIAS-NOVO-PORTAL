@@ -714,7 +714,8 @@
   </div>
   <div class="hx-corpo">
     <div class="hx-filtros">
-      <label>Entregas de<input type="date" id="hxDe" autocomplete="off" onchange="hxLerFiltros()"></label>
+      <label>Medir o desempenho<select id="hxModo" onchange="hxMudarModo(this.value)"><option value="receb">Por recebimento (mês em que o cliente recebeu)</option><option value="prev">Por previsão (mês da previsão de entrega)</option></select></label>
+      <label><span id="hxLblDe">Entregas de</span><input type="date" id="hxDe" autocomplete="off" onchange="hxLerFiltros()"></label>
       <label>até<input type="date" id="hxAte" autocomplete="off" onchange="hxLerFiltros()"></label>
       <div class="hx-presets" aria-label="Períodos rápidos">
         <button type="button" class="hx-chip ativo" data-preset="tudo" onclick="hxPreset('tudo')">Tudo</button>
@@ -725,6 +726,7 @@
       </div>
       <label>Transportadora<select id="hxTransp" onchange="hxLerFiltros()"></select></label>
       <label>Estado<select id="hxUF" onchange="hxLerFiltros()"></select></label>
+      <label class="hx-check" id="hxPendLbl" style="display:none"><input type="checkbox" id="hxPend" checked onchange="hxLerFiltros()"> Somar como atraso os pedidos vencidos e ainda não recebidos</label>
       <label class="hx-check"><input type="checkbox" id="hxCob" checked onchange="hxLerFiltros()"> Só entregas dentro do período da estatística</label>
     </div>
     <div id="hxAviso" class="hx-aviso" style="display:block"></div>
@@ -1397,7 +1399,11 @@ const HX_MOTIVOS = {
   5: 'No prazo — ocorrência manual não é culpa da transportadora',
   6: 'No prazo — tipos da estatística não são culpa da transportadora'
 };
-let hx = { dados: null, aba: 'transp', carregando: false, f: { de: '', ate: '', transp: '', uf: '', cob: true, preset: 'tudo' },
+// modo de medição do Histórico: 'receb' (mês do recebimento pelo cliente — o modo original) ou 'prev' (mês da previsão de entrega)
+function hxModoSalvo() { try { return localStorage.getItem('hxModo') === 'prev' ? 'prev' : 'receb'; } catch (e) { return 'receb'; } }
+const hxPorPrev = () => hx.modo === 'prev';
+const hxRef = r => hxPorPrev() ? r[6] : r[3]; // data que define o mês/período da linha
+let hx = { dados: null, aba: 'transp', carregando: false, modo: hxModoSalvo(), f: { de: '', ate: '', transp: '', uf: '', cob: true, pend: true, preset: 'tudo' },
   ord: { vend: { col: 'total', dir: -1 }, uf: { col: 'total', dir: -1 }, oc: { col: 'com', dir: -1 }, loja: { col: 'total', dir: -1 } }, minVend: 10, buscaVend: '', minLoja: 1, buscaLoja: '',
   ocMin: 10, ocBusca: '', ocModo: 'qtd', ocFoco: '', links: [], lista: null };
 
@@ -1458,7 +1464,13 @@ function hxLerFiltros() {
   hx.f.transp = document.getElementById('hxTransp').value;
   hx.f.uf = document.getElementById('hxUF').value;
   hx.f.cob = document.getElementById('hxCob').checked;
+  hx.f.pend = document.getElementById('hxPend').checked;
   hx.f.preset = '';
+  hxRender();
+}
+function hxMudarModo(m) {
+  hx.modo = m === 'prev' ? 'prev' : 'receb';
+  try { localStorage.setItem('hxModo', hx.modo); } catch (e) { /* sem armazenamento: vale só nesta abertura */ }
   hxRender();
 }
 function hxPreset(nome) {
@@ -1477,7 +1489,11 @@ function hxFiltrar(ignorarCob) {
   const f = hx.f, d = hx.dados;
   const de = f.de ? Number(f.de.replace(/-/g, '')) : 0, ate = f.ate ? Number(f.ate.replace(/-/g, '')) : 0;
   const t = f.transp === '' ? -1 : Number(f.transp), u = f.uf === '' ? -1 : Number(f.uf);
-  return d.rows.filter(r => (!de || r[3] >= de) && (!ate || r[3] <= ate) && (t === -1 || r[0] === t) && (u === -1 || r[2] === u) &&
+  // modo "receb": só entregas recebidas (r[9] = pedido ainda não recebido -> fora), como sempre foi.
+  // modo "prev": só quem tem previsão; os vencidos e ainda não recebidos (r[9]) entram se a caixa estiver marcada.
+  const pv = hxPorPrev();
+  return d.rows.filter(r => (pv ? (r[6] && (f.pend || !r[9])) : !r[9]) &&
+    (!de || hxRef(r) >= de) && (!ate || hxRef(r) <= ate) && (t === -1 || r[0] === t) && (u === -1 || r[2] === u) &&
     (ignorarCob || !f.cob || (r[4] & 8)));
 }
 function hxAgrupar(rows, chave) {
@@ -1497,6 +1513,10 @@ function hxRender() {
   hx.links = []; // cada render recria os números clicáveis
   document.getElementById('hxSub').textContent = `Atualizado em ${d.geradoEm}${d.doCache ? ' (do cache)' : ''}`;
   document.getElementById('hxCob').checked = hx.f.cob;
+  document.getElementById('hxPend').checked = hx.f.pend;
+  document.getElementById('hxModo').value = hx.modo;
+  document.getElementById('hxPendLbl').style.display = hxPorPrev() ? '' : 'none';
+  document.getElementById('hxLblDe').textContent = hxPorPrev() ? 'Previsão de' : 'Entregas de';
   document.getElementById('hxDe').value = hx.f.de; document.getElementById('hxAte').value = hx.f.ate; // o navegador pode ter restaurado datas antigas ao recarregar
   document.querySelectorAll('.hx-chip[data-preset]').forEach(b => b.classList.toggle('ativo', b.dataset.preset === hx.f.preset));
   document.querySelectorAll('.hx-aba').forEach(b => b.classList.toggle('ativo', b.dataset.aba === hx.aba));
@@ -1544,6 +1564,11 @@ function hxRenderAviso(rows) {
     el.className = 'hx-aviso alerta';
     html += ` ⚠️ <b>${hxFmtN(foraSemOcultar)} das entregas mostradas estão fora desse período</b>: nelas o atraso está inflado (pedido “fora da estatística”).`;
   } else el.className = 'hx-aviso';
+  if (hxPorPrev()) {
+    const semPrev = d.rows.filter(r => !r[9] && !r[6]).length, pend = d.rows.filter(r => r[9]).length;
+    html += ` <b>Modo “por previsão”:</b> o mês é o da previsão de entrega. ${hxFmtN(semPrev)} entregas sem previsão ficam de fora (não há mês para elas).` +
+      (hx.f.pend ? ` Estão somados ${hxFmtN(pend)} pedidos com previsão vencida que ainda não foram recebidos — contam como atraso conforme a regra de sempre.` : ' Os pedidos vencidos e ainda não recebidos NÃO estão somados (caixa desmarcada) — isso deixa as transportadoras com números melhores do que são.');
+  }
   el.innerHTML = html;
 }
 
@@ -1553,16 +1578,19 @@ function hxRenderKpis(rows) {
   const total = rows.length, prazo = total - atraso;
   const kpi = (cls, t, v, s) => `<div class="hx-kpi ${cls}"><div class="t">${t}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
   document.getElementById('hxKpis').innerHTML =
-    kpi('', 'Entregas analisadas', hxLink('Todas as entregas do filtro', () => true, hxFmtN(total), 'todos', total), 'recebidas pelo cliente') +
+    kpi('', hxPorPrev() ? 'Pedidos analisados' : 'Entregas analisadas', hxLink('Todas as entregas do filtro', () => true, hxFmtN(total), 'todos', total), hxPorPrev() ? 'com previsão no período' : 'recebidas pelo cliente') +
     kpi('prazo', '✔ No prazo', hxLink('Entregas no prazo', () => true, hxFmtN(prazo), 'prazo', prazo), hxFmtPct(hxPct(prazo, total))) +
     kpi('atraso', '✖ Em atraso', hxLink('Entregas em atraso', () => true, hxFmtN(atraso), 'atraso', atraso), hxFmtPct(hxPct(atraso, total))) +
     kpi('', '% no prazo', hxFmtPct(hxPct(prazo, total)), 'meta: quanto maior, melhor') +
-    kpi('', 'Sem previsão', hxLink('Sem previsão (contam como no prazo)', r => (r[4] & 7) === 1, hxFmtN(indef), 'todos', indef), 'indefinidas — contam como no prazo');
+    (hxPorPrev()
+      ? kpi('', 'Ainda não recebidos', hxLink('Vencidos e ainda não recebidos', r => r[9] === 1, hxFmtN(rows.filter(r => r[9]).length), 'todos', rows.filter(r => r[9]).length), 'previsão vencida, sem recebimento')
+      : kpi('', 'Sem previsão', hxLink('Sem previsão (contam como no prazo)', r => (r[4] & 7) === 1, hxFmtN(indef), 'todos', indef), 'indefinidas — contam como no prazo'));
 }
 
 function hxRodape() {
   const d = hx.dados;
   document.getElementById('hxRodape').innerHTML =
+    (hxPorPrev() ? 'Modo <b>por previsão</b>: o mês de cada pedido é o da sua previsão de entrega (a mesma usada na regra de atraso). ' : '') +
     `Data usada como “entrega”: <b>${escapeHtml(d.colunaData)}</b> (dia em que o cliente recebeu). ` +
     `${hxFmtN(d.semRecebimento)} pedidos da Tabela Dinâmica ainda sem essa data ficaram de fora; ${hxFmtN(d.ignoradas)} de transportadoras ignoradas (Retira / Só nota / sem transportadora). ` +
     `Base: ${hxFmtN(d.estatisticaPedidos)} pedidos na estatística, ${hxFmtN(d.ocorrenciasManuais)} ocorrências manuais, ${hxFmtN(d.previsoesManuais)} previsões manuais.` +
@@ -1581,7 +1609,7 @@ function hxBarra(p) { return p === null ? '' : `<span class="hx-barra" aria-hidd
 // ---- aba 1: transportadoras por período (mês) ----
 function hxHtmlTransp(rows) {
   const d = hx.dados;
-  const ym = r => Math.floor(r[3] / 100);
+  const ym = r => Math.floor(hxRef(r) / 100);
   const meses = Array.from(new Set(rows.map(ym))).sort((a, b) => a - b);
   const porT = hxAgrupar(rows, r => r[0]);
   const porTM = hxAgrupar(rows, r => r[0] + '|' + ym(r));
@@ -1589,7 +1617,7 @@ function hxHtmlTransp(rows) {
   const ordem = Array.from(porT.keys()).sort((a, b) => porT.get(b).total - porT.get(a).total);
   const rotulo = m => String(m).slice(4) + '/' + String(m).slice(2, 4);
   let h = '<div class="hx-secao"><h3>Performance de cada transportadora, mês a mês</h3>' +
-    '<p class="hx-dica">Cada célula mostra o % no prazo do mês (a quantidade de entregas fica embaixo). O mês é o do recebimento pelo cliente. <b>Clique em qualquer número para ver os pedidos.</b></p>' +
+    '<p class="hx-dica">Cada célula mostra o % no prazo do mês (a quantidade de entregas fica embaixo). O mês é ' + (hxPorPrev() ? 'o da <b>previsão de entrega</b> (pedidos vencidos e ainda não recebidos contam como atraso; o mês corrente só fecha quando as previsões vencem)' : 'o do recebimento pelo cliente') + '. <b>Clique em qualquer número para ver os pedidos.</b></p>' +
     '<div class="hx-wrap"><table class="hx-tab"><thead><tr><th>Transportadora</th><th>Entregas</th><th>No prazo</th><th>Atraso</th><th>% no prazo</th>' +
     meses.map(m => `<th>${rotulo(m)}</th>`).join('') + '</tr></thead><tbody>';
   ordem.forEach(t => {
@@ -1734,10 +1762,10 @@ function hxIntParaUTC(n) { return Date.UTC(Math.floor(n / 10000), Math.floor(n /
 function hxLinhasLista() {
   const L = hx.lista, d = hx.dados, busca = semAcentoMin(document.getElementById('hxListaBusca').value);
   let itens = L.base.map(r => {
-    const prev = r[6] || 0;
-    return { pedido: d.dic.ped[r[5]], transp: d.dic.transp[r[0]], vend: d.dic.vend[r[1]], loja: d.dic.loja && r[8] !== undefined ? d.dic.loja[r[8]] : '—', uf: d.dic.uf[r[2]], prev, ent: r[3],
-      dias: prev ? Math.round((hxIntParaUTC(r[3]) - hxIntParaUTC(prev)) / 86400000) : null,
-      atraso: hxEhAtraso(r), motivo: HX_MOTIVOS[r[4] & 7], tipos: (r[7] || []).map(i => d.dic.tipo[i]).join(' · ') };
+    const prev = r[6] || 0, pend = r[9] === 1, fim = pend ? d.hojeInt : r[3]; // pedido não recebido: conta os dias até hoje
+    return { pedido: d.dic.ped[r[5]], transp: d.dic.transp[r[0]], vend: d.dic.vend[r[1]], loja: d.dic.loja && r[8] !== undefined ? d.dic.loja[r[8]] : '—', uf: d.dic.uf[r[2]], prev, ent: pend ? 0 : r[3],
+      dias: prev && fim ? Math.round((hxIntParaUTC(fim) - hxIntParaUTC(prev)) / 86400000) : null,
+      atraso: hxEhAtraso(r), motivo: (pend ? 'Ainda não recebido pelo cliente (conta a partir de hoje). ' : '') + HX_MOTIVOS[r[4] & 7], tipos: (r[7] || []).map(i => d.dic.tipo[i]).join(' · ') };
   });
   const cont = { todos: itens.length, prazo: itens.filter(x => !x.atraso).length, atraso: itens.filter(x => x.atraso).length };
   if (L.filtro === 'prazo') itens = itens.filter(x => !x.atraso); else if (L.filtro === 'atraso') itens = itens.filter(x => x.atraso);
@@ -1767,7 +1795,7 @@ function hxListaRender() {
   itens.slice(0, LIM).forEach(x => {
     h += `<tr><td><a href="#" class="hx-num" data-p="${escapeHtml(x.pedido)}" onclick="hxConferirDe(this.dataset.p);return false" title="Ver como foi classificado">${escapeHtml(x.pedido)}</a></td>` +
       `<td class="txt">${escapeHtml(x.transp)}</td><td class="txt">${escapeHtml(x.vend)}</td><td class="txt">${escapeHtml(x.loja)}</td><td class="txt">${escapeHtml(x.uf)}</td>` +
-      `<td>${x.prev ? hxIntParaBR(x.prev) : 'Indefinida'}</td><td>${hxIntParaBR(x.ent)}</td><td>${x.dias === null ? '—' : (x.dias > 0 ? '+' + x.dias : x.dias)}</td>` +
+      `<td>${x.prev ? hxIntParaBR(x.prev) : 'Indefinida'}</td><td>${x.ent ? hxIntParaBR(x.ent) : 'Não recebido'}</td><td>${x.dias === null ? '—' : (x.dias > 0 ? '+' + x.dias : x.dias)}</td>` +
       `<td class="txt"><b style="color:var(${x.atraso ? '--vermelho' : '--verde'})">${x.atraso ? '✖ Atraso' : '✔ No prazo'}</b></td><td class="txt">${escapeHtml(x.motivo)}</td><td class="txt">${escapeHtml(x.tipos || '—')}</td></tr>`;
   });
   document.getElementById('hxListaTab').innerHTML = h + '</tbody>';
@@ -1777,7 +1805,7 @@ function hxListaCsv() {
   if (!hx.lista) return;
   const { itens } = hxLinhasLista();
   const linhas = [['Pedido', 'Transportadora', 'Vendedor', 'Loja', 'UF', 'Previsão', 'Recebido pelo cliente', 'Dias após a previsão', 'Resultado', 'Motivo', 'Tipos de ocorrência']];
-  itens.forEach(x => linhas.push([x.pedido, x.transp, x.vend, x.loja, x.uf, x.prev ? hxIntParaBR(x.prev) : 'Indefinida', hxIntParaBR(x.ent), x.dias === null ? '' : x.dias, x.atraso ? 'Atraso' : 'No prazo', x.motivo, x.tipos]));
+  itens.forEach(x => linhas.push([x.pedido, x.transp, x.vend, x.loja, x.uf, x.prev ? hxIntParaBR(x.prev) : 'Indefinida', x.ent ? hxIntParaBR(x.ent) : 'Não recebido', x.dias === null ? '' : x.dias, x.atraso ? 'Atraso' : 'No prazo', x.motivo, x.tipos]));
   const q = v => { const t = String(v === null || v === undefined ? '' : v); return /[";\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
   const csv = '﻿' + linhas.map(l => l.map(q).join(';')).join('\r\n');
   const a = document.createElement('a');
