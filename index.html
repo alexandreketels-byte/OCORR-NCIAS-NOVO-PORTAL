@@ -439,8 +439,8 @@
 
     <div class="card card-logo logo-tg">
       <h2>Importar Entregas SSW (TG Transp)</h2>
-      <p class="desc">Arquivo .csv do relatório da SSW (TG Transp). A NF vem com a série na frente (ex.: 1 128736) e o site ignora esse 1. Cruza pela NF com Pedidos Não Recebidos: situação "MERCADORIA ENTREGUE" = entregue (com a data da coluna Data Entrega); situação "SAIDA PARA ENTREGA" com a data de hoje = em rota. Só guarda NF, situação e datas — CPF/CNPJ e nomes de clientes do arquivo não são guardados. Cada importação substitui os dados anteriores.</p>
-      <input type="file" id="fileBaixaSSW" accept=".csv,text/csv">
+      <p class="desc">Arquivo .csv do relatório da SSW (TG Transp). A NF vem com a série na frente (ex.: 1 128736) e o site ignora esse 1. Cruza pela NF com Pedidos Não Recebidos: situação "MERCADORIA ENTREGUE" = entregue (com a data da coluna Data Entrega); situação "SAIDA PARA ENTREGA" com a data de hoje = em rota. Só guarda NF, situação e datas — CPF/CNPJ e nomes de clientes do arquivo não são guardados. Cada importação substitui os dados anteriores. <b>Tem dois CNPJs? Escolha os dois arquivos de uma vez</b> (segure Ctrl ou Shift ao clicar): o site junta tudo e importa como uma só relação — não precisa unir no Excel antes.</p>
+      <input type="file" id="fileBaixaSSW" accept=".csv,text/csv" multiple title="Dá para escolher os dois arquivos (dois CNPJs) de uma vez: segure Ctrl ou Shift ao clicar">
       <button id="btnBaixaSSW" onclick="importarBaixaSSW()">Importar</button>
       <div class="progress-wrap" id="progressBaixaSSW"><div class="progress-bar" id="progressBarBaixaSSW"></div></div>
       <div class="status-line" id="statusBaixaSSW"></div>
@@ -449,8 +449,8 @@
 
     <div class="card card-logo logo-nr">
       <h2>Importar Entregas NR Express</h2>
-      <p class="desc">Arquivo .csv do relatório "encomendas por nota fiscal" da NR Express. A NF vem com a série e zeros na frente (ex.: 1  000127179) e o site ignora isso, ficando só 127179. Cruza pela NF com Pedidos Não Recebidos: situação "Entregue" = entregue (com a data da coluna entregaRealizada); situação "Saiu para entrega" = em rota — como o arquivo não traz a data da saída, vale como em rota quando a importação é feita no próprio dia. Só guarda NF, situação e data de entrega (nomes e cidades de clientes não são guardados). Cada importação substitui os dados anteriores.</p>
-      <input type="file" id="fileBaixaNR" accept=".csv,text/csv">
+      <p class="desc">Arquivo .csv do relatório "encomendas por nota fiscal" da NR Express. A NF vem com a série e zeros na frente (ex.: 1  000127179) e o site ignora isso, ficando só 127179. Cruza pela NF com Pedidos Não Recebidos: situação "Entregue" = entregue (com a data da coluna entregaRealizada); situação "Saiu para entrega" = em rota — como o arquivo não traz a data da saída, vale como em rota quando a importação é feita no próprio dia. Só guarda NF, situação e data de entrega (nomes e cidades de clientes não são guardados). Cada importação substitui os dados anteriores. <b>Tem dois CNPJs? Escolha os dois arquivos de uma vez</b> (segure Ctrl ou Shift ao clicar): o site junta tudo e importa como uma só relação — não precisa unir no Excel antes.</p>
+      <input type="file" id="fileBaixaNR" accept=".csv,text/csv" multiple title="Dá para escolher os dois arquivos (dois CNPJs) de uma vez: segure Ctrl ou Shift ao clicar">
       <button id="btnBaixaNR" onclick="importarBaixaNR()">Importar</button>
       <div class="progress-wrap" id="progressBaixaNR"><div class="progress-bar" id="progressBarBaixaNR"></div></div>
       <div class="status-line" id="statusBaixaNR"></div>
@@ -1132,7 +1132,7 @@ function dataSSW(v) { const m = String(v || '').match(/(\d{1,2})\/(\d{1,2})\/(\d
 function dataHoraSSW(v) { const d = dataSSW(v); if (!d) return ''; const h = String(v).match(/(\d{1,2}):(\d{2})/); return h ? d + ' ' + h[1].padStart(2, '0') + ':' + h[2] : d; }
 function timestampSSW(dh) { const m = String(dh || '').match(/^(\d{2})\/(\d{2})\/(\d{4})(?: (\d{2}):(\d{2}))?/); return m ? new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0)).getTime() : 0; }
 
-function parseBaixaSSW(texto) {
+function parseBaixaSSWUm(texto) { // UM arquivo (o leitor de sempre, sem nenhuma mudança)
   const linhas = parseCSVPontoEVirgula(String(texto || '').replace(/^\uFEFF/, ''));
   if (linhas.length === 0) return { erro: 'O arquivo está vazio.' };
   const cab = linhas[0].map(semAcentoMin);
@@ -1167,19 +1167,51 @@ function parseBaixaSSW(texto) {
   return { rows: Array.from(melhor.values()).map(i => [i.nf, i.situacao, i.dh, i.de, i.pv]), lidas };
 }
 
+// Aceita um texto ou uma LISTA de textos (ex.: os relatórios dos dois CNPJs). Com vários, a regra de sempre vale entre todos:
+// se a mesma NF aparecer mais de uma vez, vale a entregue; senão, a ocorrência mais recente.
+function parseBaixaSSW(textos) {
+  if (!Array.isArray(textos)) return parseBaixaSSWUm(textos);
+  const melhor = new Map(); let lidas = 0; const porArquivo = [];
+  for (let i = 0; i < textos.length; i++) {
+    const r = parseBaixaSSWUm(textos[i]);
+    if (r.erro) return { erro: r.erro, arquivo: i };
+    lidas += r.lidas; porArquivo.push(r.rows.length);
+    r.rows.forEach(row => {
+      const item = { row, entregue: semAcentoMin(row[1]).includes('mercadoria entregue'), ts: timestampSSW(row[2]) };
+      const atual = melhor.get(row[0]);
+      if (!atual || (item.entregue && !atual.entregue) || (item.entregue === atual.entregue && item.ts >= atual.ts)) melhor.set(row[0], item);
+    });
+  }
+  return { rows: Array.from(melhor.values()).map(i => i.row), lidas, porArquivo };
+}
+
+// Lê os .csv escolhidos (um ou vários). Devolve { textos, nomes } ou { erro }.
+async function lerArquivosCsvEscolhidos(input, rotulo) {
+  const files = Array.from(input.files || []);
+  if (files.length === 0) return { erro: `Selecione o arquivo CSV ${rotulo} primeiro.` };
+  if (files.length > 6) return { erro: 'Selecione no máximo 6 arquivos de uma vez.' };
+  const excel = files.find(f => /\.xlsx?$/i.test(f.name || ''));
+  if (excel) return { erro: `Este importador só lê arquivo .csv. "${excel.name}" parece ser um Excel — exporte como .csv e tente de novo.` };
+  const textos = []; for (const f of files) textos.push(await lerTextoDoArquivo(f));
+  return { textos, nomes: files.map(f => f.name) };
+}
+
 async function importarBaixaSSW() {
   const input = document.getElementById('fileBaixaSSW');
-  const file = input.files[0];
-  if (!file) { alert('Selecione o arquivo CSV da SSW primeiro.'); return; }
-  if (/\.xlsx?$/i.test(file.name || '')) { alert('Este importador só lê arquivo .csv. O arquivo selecionado parece ser um Excel — exporte como .csv e tente de novo.'); return; }
+  if (!input.files.length) { alert('Selecione o arquivo CSV da SSW primeiro.'); return; }
+  if (Array.from(input.files).some(f => /\.xlsx?$/i.test(f.name || ''))) { alert('Este importador só lê arquivo .csv. Um dos arquivos selecionados parece ser um Excel — exporte como .csv e tente de novo.'); return; }
+  if (input.files.length > 6) { alert('Selecione no máximo 6 arquivos de uma vez.'); return; }
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
 
   setStatus('statusBaixaSSW', 'Lendo arquivo...', 'carregando');
   toggleBtn('btnBaixaSSW', true);
   try {
-    const lido = parseBaixaSSW(await lerTextoDoArquivo(file));
-    if (lido.erro) { setStatus('statusBaixaSSW', lido.erro + ' Nada foi importado; os dados atuais continuam intactos.', 'erro'); return; }
+    const arq = await lerArquivosCsvEscolhidos(input, 'da SSW');
+    if (arq.erro) { setStatus('statusBaixaSSW', arq.erro + ' Nada foi importado; os dados atuais continuam intactos.', 'erro'); return; }
+    const lido = parseBaixaSSW(arq.textos.length === 1 ? arq.textos[0] : arq.textos);
+    if (lido.erro) { setStatus('statusBaixaSSW', (lido.arquivo !== undefined ? `Arquivo "${arq.nomes[lido.arquivo]}": ` : '') + lido.erro + ' Nada foi importado; os dados atuais continuam intactos.', 'erro'); return; }
     await enviarEmLotes(lido.rows, 'importBaixaEntregaSSW', 'statusBaixaSSW', 'progressBaixaSSW', 'progressBarBaixaSSW');
+    if (arq.nomes.length > 1) notaArquivosJuntos('statusBaixaSSW', arq.nomes, lido);
     carregarIndicadores();
     atualizarEmRotaTratativas();
   } catch (err) {
@@ -1214,7 +1246,7 @@ function dataBRDeISOouBR(v) {
   return dataSSW(t);
 }
 
-function parseBaixaNR(texto) {
+function parseBaixaNRUm(texto) { // UM arquivo (o leitor de sempre, sem nenhuma mudança)
   const linhas = parseCSVPontoEVirgula(String(texto || '').replace(/^\uFEFF/, ''));
   if (linhas.length === 0) return { erro: 'O arquivo está vazio.' };
   const letras = h => semAcentoMin(h).replace(/[^a-z]/g, '');
@@ -1247,19 +1279,46 @@ function parseBaixaNR(texto) {
   return { rows: Array.from(melhor.values()).map(i => [i.nf, i.situacao, i.de, i.pv]), lidas };
 }
 
+// Igual ao da SSW: aceita um texto ou uma lista. Entre vários arquivos vale a mesma regra: a entregue; depois a "saiu para entrega"; a mais abaixo desempata.
+function parseBaixaNR(textos) {
+  if (!Array.isArray(textos)) return parseBaixaNRUm(textos);
+  const melhor = new Map(); let lidas = 0; const porArquivo = [];
+  for (let i = 0; i < textos.length; i++) {
+    const r = parseBaixaNRUm(textos[i]);
+    if (r.erro) return { erro: r.erro, arquivo: i };
+    lidas += r.lidas; porArquivo.push(r.rows.length);
+    r.rows.forEach(row => {
+      const sit = semAcentoMin(row[1]);
+      const item = { row, prioridade: /^entregue\b/.test(sit) ? 2 : (sit.includes('saiu para entrega') ? 1 : 0) };
+      const atual = melhor.get(row[0]);
+      if (!atual || item.prioridade >= atual.prioridade) melhor.set(row[0], item);
+    });
+  }
+  return { rows: Array.from(melhor.values()).map(i => i.row), lidas, porArquivo };
+}
+
+// Depois da importação, acrescenta ao aviso de conclusão quantas NFs vieram de cada arquivo.
+function notaArquivosJuntos(statusId, nomes, lido) {
+  const el = document.getElementById(statusId); if (!el || el.className.indexOf('erro') !== -1) return;
+  el.textContent += ` Arquivos juntados: ${nomes.map((n, i) => `${n} (${lido.porArquivo[i]} NFs)`).join(' + ')} → ${lido.rows.length} NFs no total.`;
+}
+
 async function importarBaixaNR() {
   const input = document.getElementById('fileBaixaNR');
-  const file = input.files[0];
-  if (!file) { alert('Selecione o arquivo CSV da NR Express primeiro.'); return; }
-  if (/\.xlsx?$/i.test(file.name || '')) { alert('Este importador só lê arquivo .csv. O arquivo selecionado parece ser um Excel — exporte como .csv e tente de novo.'); return; }
+  if (!input.files.length) { alert('Selecione o arquivo CSV da NR Express primeiro.'); return; }
+  if (Array.from(input.files).some(f => /\.xlsx?$/i.test(f.name || ''))) { alert('Este importador só lê arquivo .csv. Um dos arquivos selecionados parece ser um Excel — exporte como .csv e tente de novo.'); return; }
+  if (input.files.length > 6) { alert('Selecione no máximo 6 arquivos de uma vez.'); return; }
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
 
   setStatus('statusBaixaNR', 'Lendo arquivo...', 'carregando');
   toggleBtn('btnBaixaNR', true);
   try {
-    const lido = parseBaixaNR(await lerTextoDoArquivo(file));
-    if (lido.erro) { setStatus('statusBaixaNR', lido.erro + ' Nada foi importado; os dados atuais continuam intactos.', 'erro'); return; }
+    const arq = await lerArquivosCsvEscolhidos(input, 'da NR Express');
+    if (arq.erro) { setStatus('statusBaixaNR', arq.erro + ' Nada foi importado; os dados atuais continuam intactos.', 'erro'); return; }
+    const lido = parseBaixaNR(arq.textos.length === 1 ? arq.textos[0] : arq.textos);
+    if (lido.erro) { setStatus('statusBaixaNR', (lido.arquivo !== undefined ? `Arquivo "${arq.nomes[lido.arquivo]}": ` : '') + lido.erro + ' Nada foi importado; os dados atuais continuam intactos.', 'erro'); return; }
     await enviarEmLotes(lido.rows, 'importBaixaEntregaNR', 'statusBaixaNR', 'progressBaixaNR', 'progressBarBaixaNR');
+    if (arq.nomes.length > 1) notaArquivosJuntos('statusBaixaNR', arq.nomes, lido);
     carregarIndicadores();
     atualizarEmRotaTratativas();
   } catch (err) {
