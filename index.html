@@ -440,7 +440,7 @@
     <div class="card card-logo logo-tg">
       <h2>Importar Entregas SSW (TG Transp)</h2>
       <p class="desc">Arquivo .csv do relatório da SSW (TG Transp). A NF vem com a série na frente (ex.: 1 128736) e o site ignora esse 1. Cruza pela NF com Pedidos Não Recebidos: situação "MERCADORIA ENTREGUE" = entregue (com a data da coluna Data Entrega); situação "SAIDA PARA ENTREGA" com a data de hoje = em rota. Só guarda NF, situação e datas — CPF/CNPJ e nomes de clientes do arquivo não são guardados. Cada importação substitui os dados anteriores. <b>Tem dois CNPJs? Escolha os dois arquivos de uma vez</b> (segure Ctrl ou Shift ao clicar): o site junta tudo e importa como uma só relação — não precisa unir no Excel antes.</p>
-      <input type="file" id="fileBaixaSSW" accept=".csv,text/csv" multiple title="Dá para escolher os dois arquivos (dois CNPJs) de uma vez: segure Ctrl ou Shift ao clicar">
+      <input type="file" id="fileBaixaSSW" multiple title="Dá para escolher os dois arquivos (dois CNPJs) de uma vez: segure Ctrl ou Shift ao clicar">
       <button id="btnBaixaSSW" onclick="importarBaixaSSW()">Importar</button>
       <div class="progress-wrap" id="progressBaixaSSW"><div class="progress-bar" id="progressBarBaixaSSW"></div></div>
       <div class="status-line" id="statusBaixaSSW"></div>
@@ -450,7 +450,7 @@
     <div class="card card-logo logo-nr">
       <h2>Importar Entregas NR Express</h2>
       <p class="desc">Arquivo .csv do relatório "encomendas por nota fiscal" da NR Express. A NF vem com a série e zeros na frente (ex.: 1  000127179) e o site ignora isso, ficando só 127179. Cruza pela NF com Pedidos Não Recebidos: situação "Entregue" = entregue (com a data da coluna entregaRealizada); situação "Saiu para entrega" = em rota — como o arquivo não traz a data da saída, vale como em rota quando a importação é feita no próprio dia. Só guarda NF, situação e data de entrega (nomes e cidades de clientes não são guardados). Cada importação substitui os dados anteriores. <b>Tem dois CNPJs? Escolha os dois arquivos de uma vez</b> (segure Ctrl ou Shift ao clicar): o site junta tudo e importa como uma só relação — não precisa unir no Excel antes.</p>
-      <input type="file" id="fileBaixaNR" accept=".csv,text/csv" multiple title="Dá para escolher os dois arquivos (dois CNPJs) de uma vez: segure Ctrl ou Shift ao clicar">
+      <input type="file" id="fileBaixaNR" multiple title="Dá para escolher os dois arquivos (dois CNPJs) de uma vez: segure Ctrl ou Shift ao clicar">
       <button id="btnBaixaNR" onclick="importarBaixaNR()">Importar</button>
       <div class="progress-wrap" id="progressBaixaNR"><div class="progress-bar" id="progressBarBaixaNR"></div></div>
       <div class="status-line" id="statusBaixaNR"></div>
