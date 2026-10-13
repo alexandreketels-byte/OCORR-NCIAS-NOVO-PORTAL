@@ -509,8 +509,8 @@
 
     <div class="card card-logo logo-gfw">
       <h2>Importar Entregas GFW WhatsApp</h2>
-      <p class="desc">Arquivo .md com a exportação da conversa do WhatsApp com a GFW. O site lê os números de NF que os entregadores postaram (foto ou vídeo com o número, ou texto) e cruza pelo número da NF com Pedidos Não Recebidos: as que baterem passam a constar como entregues (WhatsApp). Notas que não são nossas simplesmente não casam. Cada importação acrescenta ao histórico (não apaga as anteriores; guarda 90 dias) e não guarda telefone nem nome de ninguém.</p>
-      <input type="file" id="fileEntregasWhats" accept=".md,.txt,text/markdown,text/plain">
+      <p class="desc">Pode escolher direto o .zip exportado do WhatsApp (o site abre sozinho e lê o .md de dentro) ou o arquivo .md já extraído. Exportação da conversa do WhatsApp com a GFW. O site lê os números de NF que os entregadores postaram (foto ou vídeo com o número, ou texto) e cruza pelo número da NF com Pedidos Não Recebidos: as que baterem passam a constar como entregues (WhatsApp). Notas que não são nossas simplesmente não casam. Cada importação acrescenta ao histórico (não apaga as anteriores; guarda 90 dias) e não guarda telefone nem nome de ninguém.</p>
+      <input type="file" id="fileEntregasWhats">
       <button id="btnEntregasWhats" onclick="importarEntregasWhatsApp()">Importar</button>
       <div class="progress-wrap" id="progressEntregasWhats"><div class="progress-bar" id="progressBarEntregasWhats"></div></div>
       <div class="status-line" id="statusEntregasWhats"></div>
@@ -2401,18 +2401,71 @@ function parseEntregasWhatsApp(texto) {
   return { entregas, mensagens: mensagens.length };
 }
 
+// Lê um .zip direto no navegador (sem biblioteca): acha o diretório central no fim do arquivo e só descompacta os
+// arquivos de texto pedidos — fotos/vídeos dentro do zip nem chegam a ser lidos.
+async function zipListar(file) {
+  const tam = file.size;
+  const fim = new Uint8Array(await file.slice(Math.max(0, tam - 65557), tam).arrayBuffer());
+  let e = -1;
+  for (let i = fim.length - 22; i >= 0; i--) { if (fim[i] === 0x50 && fim[i + 1] === 0x4b && fim[i + 2] === 5 && fim[i + 3] === 6) { e = i; break; } }
+  if (e < 0) throw new Error('não parece ser um .zip válido');
+  const dv = new DataView(fim.buffer);
+  const n = dv.getUint16(e + 10, true), tamDir = dv.getUint32(e + 12, true), iniDir = dv.getUint32(e + 16, true);
+  if (iniDir === 0xFFFFFFFF || n === 0xFFFF) throw new Error('zip grande demais (formato zip64) — extraia e escolha o arquivo .md');
+  const dir = new Uint8Array(await file.slice(iniDir, iniDir + tamDir).arrayBuffer());
+  const d2 = new DataView(dir.buffer), itens = []; let o = 0;
+  for (let k = 0; k < n && o + 46 <= dir.length; k++) {
+    if (d2.getUint32(o, true) !== 0x02014b50) break;
+    const metodo = d2.getUint16(o + 10, true), comp = d2.getUint32(o + 20, true), descomp = d2.getUint32(o + 24, true);
+    const nl = d2.getUint16(o + 28, true), el = d2.getUint16(o + 30, true), cl = d2.getUint16(o + 32, true), pos = d2.getUint32(o + 42, true);
+    const nome = new TextDecoder('utf-8').decode(dir.subarray(o + 46, o + 46 + nl));
+    itens.push({ nome, metodo, comp, descomp, pos });
+    o += 46 + nl + el + cl;
+  }
+  return itens;
+}
+async function zipLerTexto(file, item) {
+  const cab = new DataView(await file.slice(item.pos, item.pos + 30).arrayBuffer());
+  if (cab.getUint32(0, true) !== 0x04034b50) throw new Error('zip danificado');
+  const ini = item.pos + 30 + cab.getUint16(26, true) + cab.getUint16(28, true);
+  const blob = file.slice(ini, ini + item.comp);
+  let buf;
+  if (item.metodo === 0) buf = await blob.arrayBuffer();
+  else if (item.metodo === 8) {
+    if (typeof DecompressionStream === 'undefined') throw new Error('este navegador não consegue abrir .zip — extraia e escolha o arquivo .md');
+    buf = await new Response(blob.stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer();
+  } else throw new Error('tipo de compressão do zip não suportado — extraia e escolha o arquivo .md');
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch (e) { return new TextDecoder('iso-8859-1').decode(buf); }
+}
+// Devolve o texto da conversa: do .md/.txt escolhido ou de dentro do .zip (prefere o .md; se ele não tiver mensagens, tenta o .txt).
+async function lerConversaWhatsApp(file) {
+  if (!/\.zip$/i.test(file.name || '')) return { texto: await file.text(), origem: file.name };
+  const itens = (await zipListar(file)).filter(i => !/\/$/.test(i.nome) && !/(^|\/)__MACOSX\//.test(i.nome));
+  const md = itens.filter(i => /\.md$/i.test(i.nome)), txt = itens.filter(i => /\.txt$/i.test(i.nome));
+  const cand = md.concat(txt);
+  if (cand.length === 0) throw new Error('não achei nenhum arquivo .md ou .txt dentro do zip');
+  let ultimo = null;
+  for (const it of cand) {
+    const texto = await zipLerTexto(file, it);
+    ultimo = { texto, origem: file.name + ' → ' + it.nome };
+    if (parseEntregasWhatsApp(texto).mensagens > 0) return ultimo;
+  }
+  return ultimo;
+}
+
 async function importarEntregasWhatsApp() {
   const input = document.getElementById('fileEntregasWhats');
   const file = input.files[0];
-  if (!file) { alert('Selecione o arquivo .md da conversa primeiro.'); return; }
+  if (!file) { alert('Selecione o arquivo da conversa (.zip exportado do WhatsApp ou o .md) primeiro.'); return; }
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes de importar.'); return; }
 
   setStatus('statusEntregasWhats', 'Lendo arquivo...', 'carregando');
   toggleBtn('btnEntregasWhats', true);
   try {
-    const lido = parseEntregasWhatsApp(await file.text());
+    const conversa = await lerConversaWhatsApp(file);
+    const lido = parseEntregasWhatsApp(conversa.texto);
     if (lido.mensagens === 0) {
-      setStatus('statusEntregasWhats', 'Não reconheci mensagens nesse arquivo — confira se é a exportação .md da conversa do WhatsApp. Nada foi importado.', 'erro');
+      setStatus('statusEntregasWhats', 'Não reconheci mensagens nesse arquivo — confira se é a exportação da conversa do WhatsApp (o .zip ou o .md de dentro dele). Nada foi importado.', 'erro');
       return;
     }
     if (lido.entregas.length === 0) {
