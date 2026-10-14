@@ -4062,6 +4062,7 @@ function celulaEntregues(nome, v) {
 
 // ---------- Rodonaves automática: o portal consulta a API da Rodonaves e atualiza sozinho (sem robô/CSV) ----------
 let rteAutoRodando = false;
+const RTE_LOTES_EM_PARALELO = 6; // consultas ao servidor ao mesmo tempo
 function botaoRodonavesAuto(nome) {
   if (semAcentoMin(nome).indexOf('rodonaves') === -1) return '';
   return ` <button type="button" class="btn-rte-auto" id="rteAutoBtn" onclick="atualizarRodonavesAuto()" ${rteAutoRodando ? 'disabled' : ''} title="Consulta agora a API da Rodonaves para todas as NFs dela em Pedidos Não Recebidos e atualiza Em Rota e Entregues">🔄 Atualizar</button>`;
@@ -4074,6 +4075,7 @@ async function atualizarRodonavesAuto() {
   const wrap = document.getElementById('progressRteAuto'), bar = document.getElementById('progressBarRteAuto');
   const falha = msg => setStatus('statusRteAuto', 'Rodonaves NÃO foi atualizada: ' + msg + ' Nada foi trocado; os dados atuais continuam intactos.', 'erro');
   try {
+    const t0 = Date.now();
     setStatus('statusRteAuto', 'Rodonaves: conferindo acesso à API e listando as NFs…', 'carregando');
     wrap.style.display = 'block'; bar.style.width = '2%';
     const l = await buscarJsonComRetry(API_URL, 2, { action: 'reconstruirRodonavesListar' });
@@ -4082,14 +4084,23 @@ async function atualizarRodonavesAuto() {
     const nfs = l.dados.nfs || [], lote = l.dados.loteMax || 40;
     if (nfs.length === 0) { falha('não há NFs da Rodonaves em Pedidos Não Recebidos.'); return; }
     const rows = []; let semRetorno = 0, erros = 0, amostra = '';
-    for (let i = 0; i < nfs.length; i += lote) {
-      setStatus('statusRteAuto', `Rodonaves: consultando a API… ${Math.min(i + lote, nfs.length)} de ${nfs.length} NFs`, 'carregando');
-      bar.style.width = Math.max(2, Math.round((i / nfs.length) * 80)) + '%';
-      const r = await buscarJsonComRetry(API_URL, 2, { action: 'reconstruirRodonavesConsultar', nfs: nfs.slice(i, i + lote) });
-      if (!r.ok) { falha(`falhou no lote que começa na NF ${i + 1} (${r.erro || 'erro'}).`); return; }
-      if (!r.dados || r.dados.ok !== true) { falha((r.dados && r.dados.erro) || 'resposta inesperada do servidor.'); return; }
-      (r.dados.rows || []).forEach(x => rows.push(x)); semRetorno += r.dados.semRetorno || 0; erros += r.dados.erros || 0; if (!amostra && r.dados.amostraErro) amostra = r.dados.amostraErro;
-    }
+    // Vários lotes ao mesmo tempo (como os "workers" do robô): o Apps Script atende consultas em paralelo.
+    const lotes = []; for (let i = 0; i < nfs.length; i += lote) lotes.push(nfs.slice(i, i + lote));
+    const resultados = new Array(lotes.length); let proximo = 0, feitas = 0, erroLote = '';
+    const trabalhador = async () => {
+      while (!erroLote) {
+        const k = proximo++; if (k >= lotes.length) return;
+        const r = await buscarJsonComRetry(API_URL, 2, { action: 'reconstruirRodonavesConsultar', nfs: lotes[k] });
+        if (!r.ok) { erroLote = `falhou num dos lotes (${r.erro || 'erro'}).`; return; }
+        if (!r.dados || r.dados.ok !== true) { erroLote = (r.dados && r.dados.erro) || 'resposta inesperada do servidor.'; return; }
+        resultados[k] = r.dados; feitas += lotes[k].length;
+        setStatus('statusRteAuto', `Rodonaves: consultando a API… ${feitas} de ${nfs.length} NFs (${Math.round((Date.now() - t0) / 1000)} s)`, 'carregando');
+        bar.style.width = Math.max(2, Math.round((feitas / nfs.length) * 80)) + '%';
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(RTE_LOTES_EM_PARALELO, lotes.length) }, trabalhador));
+    if (erroLote) { falha(erroLote); return; }
+    resultados.forEach(d => { (d.rows || []).forEach(x => rows.push(x)); semRetorno += d.semRetorno || 0; erros += d.erros || 0; if (!amostra && d.amostraErro) amostra = d.amostraErro; });
     if (rows.length === 0) { falha(`a Rodonaves não devolveu dados de nenhuma das ${nfs.length} NFs (${erros} com erro).` + (amostra ? ' Exemplo do erro: ' + amostra : '')); return; }
     if (erros > nfs.length * 0.25) { falha(`${erros} de ${nfs.length} NFs deram erro na consulta; melhor tentar de novo mais tarde.` + (amostra ? ' Exemplo do erro: ' + amostra : '')); return; }
     bar.style.width = '85%';
@@ -4097,7 +4108,7 @@ async function atualizarRodonavesAuto() {
     if (document.getElementById('statusRteAuto').className.indexOf('erro') !== -1) return; // o próprio envio já explicou o problema
     const ent = rows.filter(x => String(x[11]).toUpperCase() === 'SIM').length;
     const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    setStatus('statusRteAuto', `Rodonaves atualizada às ${hora}: ${rows.length} de ${nfs.length} NFs com retorno da API (${ent} entregues)` +
+    setStatus('statusRteAuto', `Rodonaves atualizada às ${hora} (levou ${Math.round((Date.now() - t0) / 1000)} s): ${rows.length} de ${nfs.length} NFs com retorno da API (${ent} entregues)` +
       (semRetorno ? `; ${semRetorno} sem retorno (a API não achou a nota nos 2 CNPJs)` : '') + (erros ? `; ${erros} com erro na consulta` + (amostra ? ' (ex.: ' + amostra + ')' : '') : '') + '.', 'ok');
     atualizarEmRotaTratativas();
     carregarIndicadores();
