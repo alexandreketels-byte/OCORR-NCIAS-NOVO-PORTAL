@@ -589,6 +589,8 @@
     <button id="refreshBtn" onclick="carregarIndicadores()">Atualizar indicadores</button>
     <div class="progress-wrap" id="progressRteAuto"><div class="progress-bar" id="progressBarRteAuto"></div></div>
     <div class="status-line" id="statusRteAuto"></div>
+    <div class="progress-wrap" id="progressSSWAuto"><div class="progress-bar" id="progressBarSSWAuto"></div></div>
+    <div class="status-line" id="statusSSWAuto"></div>
   </div>
 
   <div class="indicadores" id="secOcorrencias">
@@ -4067,6 +4069,60 @@ function botaoRodonavesAuto(nome) {
   if (semAcentoMin(nome).indexOf('rodonaves') === -1) return '';
   return ` <button type="button" class="btn-rte-auto" id="rteAutoBtn" onclick="atualizarRodonavesAuto()" ${rteAutoRodando ? 'disabled' : ''} title="Consulta agora a API da Rodonaves para todas as NFs dela em Pedidos Não Recebidos e atualiza Em Rota e Entregues">🔄 Atualizar</button>`;
 }
+// ---------- TG Transp (SSW) automática: o portal pede ao SSW o mesmo CSV que você baixa à mão, para os 2 CNPJs ----------
+let sswAutoRodando = false;
+function botaoTGAuto(nome) {
+  if (semAcentoMin(nome).indexOf('tg') !== 0) return '';
+  return ` <button type="button" class="btn-rte-auto" id="sswAutoBtn" onclick="atualizarTGAuto()" ${sswAutoRodando ? 'disabled' : ''} title="Pede ao site do SSW o rastreio de todas as NFs da TG em Pedidos Não Recebidos (nos 2 CNPJs) e atualiza Em Rota e Entregues">🔄 Atualizar</button>`;
+}
+async function atualizarTGAuto() {
+  if (sswAutoRodando) return;
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes.'); return; }
+  sswAutoRodando = true;
+  const btn = document.getElementById('sswAutoBtn'); if (btn) btn.disabled = true;
+  const wrap = document.getElementById('progressSSWAuto'), bar = document.getElementById('progressBarSSWAuto');
+  const falha = msg => setStatus('statusSSWAuto', 'TG Transp NÃO foi atualizada: ' + msg + ' Nada foi trocado; os dados atuais continuam intactos.', 'erro');
+  try {
+    const t0 = Date.now();
+    setStatus('statusSSWAuto', 'TG Transp: listando as NFs…', 'carregando');
+    wrap.style.display = 'block'; bar.style.width = '3%';
+    const l = await buscarJsonComRetry(API_URL, 2, { action: 'reconstruirSSWListar' });
+    if (!l.ok) { falha(l.erro || 'sem resposta do servidor.'); return; }
+    if (!l.dados || l.dados.ok !== true) { falha((l.dados && l.dados.erro) || 'resposta inesperada — confira se o Code.gs mais novo foi implantado (nova versão).'); return; }
+    const nfs = l.dados.nfs || [], porPedido = l.dados.porPedido || 100;
+    if (nfs.length === 0) { falha('não há NFs da TG em Pedidos Não Recebidos.'); return; }
+    const textos = [], avisos = [];
+    for (let i = 0; i < nfs.length; i += porPedido) {
+      setStatus('statusSSWAuto', `TG Transp: consultando o SSW… ${Math.min(i + porPedido, nfs.length)} de ${nfs.length} NFs`, 'carregando');
+      bar.style.width = Math.max(5, Math.round((i / nfs.length) * 70)) + '%';
+      const r = await buscarJsonComRetry(API_URL, 2, { action: 'reconstruirSSWConsultar', nfs: nfs.slice(i, i + porPedido) });
+      if (!r.ok) { falha(`falhou ao consultar o SSW (${r.erro || 'erro'}).`); return; }
+      if (!r.dados || r.dados.ok !== true) { falha((r.dados && r.dados.erro) || 'resposta inesperada do servidor.'); return; }
+      // se QUALQUER CNPJ não devolveu o CSV (senha recusada, página de erro...), não importa nada: senão as notas desse CNPJ perderiam o status
+      if ((r.dados.erros || []).length) { falha('o SSW não respondeu direito: ' + r.dados.erros.join(' | ') + '.'); return; }
+      (r.dados.csvs || []).forEach(c => { if (c.linhas > 0) textos.push(c.texto); });
+    }
+    if (textos.length === 0) { falha(`o SSW não devolveu rastreio de nenhuma das ${nfs.length} NFs.`); return; }
+    const lido = parseBaixaSSW(textos.length === 1 ? textos[0] : textos);
+    if (lido.erro) { falha(lido.erro); return; }
+    bar.style.width = '80%';
+    await enviarEmLotes(lido.rows, 'importBaixaEntregaSSW', 'statusSSWAuto', 'progressSSWAuto', 'progressBarSSWAuto');
+    const el = document.getElementById('statusSSWAuto');
+    if (el.className.indexOf('erro') !== -1) return; // o próprio envio já explicou o problema
+    const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const sem = Math.max(0, nfs.length - lido.rows.length);
+    el.textContent = `TG Transp atualizada às ${hora} (levou ${Math.round((Date.now() - t0) / 1000)} s): ${lido.rows.length} de ${nfs.length} NFs com rastreio no SSW` +
+      (sem ? ` (${sem} sem retorno nos 2 CNPJs)` : '') + '. ' + el.textContent;
+    atualizarEmRotaTratativas();
+    carregarIndicadores();
+  } catch (err) {
+    falha(err.message + '.');
+  } finally {
+    sswAutoRodando = false;
+    const b = document.getElementById('sswAutoBtn'); if (b) b.disabled = false;
+  }
+}
+
 async function atualizarRodonavesAuto() {
   if (rteAutoRodando) return;
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes.'); return; }
@@ -4130,7 +4186,7 @@ function renderTabelaTransportadoras(porTransportadora) {
   tbody.innerHTML = linhas.map(([nome, v]) => {
     const cor = v.performance >= 90 ? 'var(--verde)' : (v.performance >= 80 ? 'var(--laranja)' : 'var(--vermelho)');
     return `<tr>
-      <td>${nome}${botaoRodonavesAuto(nome)}</td>
+      <td>${nome}${botaoRodonavesAuto(nome)}${botaoTGAuto(nome)}</td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false)">${v.qtd}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', true, false)">${v.emAtraso}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, true)">${v.indefinidos}</a></td>
