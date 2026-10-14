@@ -63,6 +63,8 @@
   .selo-novo { background: var(--azul); color: #fff; font-weight: 800; letter-spacing: .05em; }
   .selo-ontem { color: var(--cinza); font-weight: 500; font-style: italic; }
   .selo-editada { font-size: 0.68rem; color: var(--laranja); border: 1px solid var(--laranja); border-radius: 4px; padding: 0 4px; margin-left: 4px; white-space: nowrap; cursor: help; }
+  .btn-rte-auto { margin-left: 8px; padding: 3px 9px; font-size: 0.78rem; font-weight: 600; border-radius: 6px; cursor: pointer; background: var(--destaque); color: #fff; border: none; white-space: nowrap; }
+  .btn-rte-auto:disabled { opacity: .55; cursor: wait; }
   .atalho-btn:hover { background: rgba(255,255,255,0.25); }
   main { max-width: 1800px; margin: 0 auto; padding: 28px 32px 60px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
@@ -585,6 +587,8 @@
     </table>
     </div>
     <button id="refreshBtn" onclick="carregarIndicadores()">Atualizar indicadores</button>
+    <div class="progress-wrap" id="progressRteAuto"><div class="progress-bar" id="progressBarRteAuto"></div></div>
+    <div class="status-line" id="statusRteAuto"></div>
   </div>
 
   <div class="indicadores" id="secOcorrencias">
@@ -4056,6 +4060,55 @@ function celulaEntregues(nome, v) {
   return `<td class="cel-entregue-ocor" title="${escapeHtml(dica)}">${num}<span class="aviso-ocor" onclick="${acao}" role="button">🔔 ${n} com ocorrência</span></td>`;
 }
 
+// ---------- Rodonaves automática: o portal consulta a API da Rodonaves e atualiza sozinho (sem robô/CSV) ----------
+let rteAutoRodando = false;
+function botaoRodonavesAuto(nome) {
+  if (semAcentoMin(nome).indexOf('rodonaves') === -1) return '';
+  return ` <button type="button" class="btn-rte-auto" id="rteAutoBtn" onclick="atualizarRodonavesAuto()" ${rteAutoRodando ? 'disabled' : ''} title="Consulta agora a API da Rodonaves para todas as NFs dela em Pedidos Não Recebidos e atualiza Em Rota e Entregues">🔄 Atualizar</button>`;
+}
+async function atualizarRodonavesAuto() {
+  if (rteAutoRodando) return;
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes.'); return; }
+  rteAutoRodando = true;
+  const btn = document.getElementById('rteAutoBtn'); if (btn) btn.disabled = true;
+  const wrap = document.getElementById('progressRteAuto'), bar = document.getElementById('progressBarRteAuto');
+  const falha = msg => setStatus('statusRteAuto', 'Rodonaves NÃO foi atualizada: ' + msg + ' Nada foi trocado; os dados atuais continuam intactos.', 'erro');
+  try {
+    setStatus('statusRteAuto', 'Rodonaves: conferindo acesso à API e listando as NFs…', 'carregando');
+    wrap.style.display = 'block'; bar.style.width = '2%';
+    const l = await buscarJsonComRetry(API_URL, 2, { action: 'reconstruirRodonavesListar' });
+    if (!l.ok) { falha(l.erro || 'sem resposta do servidor.'); return; }
+    if (!l.dados || l.dados.ok !== true) { falha((l.dados && l.dados.erro) || 'resposta inesperada — confira se o Code.gs mais novo foi implantado (nova versão).'); return; }
+    const nfs = l.dados.nfs || [], lote = l.dados.loteMax || 40;
+    if (nfs.length === 0) { falha('não há NFs da Rodonaves em Pedidos Não Recebidos.'); return; }
+    const rows = []; let semRetorno = 0, erros = 0;
+    for (let i = 0; i < nfs.length; i += lote) {
+      setStatus('statusRteAuto', `Rodonaves: consultando a API… ${Math.min(i + lote, nfs.length)} de ${nfs.length} NFs`, 'carregando');
+      bar.style.width = Math.max(2, Math.round((i / nfs.length) * 80)) + '%';
+      const r = await buscarJsonComRetry(API_URL, 2, { action: 'reconstruirRodonavesConsultar', nfs: nfs.slice(i, i + lote) });
+      if (!r.ok) { falha(`falhou no lote que começa na NF ${i + 1} (${r.erro || 'erro'}).`); return; }
+      if (!r.dados || r.dados.ok !== true) { falha((r.dados && r.dados.erro) || 'resposta inesperada do servidor.'); return; }
+      (r.dados.rows || []).forEach(x => rows.push(x)); semRetorno += r.dados.semRetorno || 0; erros += r.dados.erros || 0;
+    }
+    if (rows.length === 0) { falha(`a Rodonaves não devolveu dados de nenhuma das ${nfs.length} NFs (${erros} consultas com erro).`); return; }
+    if (erros > nfs.length * (l.dados.cnpjs || 1) * 0.25) { falha(`muitas consultas deram erro (${erros}); melhor tentar de novo mais tarde.`); return; }
+    bar.style.width = '85%';
+    await enviarEmLotes(rows, 'importBaixaEntregaRTE', 'statusRteAuto', 'progressRteAuto', 'progressBarRteAuto');
+    if (document.getElementById('statusRteAuto').className.indexOf('erro') !== -1) return; // o próprio envio já explicou o problema
+    const ent = rows.filter(x => String(x[11]).toUpperCase() === 'SIM').length;
+    const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    setStatus('statusRteAuto', `Rodonaves atualizada às ${hora}: ${rows.length} de ${nfs.length} NFs com retorno da API (${ent} entregues)` +
+      (semRetorno ? `; ${semRetorno} sem retorno (a API não achou a nota nos 2 CNPJs)` : '') + (erros ? `; ${erros} consultas com erro` : '') + '.', 'ok');
+    atualizarEmRotaTratativas();
+    carregarIndicadores();
+  } catch (err) {
+    falha(err.message + '.');
+  } finally {
+    rteAutoRodando = false;
+    const b = document.getElementById('rteAutoBtn'); if (b) b.disabled = false;
+  }
+}
+
 function renderTabelaTransportadoras(porTransportadora) {
   const tbody = document.getElementById('tabelaTransportadorasBody');
   // Ordena pela pior performance primeiro
@@ -4066,7 +4119,7 @@ function renderTabelaTransportadoras(porTransportadora) {
   tbody.innerHTML = linhas.map(([nome, v]) => {
     const cor = v.performance >= 90 ? 'var(--verde)' : (v.performance >= 80 ? 'var(--laranja)' : 'var(--vermelho)');
     return `<tr>
-      <td>${nome}</td>
+      <td>${nome}${botaoRodonavesAuto(nome)}</td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false)">${v.qtd}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', true, false)">${v.emAtraso}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, true)">${v.indefinidos}</a></td>
