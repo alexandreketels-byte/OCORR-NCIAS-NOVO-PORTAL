@@ -591,6 +591,8 @@
     <div class="status-line" id="statusRteAuto"></div>
     <div class="progress-wrap" id="progressSSWAuto"><div class="progress-bar" id="progressBarSSWAuto"></div></div>
     <div class="status-line" id="statusSSWAuto"></div>
+    <div class="progress-wrap" id="progressNRAuto"><div class="progress-bar" id="progressBarNRAuto"></div></div>
+    <div class="status-line" id="statusNRAuto"></div>
   </div>
 
   <div class="indicadores" id="secOcorrencias">
@@ -4123,6 +4125,80 @@ async function atualizarTGAuto() {
   }
 }
 
+// ---------- NR Express automática: consulta pública do SSW SEM senha (lê a tabela da tela, não o CSV) ----------
+let nrAutoRodando = false;
+function botaoNRAuto(nome) {
+  if (semAcentoMin(nome).indexOf('nr') !== 0) return '';
+  return ` <button type="button" class="btn-rte-auto" id="nrAutoBtn" onclick="atualizarNRAuto()" ${nrAutoRodando ? 'disabled' : ''} title="Consulta o rastreio público da NR Express no SSW (sem senha) para todas as NFs dela em Pedidos Não Recebidos e atualiza Em Rota e Entregues">🔄 Atualizar</button>`;
+}
+async function atualizarNRAuto() {
+  if (nrAutoRodando) return;
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes.'); return; }
+  nrAutoRodando = true;
+  const btn = document.getElementById('nrAutoBtn'); if (btn) btn.disabled = true;
+  const wrap = document.getElementById('progressNRAuto'), bar = document.getElementById('progressBarNRAuto');
+  const falha = msg => setStatus('statusNRAuto', 'NR Express NÃO foi atualizada: ' + msg + ' Nada foi trocado; os dados atuais continuam intactos.', 'erro');
+  try {
+    const t0 = Date.now();
+    setStatus('statusNRAuto', 'NR Express: listando as NFs…', 'carregando');
+    wrap.style.display = 'block'; bar.style.width = '3%';
+    const l = await buscarJsonComRetry(API_URL, 2, { action: 'reconstruirNRListar' });
+    if (!l.ok) { falha(l.erro || 'sem resposta do servidor.'); return; }
+    if (!l.dados || l.dados.ok !== true) { falha((l.dados && l.dados.erro) || 'resposta inesperada — confira se o Code.gs mais novo foi implantado (nova versão).'); return; }
+    const nfs = l.dados.nfs || [], porPedido = l.dados.porPedido || 100, porDetalhe = l.dados.detalhesPorPedido || 25;
+    if (nfs.length === 0) { falha('não há NFs da NR Express em Pedidos Não Recebidos.'); return; }
+    // 1) tela de resultado do SSW (até 100 NFs por vez)
+    const rows = [], detalhes = [];
+    for (let i = 0; i < nfs.length; i += porPedido) {
+      setStatus('statusNRAuto', `NR Express: consultando o SSW… ${Math.min(i + porPedido, nfs.length)} de ${nfs.length} NFs`, 'carregando');
+      bar.style.width = Math.max(5, Math.round((i / nfs.length) * 50)) + '%';
+      const r = await buscarJsonComRetry(API_URL, 2, { action: 'reconstruirNRConsultar', nfs: nfs.slice(i, i + porPedido) });
+      if (!r.ok) { falha(`falhou ao consultar o SSW (${r.erro || 'erro'}).`); return; }
+      if (!r.dados || r.dados.ok !== true) { falha((r.dados && r.dados.erro) || 'resposta inesperada do servidor.'); return; }
+      // se QUALQUER CNPJ não devolveu a lista (bloqueio, captcha, página de erro...), não importa nada: senão as notas desse CNPJ perderiam o status
+      if ((r.dados.erros || []).length) { falha('o SSW não respondeu direito: ' + r.dados.erros.join(' | ') + '.'); return; }
+      (r.dados.rows || []).forEach(x => rows.push(x)); (r.dados.detalhes || []).forEach(x => detalhes.push(x));
+    }
+    if (rows.length === 0) { falha(`o SSW não devolveu rastreio de nenhuma das ${nfs.length} NFs.`); return; }
+    // 2) previsão de quem não trouxe no texto: abre "Mais detalhes" (vários ao mesmo tempo). Se falhar, só fica sem previsão — não trava.
+    let semPrevisao = 0, amostra = '';
+    if (detalhes.length) {
+      const lotes = []; for (let i = 0; i < detalhes.length; i += porDetalhe) lotes.push(detalhes.slice(i, i + porDetalhe));
+      const previsoes = {}; let proximo = 0, feitos = 0;
+      const trabalhador = async () => {
+        while (true) {
+          const k = proximo++; if (k >= lotes.length) return;
+          const r = await buscarJsonComRetry(API_URL, 2, { action: 'reconstruirNRDetalhes', itens: lotes[k] });
+          if (r.ok && r.dados && r.dados.ok === true) { Object.assign(previsoes, r.dados.previsoes || {}); if (!amostra && r.dados.amostra) amostra = r.dados.amostra; }
+          else if (!amostra) amostra = (r.dados && r.dados.erro) || r.erro || 'sem resposta';
+          feitos += lotes[k].length;
+          setStatus('statusNRAuto', `NR Express: buscando as previsões… ${feitos} de ${detalhes.length} (${Math.round((Date.now() - t0) / 1000)} s)`, 'carregando');
+          bar.style.width = (50 + Math.round((feitos / detalhes.length) * 30)) + '%';
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(RTE_LOTES_EM_PARALELO, lotes.length) }, trabalhador));
+      rows.forEach(x => { if (!x[3] && previsoes[x[0]]) x[3] = previsoes[x[0]]; });
+      semPrevisao = detalhes.filter(d => !previsoes[d.nf]).length;
+    }
+    bar.style.width = '85%';
+    await enviarEmLotes(rows, 'importBaixaEntregaNR', 'statusNRAuto', 'progressNRAuto', 'progressBarNRAuto');
+    const el = document.getElementById('statusNRAuto');
+    if (el.className.indexOf('erro') !== -1) return; // o próprio envio já explicou o problema
+    const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const sem = Math.max(0, nfs.length - rows.length), ent = rows.filter(x => x[1] === 'Entregue').length;
+    el.textContent = `NR Express atualizada às ${hora} (levou ${Math.round((Date.now() - t0) / 1000)} s): ${rows.length} de ${nfs.length} NFs com rastreio no SSW (${ent} entregues)` +
+      (sem ? `; ${sem} sem retorno (o SSW não mostra essas notas)` : '') +
+      (semPrevisao ? `; ${semPrevisao} sem previsão (não consegui ler${amostra ? ': ' + amostra : ''})` : '') + '. ' + el.textContent;
+    atualizarEmRotaTratativas();
+    carregarIndicadores();
+  } catch (err) {
+    falha(err.message + '.');
+  } finally {
+    nrAutoRodando = false;
+    const b = document.getElementById('nrAutoBtn'); if (b) b.disabled = false;
+  }
+}
+
 async function atualizarRodonavesAuto() {
   if (rteAutoRodando) return;
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes.'); return; }
@@ -4186,7 +4262,7 @@ function renderTabelaTransportadoras(porTransportadora) {
   tbody.innerHTML = linhas.map(([nome, v]) => {
     const cor = v.performance >= 90 ? 'var(--verde)' : (v.performance >= 80 ? 'var(--laranja)' : 'var(--vermelho)');
     return `<tr>
-      <td>${nome}${botaoRodonavesAuto(nome)}${botaoTGAuto(nome)}</td>
+      <td>${nome}${botaoRodonavesAuto(nome)}${botaoTGAuto(nome)}${botaoNRAuto(nome)}</td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false)">${v.qtd}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', true, false)">${v.emAtraso}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, true)">${v.indefinidos}</a></td>
