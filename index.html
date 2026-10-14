@@ -4081,24 +4081,24 @@ async function atualizarRodonavesAuto() {
     if (!l.dados || l.dados.ok !== true) { falha((l.dados && l.dados.erro) || 'resposta inesperada — confira se o Code.gs mais novo foi implantado (nova versão).'); return; }
     const nfs = l.dados.nfs || [], lote = l.dados.loteMax || 40;
     if (nfs.length === 0) { falha('não há NFs da Rodonaves em Pedidos Não Recebidos.'); return; }
-    const rows = []; let semRetorno = 0, erros = 0;
+    const rows = []; let semRetorno = 0, erros = 0, amostra = '';
     for (let i = 0; i < nfs.length; i += lote) {
       setStatus('statusRteAuto', `Rodonaves: consultando a API… ${Math.min(i + lote, nfs.length)} de ${nfs.length} NFs`, 'carregando');
       bar.style.width = Math.max(2, Math.round((i / nfs.length) * 80)) + '%';
       const r = await buscarJsonComRetry(API_URL, 2, { action: 'reconstruirRodonavesConsultar', nfs: nfs.slice(i, i + lote) });
       if (!r.ok) { falha(`falhou no lote que começa na NF ${i + 1} (${r.erro || 'erro'}).`); return; }
       if (!r.dados || r.dados.ok !== true) { falha((r.dados && r.dados.erro) || 'resposta inesperada do servidor.'); return; }
-      (r.dados.rows || []).forEach(x => rows.push(x)); semRetorno += r.dados.semRetorno || 0; erros += r.dados.erros || 0;
+      (r.dados.rows || []).forEach(x => rows.push(x)); semRetorno += r.dados.semRetorno || 0; erros += r.dados.erros || 0; if (!amostra && r.dados.amostraErro) amostra = r.dados.amostraErro;
     }
-    if (rows.length === 0) { falha(`a Rodonaves não devolveu dados de nenhuma das ${nfs.length} NFs (${erros} consultas com erro).`); return; }
-    if (erros > nfs.length * (l.dados.cnpjs || 1) * 0.25) { falha(`muitas consultas deram erro (${erros}); melhor tentar de novo mais tarde.`); return; }
+    if (rows.length === 0) { falha(`a Rodonaves não devolveu dados de nenhuma das ${nfs.length} NFs (${erros} com erro).` + (amostra ? ' Exemplo do erro: ' + amostra : '')); return; }
+    if (erros > nfs.length * 0.25) { falha(`${erros} de ${nfs.length} NFs deram erro na consulta; melhor tentar de novo mais tarde.` + (amostra ? ' Exemplo do erro: ' + amostra : '')); return; }
     bar.style.width = '85%';
     await enviarEmLotes(rows, 'importBaixaEntregaRTE', 'statusRteAuto', 'progressRteAuto', 'progressBarRteAuto');
     if (document.getElementById('statusRteAuto').className.indexOf('erro') !== -1) return; // o próprio envio já explicou o problema
     const ent = rows.filter(x => String(x[11]).toUpperCase() === 'SIM').length;
     const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     setStatus('statusRteAuto', `Rodonaves atualizada às ${hora}: ${rows.length} de ${nfs.length} NFs com retorno da API (${ent} entregues)` +
-      (semRetorno ? `; ${semRetorno} sem retorno (a API não achou a nota nos 2 CNPJs)` : '') + (erros ? `; ${erros} consultas com erro` : '') + '.', 'ok');
+      (semRetorno ? `; ${semRetorno} sem retorno (a API não achou a nota nos 2 CNPJs)` : '') + (erros ? `; ${erros} com erro na consulta` + (amostra ? ' (ex.: ' + amostra + ')' : '') : '') + '.', 'ok');
     atualizarEmRotaTratativas();
     carregarIndicadores();
   } catch (err) {
