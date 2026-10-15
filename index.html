@@ -4311,7 +4311,7 @@ async function buscarPedidosNaoRecebidosCentral() {
     const el = document.getElementById('statusPedidos');
     if (el.className.indexOf('erro') !== -1) return; // o próprio envio já explicou o problema
     const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    el.textContent = `Pedidos Não Recebidos atualizados às ${hora} (levou ${Math.round((Date.now() - t0) / 1000)} s): ${rows.length} pedidos entregues de ${r.dados.de} a ${r.dados.ate}. ` + el.textContent;
+    el.textContent = `Pedidos Não Recebidos atualizados às ${hora} (levou ${Math.round((Date.now() - t0) / 1000)} s): ${rows.length} pedidos (${Object.keys(r.dados.ignoradas || {}).length ? 'ignorados: ' + Object.entries(r.dados.ignoradas).map(([k, v]) => k + ' ' + v).join(', ') : 'nenhum ignorado'}) de ${r.dados.de} a ${r.dados.ate}. ` + el.textContent;
     carregarIndicadores();
   } catch (err) {
     falha(err.message + '.');
