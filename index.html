@@ -595,6 +595,8 @@
     <div class="status-line" id="statusNRAuto"></div>
     <div class="progress-wrap" id="progressTecmarAuto"><div class="progress-bar" id="progressBarTecmarAuto"></div></div>
     <div class="status-line" id="statusTecmarAuto"></div>
+    <div class="progress-wrap" id="progressGFWAuto"><div class="progress-bar" id="progressBarGFWAuto"></div></div>
+    <div class="status-line" id="statusGFWAuto"></div>
   </div>
 
   <div class="indicadores" id="secOcorrencias">
@@ -4243,6 +4245,49 @@ async function atualizarTecmarAuto() {
   }
 }
 
+// ---------- GFW automática: o servidor entra no consulta-gfw (login/senha guardados no Apps Script) e pede as notas do período ----------
+// Atualiza só as ENTREGAS (Baixa de Entrega GFW). A previsão da GFW continua vindo do romaneio, como sempre.
+let gfwAutoRodando = false;
+function botaoGFWAuto(nome) {
+  if (semAcentoMin(nome).indexOf('gfw') === -1) return '';
+  return ` <button type="button" class="btn-rte-auto" id="gfwAutoBtn" onclick="atualizarGFWAuto()" ${gfwAutoRodando ? 'disabled' : ''} title="Entra no consulta-gfw, busca as notas do período (da coleta mais antiga até hoje) e atualiza as Entregas da GFW. A previsão continua vindo do romaneio.">🔄 Atualizar</button>`;
+}
+async function atualizarGFWAuto() {
+  if (gfwAutoRodando) return;
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes.'); return; }
+  gfwAutoRodando = true;
+  const btn = document.getElementById('gfwAutoBtn'); if (btn) btn.disabled = true;
+  const wrap = document.getElementById('progressGFWAuto'), bar = document.getElementById('progressBarGFWAuto');
+  const falha = msg => setStatus('statusGFWAuto', 'GFW NÃO foi atualizada: ' + msg + ' Nada foi trocado; os dados atuais continuam intactos.', 'erro');
+  try {
+    const t0 = Date.now();
+    setStatus('statusGFWAuto', 'GFW: entrando no site e buscando as notas do período…', 'carregando');
+    wrap.style.display = 'block'; bar.style.width = '10%';
+    const r = await buscarJsonComRetry(API_URL, 1, { action: 'reconstruirGFWConsultar' });
+    if (!r.ok) { falha(r.erro || 'sem resposta do servidor.'); return; }
+    if (!r.dados || r.dados.ok !== true) { falha((r.dados && r.dados.erro) || 'resposta inesperada — confira se o Code.gs mais novo foi implantado (nova versão).'); return; }
+    const rows = r.dados.rows || [];
+    if (rows.length === 0) { falha('o site não devolveu nenhuma nota.'); return; }
+    // confere antes de trocar: se NENHUMA NF da GFW de Pedidos Não Recebidos apareceu, algo está errado (período, conta ou site)
+    if (!r.dados.achadasPNR) { falha(`o site devolveu ${rows.length} notas de ${r.dados.de} a ${r.dados.ate}, mas nenhuma das ${r.dados.nPNR} NFs da GFW em Pedidos Não Recebidos estava entre elas.`); return; }
+    bar.style.width = '40%';
+    await enviarEmLotes(rows, 'importBaixaEntregaGFW', 'statusGFWAuto', 'progressGFWAuto', 'progressBarGFWAuto');
+    const el = document.getElementById('statusGFWAuto');
+    if (el.className.indexOf('erro') !== -1) return; // o próprio envio já explicou o problema
+    const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const sem = r.dados.nPNR - r.dados.achadasPNR;
+    el.textContent = `GFW atualizada às ${hora} (levou ${Math.round((Date.now() - t0) / 1000)} s): ${rows.length} notas de ${r.dados.de} a ${r.dados.ate} (${r.dados.entregues} entregues); ` +
+      `${r.dados.achadasPNR} de ${r.dados.nPNR} NFs de Pedidos Não Recebidos encontradas` + (sem ? ` (${sem} fora do período ou sem retorno)` : '') + '. ' + el.textContent;
+    atualizarEmRotaTratativas();
+    carregarIndicadores();
+  } catch (err) {
+    falha(err.message + '.');
+  } finally {
+    gfwAutoRodando = false;
+    const b = document.getElementById('gfwAutoBtn'); if (b) b.disabled = false;
+  }
+}
+
 async function atualizarRodonavesAuto() {
   if (rteAutoRodando) return;
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes.'); return; }
@@ -4306,7 +4351,7 @@ function renderTabelaTransportadoras(porTransportadora) {
   tbody.innerHTML = linhas.map(([nome, v]) => {
     const cor = v.performance >= 90 ? 'var(--verde)' : (v.performance >= 80 ? 'var(--laranja)' : 'var(--vermelho)');
     return `<tr>
-      <td>${nome}${botaoRodonavesAuto(nome)}${botaoTGAuto(nome)}${botaoNRAuto(nome)}${botaoTecmarAuto(nome)}</td>
+      <td>${nome}${botaoRodonavesAuto(nome)}${botaoTGAuto(nome)}${botaoNRAuto(nome)}${botaoTecmarAuto(nome)}${botaoGFWAuto(nome)}</td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false)">${v.qtd}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', true, false)">${v.emAtraso}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, true)">${v.indefinidos}</a></td>
