@@ -634,6 +634,7 @@
     <p class="desc">Cole aqui direto da tela do sistema (com as mensagens de cada pedido) — não precisa mais passar pelo Excel antes, a caixa já reconhece a tabela colada e organiza as colunas sozinha. Fica salvo neste navegador até você processar um texto novo.</p>
     <textarea id="colarOcorrenciasTexto" rows="8" style="width:100%;font-family:inherit;font-size:0.9rem;padding:10px;border:1px solid var(--borda);border-radius:8px;"></textarea>
     <button id="btnProcessarTratativas" onclick="processarOcorrenciasTexto()" style="margin-top:10px">Processar texto</button>
+    <button type="button" id="btnBuscarCentral" onclick="buscarOcorrenciasCentral()" style="margin-top:10px;margin-left:6px" title="Entra no sistema da empresa, abre o Relatório de Ocorrências (todas, status Ambos) e carrega aqui, sem copiar e colar.">🔄 Buscar do sistema</button>
     <div class="progress-wrap" id="progressTratativas"><div class="progress-bar" id="progressBarTratativas"></div></div>
     <div class="status-line" id="statusTratativas"></div>
 
@@ -4286,6 +4287,30 @@ async function atualizarGFWAuto() {
   } finally {
     gfwAutoRodando = false;
     const b = document.getElementById('gfwAutoBtn'); if (b) b.disabled = false;
+  }
+}
+
+// Ocorrências direto do sistema da empresa (Central): o servidor entra, consulta e devolve; daqui em diante é o mesmo fluxo do texto colado.
+let centralRodando = false;
+async function buscarOcorrenciasCentral() {
+  if (centralRodando) return;
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes.'); return; }
+  centralRodando = true;
+  const btn = document.getElementById('btnBuscarCentral'); if (btn) btn.disabled = true;
+  const falha = msg => setStatus('statusTratativas', 'Ocorrências NÃO foram buscadas: ' + msg + ' Nada foi trocado.', 'erro');
+  try {
+    setStatus('statusTratativas', 'Entrando no sistema e buscando as ocorrências (pode levar até 1 minuto)…', 'carregando');
+    const r = await buscarJsonComRetry(API_URL, 1, { action: 'reconstruirCentralOcorrencias' });
+    if (!r.ok) { falha(r.erro || 'sem resposta do servidor.'); return; }
+    if (!r.dados || r.dados.ok !== true) { falha((r.dados && r.dados.erro) || 'resposta inesperada — confira se o Code.gs mais novo foi implantado (nova versão).'); return; }
+    const registros = r.dados.registros || [];
+    if (!registros.length) { falha('o sistema não devolveu ocorrências.'); return; }
+    await finalizarProcessamentoTratativas(registros, 'btnBuscarCentral', null);
+  } catch (err) {
+    falha(err.message + '.');
+  } finally {
+    centralRodando = false;
+    const b = document.getElementById('btnBuscarCentral'); if (b) b.disabled = false;
   }
 }
 
