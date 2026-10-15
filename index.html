@@ -435,6 +435,7 @@
       <p class="desc">Relatório exportado do sistema (Data Coleta, Prev Etg, Atraso, Pedido, NF, Cliente, agrupado por Transportadora).</p>
       <input type="file" id="filePedidosNaoRecebidos">
       <button id="btnPedidosNaoRecebidos" onclick="importarPedidosNaoRecebidos()">Importar</button>
+      <button type="button" id="btnPNRCentral" onclick="buscarPedidosNaoRecebidosCentral()" style="margin-left:6px" title="Entra no sistema da empresa, abre o Relatório de Pedidos Não Recebidos Pelo Cliente (entregues de 01/01/2026 até hoje, todas as transportadoras) e importa direto, sem baixar arquivo.">🔄 Buscar do sistema</button>
       <div class="progress-wrap" id="progressPedidos"><div class="progress-bar" id="progressBarPedidos"></div></div>
       <div class="status-line" id="statusPedidos"></div>
       <div class="meta" id="metaPedidos"></div>
@@ -4287,6 +4288,36 @@ async function atualizarGFWAuto() {
   } finally {
     gfwAutoRodando = false;
     const b = document.getElementById('gfwAutoBtn'); if (b) b.disabled = false;
+  }
+}
+
+// Pedidos Não Recebidos direto do sistema da empresa (Central): o servidor entra, consulta e devolve as linhas; o envio é o mesmo do importador de arquivo (troca tudo, preservando as previsões manuais).
+let pnrCentralRodando = false;
+async function buscarPedidosNaoRecebidosCentral() {
+  if (pnrCentralRodando) return;
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes.'); return; }
+  pnrCentralRodando = true;
+  toggleBtn('btnPedidosNaoRecebidos', true); toggleBtn('btnPNRCentral', true);
+  const falha = msg => setStatus('statusPedidos', 'Pedidos Não Recebidos NÃO foram atualizados: ' + msg + ' Nada foi trocado; os dados atuais continuam intactos.', 'erro');
+  try {
+    const t0 = Date.now();
+    setStatus('statusPedidos', 'Entrando no sistema e buscando o relatório (pode levar até 1 minuto)…', 'carregando');
+    const r = await buscarJsonComRetry(API_URL, 1, { action: 'reconstruirCentralPedidosNaoRecebidos' });
+    if (!r.ok) { falha(r.erro || 'sem resposta do servidor.'); return; }
+    if (!r.dados || r.dados.ok !== true) { falha((r.dados && r.dados.erro) || 'resposta inesperada — confira se o Code.gs mais novo foi implantado (nova versão).'); return; }
+    const rows = r.dados.rows || [];
+    if (!rows.length) { falha('o sistema não devolveu pedidos.'); return; }
+    await enviarEmLotes(rows, 'importPedidosNaoRecebidos', 'statusPedidos', 'progressPedidos', 'progressBarPedidos');
+    const el = document.getElementById('statusPedidos');
+    if (el.className.indexOf('erro') !== -1) return; // o próprio envio já explicou o problema
+    const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    el.textContent = `Pedidos Não Recebidos atualizados às ${hora} (levou ${Math.round((Date.now() - t0) / 1000)} s): ${rows.length} pedidos entregues de ${r.dados.de} a ${r.dados.ate}. ` + el.textContent;
+    carregarIndicadores();
+  } catch (err) {
+    falha(err.message + '.');
+  } finally {
+    pnrCentralRodando = false;
+    toggleBtn('btnPedidosNaoRecebidos', false); toggleBtn('btnPNRCentral', false);
   }
 }
 
