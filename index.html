@@ -65,6 +65,7 @@
   .selo-editada { font-size: 0.68rem; color: var(--laranja); border: 1px solid var(--laranja); border-radius: 4px; padding: 0 4px; margin-left: 4px; white-space: nowrap; cursor: help; }
   .btn-rte-auto { margin-left: 8px; padding: 3px 9px; font-size: 0.78rem; font-weight: 600; border-radius: 6px; cursor: pointer; background: var(--destaque); color: #fff; border: none; white-space: nowrap; }
   .btn-rte-auto:disabled { opacity: .55; cursor: wait; }
+  .orig-ent { display: inline-block; margin-left: 4px; padding: 0 6px; font-size: 0.62rem; font-weight: 700; line-height: 1.5; border-radius: 8px; background: rgba(128,128,128,.28); vertical-align: middle; white-space: nowrap; cursor: help; }
   .atalho-btn:hover { background: rgba(255,255,255,0.25); }
   main { max-width: 1800px; margin: 0 auto; padding: 28px 32px 60px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
@@ -4542,7 +4543,13 @@ let modalFiltrosSelecionados = {};
 let modalOrdenacao = { indice: null, direcao: 1 };
 
 // Colunas que, quando presentes, ganham um dropdown de filtro automático
-const COLUNAS_FILTRAVEIS = ['Transportadora', 'Status', 'Ocorrência', 'Entregue?', 'Entregue (GFW)', 'Entregue (RTE)', 'Entregue (SSW)', 'Entregue (NR Express)', 'Entregue (Tecmar)', 'Entregue (WhatsApp)'];
+const COLUNAS_FILTRAVEIS = ['Transportadora', 'Status', 'Ocorrência', 'Entregue?', 'Entregue'];
+let modalFiltroOrigem = ''; // "Entregue por" (GFW, RTE...) — só nos relatórios cujas linhas trazem .origens
+
+// Valor de uma célula para filtrar: a linha pode trazer um valor próprio (.filtros) quando a célula tem HTML/etiquetas.
+function valorParaFiltro(linha, idx, nome) {
+  return (linha.filtros && linha.filtros[nome] !== undefined) ? linha.filtros[nome] : linha[idx];
+}
 
 function mostrarModalCarregando(titulo, colunas) {
   document.getElementById('modalTitulo').textContent = titulo;
@@ -4556,6 +4563,7 @@ function mostrarModalCarregando(titulo, colunas) {
   modalDadosAtuais = [];
   modalLinhasFiltradas = [];
   modalFiltrosSelecionados = {};
+  modalFiltroOrigem = '';
   modalOrdenacao = { indice: null, direcao: 1 };
   montarCabecalhoModal();
   document.getElementById('modalOverlay').style.display = 'flex';
@@ -4587,11 +4595,12 @@ function montarFiltrosModal() {
   const container = document.getElementById('modalFiltrosSelects');
   container.innerHTML = '';
   modalFiltrosSelecionados = {};
+  modalFiltroOrigem = '';
 
   modalColunasAtuais.forEach((nome, idx) => {
     if (COLUNAS_FILTRAVEIS.indexOf(nome) === -1) return;
     const valores = Array.from(new Set(
-      modalDadosAtuais.map(l => l[idx]).filter(v => v !== undefined && v !== null && v !== '')
+      modalDadosAtuais.map(l => valorParaFiltro(l, idx, nome)).filter(v => v !== undefined && v !== null && v !== '')
     )).sort();
     if (valores.length === 0) return;
 
@@ -4603,15 +4612,17 @@ function montarFiltrosModal() {
     container.appendChild(select);
   });
 
-  // O filtro por período de entrega (GFW e/ou RTE) só faz sentido nos
-  // relatórios que têm essas colunas (ex: Pedidos Não Recebidos).
-  const temColunaEntrega = modalColunasAtuais.indexOf('Data Entrega (GFW)') !== -1 ||
-    modalColunasAtuais.indexOf('Data Entrega (RTE)') !== -1 ||
-    modalColunasAtuais.indexOf('Data Entrega (SSW)') !== -1 ||
-    modalColunasAtuais.indexOf('Data Entrega (NR Express)') !== -1 ||
-    modalColunasAtuais.indexOf('Data Entrega (Tecmar)') !== -1 ||
-    modalColunasAtuais.indexOf('Data Entrega (WhatsApp)') !== -1;
-  document.getElementById('modalFiltroDataEntrega').style.display = temColunaEntrega ? 'flex' : 'none';
+  // "Entregue por": qual origem (GFW, RTE, SSW, NR Express, Tecmar, WhatsApp) deu a entrega. Só aparece se as linhas trazem essa informação.
+  const origens = Array.from(new Set(modalDadosAtuais.reduce((acc, l) => acc.concat(l.origens || []), []))).sort();
+  if (origens.length) {
+    const selO = document.createElement('select');
+    selO.innerHTML = '<option value="">Entregue por (todas)</option>' + origens.map(o => `<option value="${o}">${o}</option>`).join('');
+    selO.onchange = () => { modalFiltroOrigem = selO.value; aplicarFiltrosModal(); };
+    container.appendChild(selO);
+  }
+
+  // O filtro por período de entrega só faz sentido nos relatórios que têm a coluna "Data Entrega" (ex: Pedidos Não Recebidos).
+  document.getElementById('modalFiltroDataEntrega').style.display = modalColunasAtuais.indexOf('Data Entrega') !== -1 ? 'flex' : 'none';
 }
 
 function limparFiltroDataEntregaModal() {
@@ -4627,27 +4638,19 @@ function aplicarFiltrosModal() {
   Object.keys(modalFiltrosSelecionados).forEach(idxStr => {
     const idx = Number(idxStr);
     const valor = modalFiltrosSelecionados[idx];
-    if (valor) linhas = linhas.filter(l => String(l[idx] ?? '') === valor);
+    if (valor) linhas = linhas.filter(l => String(valorParaFiltro(l, idx, modalColunasAtuais[idx]) ?? '') === valor);
   });
+  if (modalFiltroOrigem) linhas = linhas.filter(l => (l.origens || []).indexOf(modalFiltroOrigem) !== -1);
 
-  // Filtro por período de entrega — considera a data que estiver
-  // preenchida (baixa GFW, baixa RTE, entrega da SSW, da NR Express ou entrega informada no WhatsApp).
+  // Filtro por período de entrega — considera a data de QUALQUER origem da entrega (GFW, RTE, SSW, NR Express, Tecmar, WhatsApp).
   const dataDeStr = document.getElementById('modalDataEntregaDe').value;
   const dataAteStr = document.getElementById('modalDataEntregaAte').value;
   if (dataDeStr || dataAteStr) {
-    const idxGFW = modalColunasAtuais.indexOf('Data Entrega (GFW)');
-    const idxRTE = modalColunasAtuais.indexOf('Data Entrega (RTE)');
-    const idxSSW = modalColunasAtuais.indexOf('Data Entrega (SSW)');
-    const idxNR = modalColunasAtuais.indexOf('Data Entrega (NR Express)');
-    const idxTecmar = modalColunasAtuais.indexOf('Data Entrega (Tecmar)');
-    const idxWhats = modalColunasAtuais.indexOf('Data Entrega (WhatsApp)');
+    const idxData = modalColunasAtuais.indexOf('Data Entrega');
     const dataDe = dataDeStr ? new Date(dataDeStr + 'T00:00:00') : null;
     const dataAte = dataAteStr ? new Date(dataAteStr + 'T00:00:00') : null;
     linhas = linhas.filter(l => {
-      const candidatas = [idxGFW, idxRTE, idxSSW, idxNR, idxTecmar, idxWhats]
-        .filter(idx => idx !== -1)
-        .map(idx => parseDataBR(l[idx]))
-        .filter(d => d !== null);
+      const candidatas = (l.datas && l.datas.length ? l.datas : [l[idxData]]).map(parseDataBR).filter(d => d !== null);
       return candidatas.some(d => (!dataDe || d >= dataDe) && (!dataAte || d <= dataAte));
     });
   }
@@ -4695,7 +4698,25 @@ function baixarModalExcel() {
   exportarCSV(modalColunasAtuais, modalLinhasFiltradas, document.getElementById('modalTitulo').textContent);
 }
 
-const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)', 'Em Rota', 'Entregue (GFW)', 'Data Entrega (GFW)', 'Entregue (RTE)', 'Data Entrega (RTE)', 'Entregue (SSW)', 'Data Entrega (SSW)', 'Entregue (NR Express)', 'Data Entrega (NR Express)', 'Entregue (Tecmar)', 'Data Entrega (Tecmar)', 'Entregue (WhatsApp)', 'Data Entrega (WhatsApp)', 'Última Mensagem'];
+// As 6 origens da entrega (GFW, RTE, SSW, NR Express, Tecmar, WhatsApp) viram só 2 colunas: "Entregue" (com uma etiqueta pequena
+// da origem) e "Data Entrega" (a primeira data que existir). O detalhe de cada origem fica no balãozinho da etiqueta.
+const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loja', 'Data Coleta', 'Prev Etg', 'Atraso (dias)', 'Em Rota', 'Entregue', 'Data Entrega', 'Última Mensagem'];
+
+// Junta as 6 origens numa linha só: devolve as 2 células + os dados que o filtro/ordenação do modal usam.
+function celulasEntregaUniversal(p) {
+  const fontes = [
+    ['GFW', p.entregueGFW, fmtData(p.dataEntregaGFW)],
+    ['RTE', p.entregueRTE, fmtData(p.dataEntregaRTE)],
+    ['SSW', p.entregueSSW, p.dataEntregaSSW || ''],
+    ['NR Express', p.entregueNR, p.dataEntregaNR || ''],
+    ['Tecmar', p.entregueTecmar, p.dataEntregaTecmar || ''],
+    ['WhatsApp', p.entregueWhats, p.dataEntregaWhats || '']
+  ].filter(f => f[1] || f[2]);
+  if (!fontes.length) return { entregue: 'Não', data: '', origens: [], datas: [] };
+  const etiquetas = fontes.map(f => `<span class="orig-ent" title="${escapeHtml(f[0] + (f[2] ? ': entregue em ' + f[2] : ': entregue (sem data)'))}">${escapeHtml(f[0])}</span>`).join(' ');
+  const primeira = fontes.find(f => f[2]);
+  return { entregue: 'Sim ' + etiquetas, data: primeira ? primeira[2] : '', origens: fontes.map(f => f[0]), datas: fontes.map(f => f[2]).filter(Boolean) };
+}
 
 let ultimoFiltroPedidos = null;
 
@@ -4723,18 +4744,17 @@ async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido
   }
   try {
     const linhas = res.dados.map(p => {
+      const ent = celulasEntregaUniversal(p);
       const linha = [
         p.pedido, p.nf, p.cliente, p.cidade, p.loja, fmtData(p.dataColeta),
         celulaPrevisaoEditavel(p.pedido, fmtData(p.prevEtg)), p.atraso,
         p.emRota ? '<span style="color:var(--verde);font-weight:700">Em Rota</span>' : (p.dataRomaneio || ''),
-        p.entregueGFW ? 'Sim' : 'Não', fmtData(p.dataEntregaGFW),
-        p.entregueRTE ? 'Sim' : 'Não', fmtData(p.dataEntregaRTE),
-        p.entregueSSW ? 'Sim' : 'Não', p.dataEntregaSSW || '',
-        p.entregueNR ? 'Sim' : 'Não', p.dataEntregaNR || '',
-        p.entregueTecmar ? 'Sim' : 'Não', p.dataEntregaTecmar || '',
-        p.entregueWhats ? 'Sim' : 'Não', p.dataEntregaWhats || '',
+        ent.entregue, ent.data,
         p.ultimaOcorrencia || ''
       ];
+      linha.origens = ent.origens;                  // pro filtro "Entregue por"
+      linha.datas = ent.datas;                      // pro filtro por período (vale a data de qualquer origem, como antes)
+      linha.filtros = { 'Entregue': ent.origens.length ? 'Sim' : 'Não' }; // o dropdown "Entregue" filtra só Sim/Não, sem as etiquetas
       linha.historico = expandirHistorico(p.ultimaOcorrenciaHistorico);
       linha.destaque = !!(apenasEntregue && p.ocorrenciaAberta); // entregue + ocorrência em aberto: vermelho e no topo
       return linha;
