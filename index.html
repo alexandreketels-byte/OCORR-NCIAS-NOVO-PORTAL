@@ -425,6 +425,7 @@
       <p class="desc">Arquivo .csv exportado do sistema. A importação preserva o histórico: pedidos novos são adicionados e pedidos já existentes têm apenas Status Entrega e Receb Cliente atualizados.</p>
       <input type="file" id="fileTabDinamica">
       <button id="btnTabDinamica" onclick="importarTabDinamica()">Importar</button>
+      <button type="button" id="btnTabCentral" onclick="buscarTabDinamicaCentral()" style="margin-left:6px" title="Entra no sistema da empresa, gera a Tabela Dinâmica (cadastro da coleta mais antiga dos Pedidos Não Recebidos até hoje) e importa direto, sem baixar arquivo. Atualize os Pedidos Não Recebidos antes.">🔄 Buscar do sistema</button>
       <div class="progress-wrap" id="progressTabDinamica"><div class="progress-bar" id="progressBarTabDinamica"></div></div>
       <div class="status-line" id="statusTabDinamica"></div>
       <div class="meta" id="metaTabDinamica"></div>
@@ -4291,6 +4292,48 @@ async function atualizarGFWAuto() {
   } finally {
     gfwAutoRodando = false;
     const b = document.getElementById('gfwAutoBtn'); if (b) b.disabled = false;
+  }
+}
+
+// Tabela Dinâmica direto do sistema da empresa (Central): o servidor entra, gera o relatório e devolve as linhas (dados pessoais já esvaziados);
+// daí em diante é exatamente o caminho do arquivo CSV: mesmo tratamento das colunas, mesmo envio em lotes e mesmo índice de busca.
+let tabCentralRodando = false;
+async function buscarTabDinamicaCentral() {
+  if (tabCentralRodando) return;
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes.'); return; }
+  tabCentralRodando = true;
+  toggleBtn('btnTabDinamica', true); toggleBtn('btnTabCentral', true);
+  const falha = msg => setStatus('statusTabDinamica', 'Tabela Dinâmica NÃO foi atualizada: ' + msg + ' Nada foi trocado; os dados atuais continuam intactos.', 'erro');
+  try {
+    const t0 = Date.now();
+    setStatus('statusTabDinamica', 'Entrando no sistema e gerando a Tabela Dinâmica (pode levar de 1 a 2 minutos)…', 'carregando');
+    const r = await buscarJsonComRetry(API_URL, 1, { action: 'reconstruirCentralTabDinamica' });
+    if (!r.ok) { falha(r.erro || 'sem resposta do servidor.'); return; }
+    if (!r.dados || r.dados.ok !== true) { falha((r.dados && r.dados.erro) || 'resposta inesperada — confira se o Code.gs mais novo foi implantado (nova versão).'); return; }
+    const linhas = r.dados.rows || [];
+    if (!linhas.length) { falha('o sistema não devolveu pedidos.'); return; }
+    const cleanRows = linhas.map(r0 => {
+      const row = r0.slice(0, 58);
+      TAB_FORMULA_COLS.forEach(i => { row[i] = stripFormula(row[i]); });
+      TAB_NUMERIC_COLS.forEach(i => { row[i] = parseBRNumber(row[i]); });
+      TAB_COLS_PESSOAIS.forEach(i => { row[i] = ''; });
+      return row;
+    });
+    const sucesso = await enviarEmLotes(cleanRows, 'importTabDinamica', 'statusTabDinamica', 'progressTabDinamica', 'progressBarTabDinamica');
+    if (sucesso) {
+      await reconstruirIndiceTabDinamica();
+      const el = document.getElementById('statusTabDinamica');
+      if (el.className.indexOf('erro') === -1) {
+        const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        el.textContent = `Tabela Dinâmica atualizada às ${hora} (levou ${Math.round((Date.now() - t0) / 1000)} s): ${cleanRows.length} pedidos cadastrados de ${r.dados.de} a ${r.dados.ate}. ` + el.textContent;
+      }
+    }
+    carregarIndicadores();
+  } catch (err) {
+    falha(err.message + '.');
+  } finally {
+    tabCentralRodando = false;
+    toggleBtn('btnTabDinamica', false); toggleBtn('btnTabCentral', false);
   }
 }
 
