@@ -58,6 +58,10 @@
   .campo-simples:disabled { opacity: 0.45; }
   .lapis-ocorrencia { cursor: pointer; opacity: .55; margin-left: 4px; }
   .lapis-ocorrencia:hover { opacity: 1; }
+  .finalizar-ocorrencia { cursor: pointer; opacity: .55; margin-left: 4px; }
+  .finalizar-ocorrencia:hover { opacity: 1; }
+  .fin-box { border:1px solid var(--borda); border-radius:8px; padding:10px 12px; font-size:0.85rem; margin:8px 0; }
+  .fin-box .fin-msg { margin-top:6px; padding-top:6px; border-top:1px dashed var(--borda); }
   /* NEW / Ontem: quando a ocorrência foi aberta (canto da mensagem; o texto contorna o selo) */
   .selo-novo, .selo-ontem { float: right; margin: 0 0 2px 8px; font-size: 0.62rem; line-height: 1.5; border-radius: 4px; padding: 0 6px; white-space: nowrap; cursor: help; }
   .selo-novo { background: var(--azul); color: #fff; font-weight: 800; letter-spacing: .05em; }
@@ -691,6 +695,31 @@
         <button type="button" onclick="fecharEditorOcorrencia()" style="background:none;border:1px solid var(--borda);color:var(--texto)">Cancelar</button>
       </div>
       <div class="status-line" id="statusEditorOcorrencia"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="finalizarOcorrenciaOverlay">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <h3>Finalizar ocorrência no sistema</h3>
+      <button class="modal-close" onclick="fecharFinalizarOcorrencia()">&times;</button>
+    </div>
+    <div style="padding:16px 20px 20px">
+      <p class="desc" id="finalizarInfo" style="margin-top:0"></p>
+      <div id="finalizarPrevia" class="fin-box" style="display:none"></div>
+      <div id="finalizarForm" style="display:none">
+        <label class="desc" for="finalizarTipo" style="display:block;margin:10px 0 4px">Tipo da ocorrência (lista do sistema)</label>
+        <select id="finalizarTipo" class="campo-simples" style="width:100%"></select>
+        <label class="desc" for="finalizarSolucao" style="display:block;margin:10px 0 4px">Solução <span id="finalizarContador" style="float:right">240</span></label>
+        <textarea id="finalizarSolucao" rows="3" maxlength="240" class="PLLe" style="width:100%;font-family:inherit;font-size:0.9rem;padding:8px;border:1px solid var(--borda);border-radius:8px" oninput="atualizarFinalizar()"></textarea>
+        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;font-size:0.88rem"><input type="checkbox" id="finalizarConfirma" onchange="atualizarFinalizar()" style="margin-top:3px"><span id="finalizarConfirmaTexto"></span></label>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button id="btnFinalizarOcorrencia" type="button" onclick="confirmarFinalizarOcorrencia()" disabled>Finalizar ocorrência</button>
+        <button type="button" id="btnFinalizarCancelar" onclick="fecharFinalizarOcorrencia()" style="background:none;border:1px solid var(--borda);color:var(--texto)">Cancelar</button>
+      </div>
+      <div class="status-line" id="statusFinalizarOcorrencia"></div>
     </div>
   </div>
 </div>
@@ -2873,6 +2902,14 @@ function configurarPopoverHistoricoTratativas() {
     if (linha) abrirEditorOcorrencia(linha[COLUNAS_TRATATIVAS.indexOf('Pedido')], linha[COLUNAS_TRATATIVAS.indexOf('Ocorrência')]);
   });
 
+  if (corpoTratativas) corpoTratativas.addEventListener('click', e => {
+    const fin = e.target.closest('.finalizar-ocorrencia');
+    if (!fin) return;
+    e.stopPropagation();
+    const linha = tratativasLinhasFiltradas[Number(fin.dataset.idx)];
+    if (linha) abrirFinalizarOcorrencia(linha[COLUNAS_TRATATIVAS.indexOf('Pedido')]);
+  });
+
   if (corpoTratativas) corpoTratativas.addEventListener('change', e => {
     const caixa = e.target.closest('.chk-urgente');
     if (!caixa) return;
@@ -3628,7 +3665,7 @@ function aplicarFiltrosTratativas() {
             const ed = l.edicaoOcorrencia;
             const dica = ed ? escapeHtml(`Original: ${ed.original || 'não registrado'}${ed.por ? ' · alterada por ' + ed.por : ''}${ed.em ? ' em ' + ed.em : ''}`) : '';
             const selo = ed ? ` <span class="selo-editada" title="${dica}">alterada</span>` : '';
-            return `<td>${escapeHtml(valor)}${selo} <span class="lapis-ocorrencia" data-idx="${posicao}" title="Alterar tipo de ocorrência">✏️</span></td>`;
+            return `<td>${escapeHtml(valor)}${selo} <span class="lapis-ocorrencia" data-idx="${posicao}" title="Alterar tipo de ocorrência">✏️</span> <span class="finalizar-ocorrencia" data-idx="${posicao}" title="Finalizar esta ocorrência no sistema da empresa">✅</span></td>`;
           }
           if (idx === idxPedidoCol) {
             const u = l.urgente;
@@ -4335,6 +4372,76 @@ async function buscarTabDinamicaCentral() {
     tabCentralRodando = false;
     toggleBtn('btnTabDinamica', false); toggleBtn('btnTabCentral', false);
   }
+}
+
+// ---------- Finalizar ocorrência NO SISTEMA DA EMPRESA (a única ação do portal que grava lá) ----------
+// Um pedido por vez. 1) busca a PRÉVIA ao vivo no sistema; 2) você escolhe tipo + solução e marca a confirmação; 3) o servidor envia e
+// CONFERE no sistema depois. Nunca repete o envio sozinho: se a resposta demorar, avisa que PODE ter sido finalizada.
+let _finPedido = '', _finId = '', _finOcupado = false, _finPronto = false;
+function abrirFinalizarOcorrencia(pedido) {
+  if (_finOcupado) return;
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes.'); return; }
+  _finPedido = String(pedido || '').trim(); _finId = ''; _finPronto = false;
+  document.getElementById('finalizarInfo').innerHTML = `Pedido <b>${escapeHtml(_finPedido)}</b>`;
+  document.getElementById('finalizarPrevia').style.display = 'none';
+  document.getElementById('finalizarForm').style.display = 'none';
+  document.getElementById('finalizarSolucao').value = ''; document.getElementById('finalizarConfirma').checked = false;
+  document.getElementById('finalizarConfirmaTexto').textContent = `Confirmo que quero FINALIZAR a ocorrência do pedido ${_finPedido} no sistema da empresa.`;
+  toggleBtn('btnFinalizarOcorrencia', true);
+  document.getElementById('finalizarOcorrenciaOverlay').style.display = 'flex';
+  carregarPreviaFinalizacao();
+}
+function fecharFinalizarOcorrencia() { if (_finOcupado) return; document.getElementById('finalizarOcorrenciaOverlay').style.display = 'none'; }
+function atualizarFinalizar() {
+  const sol = document.getElementById('finalizarSolucao').value;
+  document.getElementById('finalizarContador').textContent = String(240 - sol.length);
+  const ok = _finPronto && !_finOcupado && document.getElementById('finalizarTipo').value && sol.trim() && document.getElementById('finalizarConfirma').checked;
+  toggleBtn('btnFinalizarOcorrencia', !ok);
+}
+async function carregarPreviaFinalizacao() {
+  _finOcupado = true;
+  setStatus('statusFinalizarOcorrencia', 'Consultando o sistema da empresa (até 1 minuto)…', 'carregando');
+  try {
+    const resp = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'reconstruirFinalizarOcorrenciaCentral', pedido: _finPedido, confirmar: false }) });
+    const r = await resp.json();
+    if (!r || r.error || r.ok !== true) { setStatus('statusFinalizarOcorrencia', (r && (r.erro || r.error)) || 'resposta inesperada do servidor.', 'erro'); return; }
+    const it = r.item; _finId = it.idOcorrencia;
+    const msgs = (it.ultimasMensagens || []).map(m => `<div class="fin-msg"><b>${escapeHtml(m.autor)}</b> · ${escapeHtml(m.data)}<br>${escapeHtml(m.texto)}</div>`).join('');
+    const prev = document.getElementById('finalizarPrevia');
+    prev.innerHTML = `<b>${escapeHtml(it.cliente)}</b><br>Transportadora: ${escapeHtml(it.transportadora)} · Loja ${escapeHtml(it.loja)} · NF ${escapeHtml(it.nf)}<br>Ocorrência: ${escapeHtml(it.ocorrencia)} · Status: <b>${escapeHtml(it.status)}</b> · aberta em ${escapeHtml(it.aberturaEm)}${msgs}`;
+    prev.style.display = 'block';
+    document.getElementById('finalizarTipo').innerHTML = '<option value="">Escolha o tipo...</option>' + (r.tipos || []).map(t => `<option value="${escapeHtml(t.codigo)}">${escapeHtml(t.nome)}</option>`).join('');
+    document.getElementById('finalizarForm').style.display = 'block';
+    _finPronto = true;
+    setStatus('statusFinalizarOcorrencia', 'Confira os dados acima, escolha o tipo, escreva a solução e marque a confirmação.', '');
+  } catch (err) {
+    setStatus('statusFinalizarOcorrencia', 'Não consegui consultar o sistema (' + (err && err.name === 'AbortError' ? 'demorou demais' : (err && err.message) || 'erro de rede') + '). Nada foi feito.', 'erro');
+  } finally { _finOcupado = false; atualizarFinalizar(); }
+}
+async function confirmarFinalizarOcorrencia() {
+  if (_finOcupado || !_finPronto) return;
+  const tipo = document.getElementById('finalizarTipo').value, solucao = document.getElementById('finalizarSolucao').value.replace(/\s+/g, ' ').trim();
+  if (!tipo || !solucao || !document.getElementById('finalizarConfirma').checked) return;
+  _finOcupado = true; toggleBtn('btnFinalizarOcorrencia', true); toggleBtn('btnFinalizarCancelar', true);
+  setStatus('statusFinalizarOcorrencia', 'Finalizando no sistema e conferindo (pode levar até 1 minuto) — não feche esta janela…', 'carregando');
+  let concluida = false;
+  try {
+    const resp = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'reconstruirFinalizarOcorrenciaCentral', pedido: _finPedido, idOcorrencia: _finId, tipo, solucao, confirmar: true }) });
+    const r = await resp.json();
+    if (r && r.ok === true && r.finalizada) {
+      concluida = true;
+      setStatus('statusFinalizarOcorrencia', `Ocorrência do pedido ${_finPedido} FINALIZADA e conferida no sistema (${r.restantes} restantes na lista). Atualizando a lista do portal…`, 'ok');
+    } else {
+      _finPronto = !(r && (r.naoConfirmada || r.atencao)); // se ficou incerto, não deixa clicar de novo sem conferir no sistema
+      setStatus('statusFinalizarOcorrencia', (r && (r.erro || r.error)) || 'resposta inesperada do servidor — confira no sistema antes de tentar de novo.', 'erro');
+    }
+  } catch (err) {
+    _finPronto = false;
+    setStatus('statusFinalizarOcorrencia', 'A resposta demorou ou falhou (' + ((err && err.message) || 'erro de rede') + '). A finalização PODE ter sido feita: confira no sistema (ou use "🔄 Buscar do sistema") antes de tentar de novo. Nada foi repetido.', 'erro');
+  } finally {
+    _finOcupado = false; toggleBtn('btnFinalizarCancelar', false); atualizarFinalizar();
+  }
+  if (concluida) { setTimeout(() => { document.getElementById('finalizarOcorrenciaOverlay').style.display = 'none'; buscarOcorrenciasCentral(); }, 1800); }
 }
 
 // Pedidos Não Recebidos direto do sistema da empresa (Central): o servidor entra, consulta e devolve as linhas; o envio é o mesmo do importador de arquivo (troca tudo, preservando as previsões manuais).
