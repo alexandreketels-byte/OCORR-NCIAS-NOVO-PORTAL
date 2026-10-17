@@ -60,8 +60,16 @@
   .lapis-ocorrencia:hover { opacity: 1; }
   .finalizar-ocorrencia { cursor: pointer; opacity: .55; margin-left: 4px; }
   .finalizar-ocorrencia:hover { opacity: 1; }
-  #finalizarOcorrenciaOverlay { z-index: 150; } /* acima da janela de pedidos (z-index 100), pois o ✅ também abre de dentro dela */
+  #finalizarOcorrenciaOverlay, #finalizarLoteOverlay { z-index: 150; } /* acima da janela de pedidos (z-index 100), pois o ✅ também abre de dentro dela */
   .fin-box { border:1px solid var(--borda); border-radius:8px; padding:10px 12px; font-size:0.85rem; margin:8px 0; }
+  .lote-barra { display:none; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 20px; border-bottom:1px solid var(--borda); font-size:0.85rem; }
+  .lote-barra button { padding:6px 12px; font-size:0.82rem; }
+  .fin-sel { margin-left:6px; vertical-align:middle; cursor:pointer; width:16px; height:16px; }
+  #loteTabela { width:100%; border-collapse:collapse; font-size:0.85rem; }
+  #loteTabela th, #loteTabela td { padding:6px 8px; border-bottom:1px solid var(--borda); text-align:left; vertical-align:top; }
+  #loteTabela select, #loteTabela input[type=text] { width:100%; box-sizing:border-box; }
+  .lote-prob td { color:var(--vermelho); opacity:.85; }
+  .lote-res { margin:8px 0 0; padding:0; list-style:none; font-size:0.85rem; }
   .fin-box .fin-msg { margin-top:6px; padding-top:6px; border-top:1px dashed var(--borda); }
   /* NEW / Ontem: quando a ocorrência foi aberta (canto da mensagem; o texto contorna o selo) */
   .selo-novo, .selo-ontem { float: right; margin: 0 0 2px 8px; font-size: 0.62rem; line-height: 1.5; border-radius: 4px; padding: 0 6px; white-space: nowrap; cursor: help; }
@@ -725,6 +733,36 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="finalizarLoteOverlay">
+  <div class="modal" style="max-width:1000px">
+    <div class="modal-header">
+      <h3 id="loteTitulo">Finalizar ocorrências no sistema</h3>
+      <button class="modal-close" onclick="fecharLote()">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:16px 20px 20px">
+      <div id="loteAplicar" class="fin-box" style="display:none">
+        <b>Preencher todos de uma vez</b> <span class="desc">(depois dá para ajustar pedido a pedido; <code>{data}</code> vira a data de entrega de cada pedido)</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <select id="loteTipoTodos" class="campo-simples" style="min-width:200px"></select>
+          <input type="text" id="loteSolucaoTodos" class="campo-simples" maxlength="240" style="flex:1;min-width:240px" value="Entregue em {data}.">
+          <button type="button" onclick="aplicarLoteATodos()">Aplicar a todos</button>
+        </div>
+      </div>
+      <table id="loteTabela" style="display:none">
+        <thead><tr><th style="width:90px">Pedido</th><th style="width:26%">Cliente / ocorrência</th><th style="width:210px">Tipo (lista do sistema)</th><th>Solução (até 240)</th><th style="width:40px"></th></tr></thead>
+        <tbody id="loteTabelaBody"></tbody>
+      </table>
+      <label id="loteConfirmaLinha" style="display:none;gap:8px;align-items:flex-start;margin-top:14px;font-size:0.88rem"><input type="checkbox" id="loteConfirma" onchange="atualizarLote()" style="margin-top:3px"><span id="loteConfirmaTexto"></span></label>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button id="btnLoteConfirmar" type="button" onclick="confirmarLote()" disabled>Finalizar</button>
+        <button type="button" id="btnLoteCancelar" onclick="fecharLote()" style="background:none;border:1px solid var(--borda);color:var(--texto)">Cancelar</button>
+      </div>
+      <div class="status-line" id="statusLote"></div>
+      <ul class="lote-res" id="loteResultado"></ul>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modalOverlay" onclick="fecharModalSeClicouFora(event)">
   <div class="modal">
     <div class="modal-header">
@@ -750,6 +788,13 @@
         <input type="date" id="modalDataEntregaAte" oninput="aplicarFiltrosModal()">
         <button type="button" onclick="limparFiltroDataEntregaModal()" style="padding:6px 10px;font-size:0.8rem">Limpar</button>
       </div>
+    </div>
+    <div class="lote-barra" id="modalLoteBarra">
+      <span>✅ Finalizar várias ocorrências de uma vez:</span>
+      <button type="button" onclick="marcarLoteDestacadas()" title="Marca só as linhas destacadas (entregues com ocorrência em aberto) que estão visíveis, até 20">Marcar as linhas destacadas</button>
+      <button type="button" onclick="limparLoteSelecao()" style="background:none;border:1px solid var(--borda);color:var(--texto)">Limpar seleção</button>
+      <button type="button" id="btnLoteFinalizar" onclick="abrirLote()" disabled>Finalizar selecionados (0)</button>
+      <span id="loteBarraAviso" style="color:var(--cinza)"></span>
     </div>
     <div class="modal-body">
       <table id="modalTabela">
@@ -2912,6 +2957,16 @@ function configurarPopoverHistoricoTratativas() {
   });
 
   const corpoModal = document.getElementById('modalTabelaBody');
+  if (corpoModal) corpoModal.addEventListener('change', e => {
+    const cx = e.target.closest('.fin-sel');
+    if (!cx) return;
+    const ped = cx.dataset.pedido;
+    if (cx.checked) {
+      if (_loteSel.size >= LOTE_MAX) { cx.checked = false; document.getElementById('loteBarraAviso').textContent = `Máximo de ${LOTE_MAX} pedidos por vez.`; return; }
+      _loteSel.add(ped);
+    } else _loteSel.delete(ped);
+    atualizarBarraLote();
+  });
   if (corpoModal) corpoModal.addEventListener('click', e => {
     const fin = e.target.closest('.finalizar-ocorrencia');
     if (!fin) return;
@@ -4466,6 +4521,162 @@ async function confirmarFinalizarOcorrencia() {
   }
 }
 
+// ---------- Finalizar VÁRIAS ocorrências de uma vez (lote) ----------
+// Você marca os pedidos, revisa tipo + solução de cada um, confirma, e o servidor envia tudo junto e CONFERE no sistema pedido a pedido.
+// Nada vem marcado sozinho. Se algo mudar entre a prévia e o envio, o servidor aborta tudo. Nunca repete o envio sozinho.
+const LOTE_MAX = 20;
+const _loteSel = new Set();
+let _lote = null, _loteOcupado = false, _lotePronto = false, _loteHouveFinalizacao = false;
+
+function atualizarBarraLote() {
+  const barra = document.getElementById('modalLoteBarra'); if (!barra) return;
+  const iPed = modalColunasAtuais.indexOf('Pedido');
+  const tem = iPed >= 0 && modalDadosAtuais.some(l => (l.historico || []).length > 0 || l.destaque);
+  barra.style.display = tem ? 'flex' : 'none';
+  if (iPed >= 0) { const ex = new Set(modalDadosAtuais.map(l => String(l[iPed] || '').trim())); Array.from(_loteSel).forEach(p => { if (!ex.has(p)) _loteSel.delete(p); }); }
+  const b = document.getElementById('btnLoteFinalizar');
+  b.textContent = `Finalizar selecionados (${_loteSel.size})`; b.disabled = _loteSel.size === 0;
+}
+function limparLoteSelecao() {
+  _loteSel.clear(); document.getElementById('loteBarraAviso').textContent = '';
+  document.querySelectorAll('#modalTabelaBody .fin-sel').forEach(c => { c.checked = false; });
+  atualizarBarraLote();
+}
+function marcarLoteDestacadas() {
+  const iPed = modalColunasAtuais.indexOf('Pedido'); let cortou = false;
+  modalLinhasFiltradas.forEach(l => {
+    const ped = iPed >= 0 ? String(l[iPed] || '').trim() : '';
+    if (!ped || !l.destaque || _loteSel.has(ped)) return;
+    if (_loteSel.size >= LOTE_MAX) { cortou = true; return; }
+    _loteSel.add(ped);
+  });
+  document.getElementById('loteBarraAviso').textContent = cortou ? `Marquei até o limite de ${LOTE_MAX}; as demais ficaram de fora.` : '';
+  document.querySelectorAll('#modalTabelaBody .fin-sel').forEach(c => { c.checked = _loteSel.has(c.dataset.pedido); });
+  atualizarBarraLote();
+}
+
+function abrirLote() {
+  if (_loteOcupado || _loteSel.size === 0) return;
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes.'); return; }
+  const iPed = modalColunasAtuais.indexOf('Pedido'), iDt = modalColunasAtuais.indexOf('Data Entrega');
+  const itens = Array.from(_loteSel).map(ped => {
+    const l = modalDadosAtuais.find(x => String(x[iPed] || '').trim() === ped);
+    const m = l && iDt >= 0 ? String(l[iDt] || '').replace(/<[^>]*>/g, ' ').match(/\d{2}\/\d{2}\/\d{4}/) : null;
+    return { pedido: ped, dataEntrega: m ? m[0] : '', tipo: '', solucao: '', info: null, problema: '' };
+  });
+  _lote = { itens, tiposHtml: '' }; _lotePronto = false; _loteHouveFinalizacao = false;
+  document.getElementById('loteTitulo').textContent = `Finalizar ${itens.length} ocorrência${itens.length === 1 ? '' : 's'} no sistema`;
+  document.getElementById('loteAplicar').style.display = 'none';
+  document.getElementById('loteTabela').style.display = 'none';
+  document.getElementById('loteConfirmaLinha').style.display = 'none';
+  document.getElementById('loteConfirma').checked = false;
+  document.getElementById('loteResultado').innerHTML = '';
+  toggleBtn('btnLoteConfirmar', true); toggleBtn('btnLoteCancelar', false);
+  document.getElementById('finalizarLoteOverlay').style.display = 'flex';
+  carregarPreviaLote();
+}
+function fecharLote() {
+  if (_loteOcupado) return;
+  document.getElementById('finalizarLoteOverlay').style.display = 'none';
+  if (_loteHouveFinalizacao) { _loteHouveFinalizacao = false; atualizarAposLote(); }
+}
+async function atualizarAposLote() {
+  await buscarOcorrenciasCentral();
+  const m = document.getElementById('modalOverlay');
+  if (m && getComputedStyle(m).display !== 'none' && ultimoFiltroPedidos) {
+    const f = ultimoFiltroPedidos;
+    verPedidos(f.transportadora, f.apenasAtraso, f.titulo, f.apenasIndefinido, f.apenasEntregue, f.apenasEmRota);
+  }
+}
+async function carregarPreviaLote() {
+  _loteOcupado = true;
+  setStatus('statusLote', 'Consultando o sistema da empresa para conferir cada pedido (até 1 minuto)…', 'carregando');
+  try {
+    const resp = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'reconstruirFinalizarLoteCentral', itens: _lote.itens.map(i => ({ pedido: i.pedido })), confirmar: false }) });
+    const r = await resp.json();
+    if (!r || r.error || r.ok !== true) { setStatus('statusLote', (r && (r.erro || r.error)) || 'resposta inesperada do servidor.', 'erro'); return; }
+    r.itens.forEach(x => { const it = _lote.itens.find(i => i.pedido === x.pedido); if (!it) return; if (x.problema) it.problema = x.problema; else it.info = x; });
+    _lote.tiposHtml = '<option value="">Escolha o tipo...</option>' + (r.tipos || []).map(t => `<option value="${escapeHtml(t.codigo)}">${escapeHtml(t.nome)}</option>`).join('');
+    document.getElementById('loteTipoTodos').innerHTML = _lote.tiposHtml;
+    renderLote();
+    const validos = _lote.itens.filter(i => !i.problema).length;
+    document.getElementById('loteAplicar').style.display = validos ? 'block' : 'none';
+    document.getElementById('loteTabela').style.display = 'table';
+    document.getElementById('loteConfirmaLinha').style.display = validos ? 'flex' : 'none';
+    _lotePronto = validos > 0;
+    setStatus('statusLote', validos ? `${validos} pedido${validos === 1 ? '' : 's'} confirmado${validos === 1 ? '' : 's'} no sistema${validos < _lote.itens.length ? ` (${_lote.itens.length - validos} ficam de fora — veja em vermelho)` : ''}. Escolha o tipo e a solução de cada um, confira e marque a confirmação.` : 'Nenhum dos pedidos selecionados tem ocorrência única em aberto — nada a finalizar.', validos ? '' : 'erro');
+  } catch (err) {
+    setStatus('statusLote', 'Não consegui consultar o sistema (' + ((err && err.message) || 'erro de rede') + '). Nada foi feito.', 'erro');
+  } finally { _loteOcupado = false; atualizarLote(); }
+}
+function renderLote() {
+  document.getElementById('loteTabelaBody').innerHTML = _lote.itens.map((it, i) => {
+    if (it.problema) return `<tr class="lote-prob"><td><b>${escapeHtml(it.pedido)}</b></td><td colspan="4">⚠ ${escapeHtml(it.problema)} — este pedido fica de fora.</td></tr>`;
+    const x = it.info || {};
+    return `<tr><td><b>${escapeHtml(it.pedido)}</b></td>
+      <td>${escapeHtml(x.cliente || '')}<br><span class="desc">${escapeHtml(x.transportadora || '')} · NF ${escapeHtml(x.nf || '')} · ${escapeHtml(x.ocorrencia || '')} · ${escapeHtml(x.status || '')}</span>${x.ultimaMensagem ? `<br><span class="desc">“${escapeHtml(String(x.ultimaMensagem).slice(0, 90))}”</span>` : ''}</td>
+      <td><select class="campo-simples lote-tipo" data-i="${i}" onchange="loteCampo(${i})">${_lote.tiposHtml}</select></td>
+      <td><input type="text" class="campo-simples lote-sol" data-i="${i}" maxlength="240" value="${escapeHtml(it.solucao)}" oninput="loteCampo(${i})"></td>
+      <td><span class="desc lote-cont" data-i="${i}">${240 - it.solucao.length}</span></td></tr>`;
+  }).join('');
+  _lote.itens.forEach((it, i) => { if (!it.problema) { const sel = document.querySelector(`.lote-tipo[data-i="${i}"]`); if (sel) sel.value = it.tipo; } });
+}
+function loteCampo(i) {
+  const it = _lote.itens[i];
+  it.tipo = document.querySelector(`.lote-tipo[data-i="${i}"]`).value;
+  it.solucao = document.querySelector(`.lote-sol[data-i="${i}"]`).value;
+  document.querySelector(`.lote-cont[data-i="${i}"]`).textContent = String(240 - it.solucao.length);
+  atualizarLote();
+}
+function aplicarLoteATodos() {
+  const tipo = document.getElementById('loteTipoTodos').value, modelo = document.getElementById('loteSolucaoTodos').value;
+  if (!tipo && !modelo.trim()) return;
+  _lote.itens.forEach(it => {
+    if (it.problema) return;
+    if (tipo) it.tipo = tipo;
+    if (modelo.trim()) it.solucao = modelo.replace(/\{data\}/g, it.dataEntrega || 'data não informada').replace(/\s+/g, ' ').trim().slice(0, 240);
+  });
+  renderLote(); atualizarLote();
+}
+function atualizarLote() {
+  if (!_lote) return;
+  const validos = _lote.itens.filter(i => !i.problema);
+  document.getElementById('loteConfirmaTexto').textContent = `Confirmo que quero FINALIZAR ${validos.length} ocorrência${validos.length === 1 ? '' : 's'} no sistema da empresa: ${validos.map(i => i.pedido).join(', ')}.`;
+  const completo = validos.length > 0 && validos.every(i => i.tipo && i.solucao.trim());
+  const ok = _lotePronto && !_loteOcupado && completo && document.getElementById('loteConfirma').checked;
+  document.getElementById('btnLoteConfirmar').textContent = `Finalizar ${validos.length} pedido${validos.length === 1 ? '' : 's'}`;
+  toggleBtn('btnLoteConfirmar', !ok);
+}
+async function confirmarLote() {
+  if (_loteOcupado || !_lotePronto) return;
+  const validos = _lote.itens.filter(i => !i.problema);
+  if (!validos.length || !validos.every(i => i.tipo && i.solucao.trim()) || !document.getElementById('loteConfirma').checked) return;
+  _loteOcupado = true; toggleBtn('btnLoteConfirmar', true); toggleBtn('btnLoteCancelar', true);
+  setStatus('statusLote', `Finalizando ${validos.length} pedido${validos.length === 1 ? '' : 's'} no sistema e conferindo (pode levar até 2 minutos) — não feche esta janela…`, 'carregando');
+  let sucessoTotal = false;
+  const mostrarResultados = rs => {
+    document.getElementById('loteResultado').innerHTML = (rs || []).map(x => `<li>${x.finalizada ? '✅' : '❌'} <b>${escapeHtml(x.pedido)}</b> — ${x.finalizada ? 'finalizada e conferida no sistema' : 'CONTINUA ABERTA no sistema'}</li>`).join('');
+    (rs || []).forEach(x => { if (x.finalizada) { _loteSel.delete(x.pedido); _loteHouveFinalizacao = true; } });
+  };
+  try {
+    const resp = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'reconstruirFinalizarLoteCentral', itens: validos.map(i => ({ pedido: i.pedido, idOcorrencia: i.info.idOcorrencia, tipo: i.tipo, solucao: i.solucao.replace(/\s+/g, ' ').trim() })), confirmar: true }) });
+    const r = await resp.json();
+    if (r && r.ok === true && r.finalizada) {
+      sucessoTotal = true; mostrarResultados(r.resultados);
+      setStatus('statusLote', `${r.finalizadas} de ${r.total} ocorrências FINALIZADAS e conferidas no sistema (${r.restantes} restantes na lista). Atualizando o portal…`, 'ok');
+    } else {
+      _lotePronto = false; // depois de qualquer envio incerto/parcial, só refazendo a seleção
+      if (r && r.resultados) mostrarResultados(r.resultados);
+      setStatus('statusLote', (r && (r.erro || r.error)) || 'resposta inesperada do servidor — confira no sistema antes de tentar de novo.', 'erro');
+    }
+  } catch (err) {
+    _lotePronto = false;
+    setStatus('statusLote', 'A resposta demorou ou falhou (' + ((err && err.message) || 'erro de rede') + '). Algumas ou todas as finalizações PODEM ter sido feitas: confira no sistema (ou use "🔄 Buscar do sistema") antes de tentar de novo. Nada foi repetido.', 'erro');
+    _loteHouveFinalizacao = true; // por garantia, atualiza a lista ao fechar
+  } finally { _loteOcupado = false; toggleBtn('btnLoteCancelar', false); atualizarLote(); }
+  if (sucessoTotal) setTimeout(() => { if (document.getElementById('finalizarLoteOverlay').style.display !== 'none') fecharLote(); }, 2500);
+}
+
 // Pedidos Não Recebidos direto do sistema da empresa (Central): o servidor entra, consulta e devolve as linhas; o envio é o mesmo do importador de arquivo (troca tudo, preservando as previsões manuais).
 let pnrCentralRodando = false;
 async function buscarPedidosNaoRecebidosCentral() {
@@ -4796,6 +5007,7 @@ function mostrarModalCarregando(titulo, colunas) {
   modalFiltrosSelecionados = {};
   modalFiltroOrigem = '';
   modalOrdenacao = { indice: null, direcao: 1 };
+  _loteSel.clear();
   montarCabecalhoModal();
   document.getElementById('modalOverlay').style.display = 'flex';
 }
@@ -4919,13 +5131,15 @@ function aplicarFiltrosModal() {
         const valor = v === undefined || v === null ? '' : v;
         if (idx === idxUltimaMsg && ((l.historico || []).length > 0 || l.destaque)) {
           const temHist = (l.historico || []).length > 0;
-          const fin = idxPedidoModal >= 0 && String(l[idxPedidoModal] || '').trim()
-            ? ` <span class="finalizar-ocorrencia" data-idx="${posicao}" title="Finalizar esta ocorrência no sistema da empresa">✅</span>` : '';
+          const pedLinha = idxPedidoModal >= 0 ? String(l[idxPedidoModal] || '').trim() : '';
+          const fin = pedLinha
+            ? ` <input type="checkbox" class="fin-sel" data-pedido="${escapeHtml(pedLinha)}" title="Marcar para finalizar em lote"${_loteSel.has(pedLinha) ? ' checked' : ''}> <span class="finalizar-ocorrencia" data-idx="${posicao}" title="Finalizar esta ocorrência no sistema da empresa">✅</span>` : '';
           return `<td>${valor}${temHist ? ` <span class="hist-icone" data-idx="${posicao}" title="Ver tratativa completa">💬</span>` : ''}${fin}</td>`;
         }
         return `<td>${valor}</td>`;
       }).join('')}</tr>`).join('')
     : `<tr><td colspan="${numColunas}">Nenhum registro encontrado.</td></tr>`;
+  atualizarBarraLote();
 }
 
 function baixarModalExcel() {
