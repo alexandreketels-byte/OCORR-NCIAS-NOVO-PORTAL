@@ -4745,7 +4745,7 @@ async function atualizarRodonavesAuto() {
     const l = await buscarJsonComRetry(API_URL, 2, { action: 'reconstruirRodonavesListar' });
     if (!l.ok) { falha(l.erro || 'sem resposta do servidor.'); return; }
     if (!l.dados || l.dados.ok !== true) { falha((l.dados && l.dados.erro) || 'resposta inesperada — confira se o Code.gs mais novo foi implantado (nova versão).'); return; }
-    const nfs = l.dados.nfs || [], lote = l.dados.loteMax || 40;
+    const nfs = l.dados.nfs || [], lote = l.dados.loteMax || 40, paralelo = l.dados.paralelo || RTE_LOTES_EM_PARALELO;
     if (nfs.length === 0) { falha('não há NFs da Rodonaves em Pedidos Não Recebidos.'); return; }
     const rows = []; let semRetorno = 0, erros = 0, amostra = '';
     // Vários lotes ao mesmo tempo (como os "workers" do robô): o Apps Script atende consultas em paralelo.
@@ -4762,7 +4762,7 @@ async function atualizarRodonavesAuto() {
         bar.style.width = Math.max(2, Math.round((feitas / nfs.length) * 80)) + '%';
       }
     };
-    await Promise.all(Array.from({ length: Math.min(RTE_LOTES_EM_PARALELO, lotes.length) }, trabalhador));
+    await Promise.all(Array.from({ length: Math.min(paralelo, lotes.length) }, trabalhador));
     if (erroLote) { falha(erroLote); return; }
     resultados.forEach(d => { (d.rows || []).forEach(x => rows.push(x)); semRetorno += d.semRetorno || 0; erros += d.erros || 0; if (!amostra && d.amostraErro) amostra = d.amostraErro; });
     if (rows.length === 0) { falha(`a Rodonaves não devolveu dados de nenhuma das ${nfs.length} NFs (${erros} com erro).` + (amostra ? ' Exemplo do erro: ' + amostra : '')); return; }
