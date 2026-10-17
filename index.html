@@ -60,6 +60,7 @@
   .lapis-ocorrencia:hover { opacity: 1; }
   .finalizar-ocorrencia { cursor: pointer; opacity: .55; margin-left: 4px; }
   .finalizar-ocorrencia:hover { opacity: 1; }
+  #finalizarOcorrenciaOverlay { z-index: 150; } /* acima da janela de pedidos (z-index 100), pois o ✅ também abre de dentro dela */
   .fin-box { border:1px solid var(--borda); border-radius:8px; padding:10px 12px; font-size:0.85rem; margin:8px 0; }
   .fin-box .fin-msg { margin-top:6px; padding-top:6px; border-top:1px dashed var(--borda); }
   /* NEW / Ontem: quando a ocorrência foi aberta (canto da mensagem; o texto contorna o selo) */
@@ -2910,6 +2911,16 @@ function configurarPopoverHistoricoTratativas() {
     if (linha) abrirFinalizarOcorrencia(linha[COLUNAS_TRATATIVAS.indexOf('Pedido')]);
   });
 
+  const corpoModal = document.getElementById('modalTabelaBody');
+  if (corpoModal) corpoModal.addEventListener('click', e => {
+    const fin = e.target.closest('.finalizar-ocorrencia');
+    if (!fin) return;
+    e.stopPropagation();
+    const linha = modalLinhasFiltradas[Number(fin.dataset.idx)];
+    const iPed = modalColunasAtuais.indexOf('Pedido');
+    if (linha && iPed >= 0) abrirFinalizarOcorrencia(linha[iPed]);
+  });
+
   if (corpoTratativas) corpoTratativas.addEventListener('change', e => {
     const caixa = e.target.closest('.chk-urgente');
     if (!caixa) return;
@@ -4441,7 +4452,18 @@ async function confirmarFinalizarOcorrencia() {
   } finally {
     _finOcupado = false; toggleBtn('btnFinalizarCancelar', false); atualizarFinalizar();
   }
-  if (concluida) { setTimeout(() => { document.getElementById('finalizarOcorrenciaOverlay').style.display = 'none'; buscarOcorrenciasCentral(); }, 1800); }
+  if (concluida) {
+    setTimeout(async () => {
+      document.getElementById('finalizarOcorrenciaOverlay').style.display = 'none';
+      await buscarOcorrenciasCentral();
+      // Se a ocorrência foi finalizada de dentro da janela de pedidos, reabre a mesma lista já atualizada
+      const m = document.getElementById('modalOverlay');
+      if (m && getComputedStyle(m).display !== 'none' && ultimoFiltroPedidos) {
+        const f = ultimoFiltroPedidos;
+        verPedidos(f.transportadora, f.apenasAtraso, f.titulo, f.apenasIndefinido, f.apenasEntregue, f.apenasEmRota);
+      }
+    }, 1800);
+  }
 }
 
 // Pedidos Não Recebidos direto do sistema da empresa (Central): o servidor entra, consulta e devolve as linhas; o envio é o mesmo do importador de arquivo (troca tudo, preservando as previsões manuais).
@@ -4891,11 +4913,15 @@ function aplicarFiltrosModal() {
 
   const numColunas = modalColunasAtuais.length;
   const idxUltimaMsg = modalColunasAtuais.indexOf('Última Mensagem');
+  const idxPedidoModal = modalColunasAtuais.indexOf('Pedido');
   document.getElementById('modalTabelaBody').innerHTML = linhas.length
     ? linhas.map((l, posicao) => `<tr${l.destaque ? ' class="linha-ocor-aberta" title="Entregue e com ocorrência em aberto — finalize a ocorrência"' : ''}>${l.map((v, idx) => {
         const valor = v === undefined || v === null ? '' : v;
-        if (idx === idxUltimaMsg && (l.historico || []).length > 0) {
-          return `<td>${valor} <span class="hist-icone" data-idx="${posicao}" title="Ver tratativa completa">💬</span></td>`;
+        if (idx === idxUltimaMsg && ((l.historico || []).length > 0 || l.destaque)) {
+          const temHist = (l.historico || []).length > 0;
+          const fin = idxPedidoModal >= 0 && String(l[idxPedidoModal] || '').trim()
+            ? ` <span class="finalizar-ocorrencia" data-idx="${posicao}" title="Finalizar esta ocorrência no sistema da empresa">✅</span>` : '';
+          return `<td>${valor}${temHist ? ` <span class="hist-icone" data-idx="${posicao}" title="Ver tratativa completa">💬</span>` : ''}${fin}</td>`;
         }
         return `<td>${valor}</td>`;
       }).join('')}</tr>`).join('')
