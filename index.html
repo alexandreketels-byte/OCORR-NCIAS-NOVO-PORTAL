@@ -596,7 +596,7 @@
     <div style="overflow-x:auto">
     <table id="tabelaTransportadoras" style="display:none">
       <thead><tr>
-        <th>Transportadora</th><th>Pedidos não recebidos</th><th>Em atraso</th><th>Indefinidos</th>
+        <th>Transportadora</th><th>Pedidos não recebidos</th><th>Em atraso</th><th>Indefinidos</th><th>Sem previsão</th>
         <th>Em Rota</th><th>Entregues</th><th>Performance</th>
       </tr></thead>
       <tbody id="tabelaTransportadorasBody"></tbody>
@@ -4011,7 +4011,7 @@ async function buscarJsonComRetry(url, tentativas, corpoPost) {
 }
 
 // ---------- Cache local (mostra o último dado na hora e atualiza em seguida) ----------
-const CHAVE_CACHE_PAINEL_LOCAL = 'dis_painel_cache_v1';
+const CHAVE_CACHE_PAINEL_LOCAL = 'dis_painel_cache_v2';
 const CHAVE_CACHE_TRATATIVAS_LOCAL = 'dis_tratativas_cache_v1';
 
 function lerCacheLocal(chave) {
@@ -4798,6 +4798,7 @@ function renderTabelaTransportadoras(porTransportadora) {
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false)">${v.qtd}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', true, false)">${v.emAtraso}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, true)">${v.indefinidos}</a></td>
+      <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, 'sem')">${v.semPrevisao || 0}</a></td>
       <td><a class="num-link" onclick="verPedidosPorNome('${encodeURIComponent(nome)}', false, false, false, true)">${v.emRota}</a></td>
       ${celulaEntregues(nome, v)}
       <td style="color:${cor};font-weight:600">${v.performance.toFixed(1)}%</td>
@@ -4807,9 +4808,9 @@ function renderTabelaTransportadoras(porTransportadora) {
 
 function baixarIndicadoresExcel() {
   if (!dadosTabelaTransportadoras.length) { alert('Não há dados para baixar.'); return; }
-  const colunas = ['Transportadora', 'Pedidos não recebidos', 'Em atraso', 'Indefinidos', 'Em Rota', 'Entregues', 'Performance'];
+  const colunas = ['Transportadora', 'Pedidos não recebidos', 'Em atraso', 'Indefinidos', 'Sem previsão', 'Em Rota', 'Entregues', 'Performance'];
   const linhas = dadosTabelaTransportadoras.map(([nome, v]) =>
-    [nome, v.qtd, v.emAtraso, v.indefinidos, v.emRota, v.entregues, v.performance.toFixed(1) + '%']);
+    [nome, v.qtd, v.emAtraso, v.indefinidos, v.semPrevisao || 0, v.emRota, v.entregues, v.performance.toFixed(1) + '%']);
   exportarCSV(colunas, linhas, 'Indicadores por Transportadora');
 }
 
@@ -5177,7 +5178,7 @@ async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido
   const params = new URLSearchParams({
     action: 'getPedidosDetalhe', transportadora,
     apenasAtraso: apenasAtraso ? '1' : '0',
-    apenasIndefinido: apenasIndefinido ? '1' : '0',
+    apenasIndefinido: apenasIndefinido === 'sem' ? 'sem' : (apenasIndefinido ? '1' : '0'),
     apenasEntregue: apenasEntregue ? '1' : '0',
     apenasEmRota: apenasEmRota ? '1' : '0'
   });
@@ -5196,7 +5197,7 @@ async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido
       const ent = celulasEntregaUniversal(p);
       const linha = [
         p.pedido, p.nf, p.cliente, p.cidade, p.loja, fmtData(p.dataColeta),
-        celulaPrevisaoEditavel(p.pedido, fmtData(p.prevEtg)), p.atraso,
+        celulaPrevisaoEditavel(p.pedido, p.semPrevisao ? 'Sem previsão' : fmtData(p.prevEtg)), p.atraso,
         p.emRota ? '<span style="color:var(--verde);font-weight:700">Em Rota</span>' : (p.dataRomaneio || ''),
         ent.entregue, ent.data,
         p.ultimaOcorrencia || ''
@@ -5497,10 +5498,11 @@ function verPedidosPorNome(nomeEncoded, apenasAtraso, apenasIndefinido, apenasEn
   const nome = decodeURIComponent(nomeEncoded);
   const titulo = apenasEntregue ? 'Pedidos já entregues — ' + nome
     : apenasEmRota ? 'Pedidos em rota — ' + nome
+    : apenasIndefinido === 'sem' ? 'Pedidos sem previsão — ' + nome
     : apenasIndefinido ? 'Pedidos com previsão indefinida — ' + nome
     : apenasAtraso ? 'Pedidos em atraso — ' + nome
     : 'Pedidos não recebidos — ' + nome;
-  verPedidos(nome, !!apenasAtraso, titulo, !!apenasIndefinido, !!apenasEntregue, !!apenasEmRota);
+  verPedidos(nome, !!apenasAtraso, titulo, apenasIndefinido === 'sem' ? 'sem' : !!apenasIndefinido, !!apenasEntregue, !!apenasEmRota);
 }
 
 const COLUNAS_RECEBIDOS = ['Data', 'Pedido', 'Transportadora'];
