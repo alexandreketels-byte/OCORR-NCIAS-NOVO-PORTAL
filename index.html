@@ -60,7 +60,8 @@
   .lapis-ocorrencia:hover { opacity: 1; }
   .finalizar-ocorrencia { cursor: pointer; opacity: .55; margin-left: 4px; }
   .finalizar-ocorrencia:hover { opacity: 1; }
-  #finalizarOcorrenciaOverlay, #finalizarLoteOverlay { z-index: 150; } /* acima da janela de pedidos (z-index 100), pois o ✅ também abre de dentro dela */
+  #finalizarOcorrenciaOverlay, #finalizarLoteOverlay, #prevLoteOverlay { z-index: 150; }
+  .prev-sel { margin-right:6px; vertical-align:middle; cursor:pointer; width:16px; height:16px; } /* acima da janela de pedidos (z-index 100), pois o ✅ também abre de dentro dela */
   .fin-box { border:1px solid var(--borda); border-radius:8px; padding:10px 12px; font-size:0.85rem; margin:8px 0; }
   .lote-barra { display:none; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 20px; border-bottom:1px solid var(--borda); font-size:0.85rem; }
   .lote-barra button { padding:6px 12px; font-size:0.82rem; }
@@ -733,6 +734,25 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="prevLoteOverlay">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <h3 id="prevLoteTitulo">Alterar previsão</h3>
+      <button class="modal-close" onclick="fecharPrevLote()">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:16px 20px 20px">
+      <div id="prevLoteLista" class="fin-box" style="max-height:130px;overflow:auto"></div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="radio" name="prevLoteTipo" id="prevLoteIndef" value="indef" checked onchange="atualizarPrevLote()"> <b>Indefinido</b> <span class="desc">(o cliente ainda não tem data para receber)</span></label>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="radio" name="prevLoteTipo" id="prevLoteDataRadio" value="data" onchange="atualizarPrevLote()"> <b>Nova data</b> <input type="date" id="prevLoteData" oninput="document.getElementById('prevLoteDataRadio').checked=true;atualizarPrevLote()"></label>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button id="btnPrevLoteAplicar" type="button" onclick="confirmarPrevLote()">Aplicar</button>
+        <button type="button" id="btnPrevLoteCancelar" onclick="fecharPrevLote()" style="background:none;border:1px solid var(--borda);color:var(--texto)">Cancelar</button>
+      </div>
+      <div class="status-line" id="statusPrevLote"></div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="finalizarLoteOverlay">
   <div class="modal" style="max-width:1000px">
     <div class="modal-header">
@@ -795,6 +815,13 @@
       <button type="button" onclick="limparLoteSelecao()" style="background:none;border:1px solid var(--borda);color:var(--texto)">Limpar seleção</button>
       <button type="button" id="btnLoteFinalizar" onclick="abrirLote()" disabled>Finalizar selecionados (0)</button>
       <span id="loteBarraAviso" style="color:var(--cinza)"></span>
+    </div>
+    <div class="lote-barra" id="modalPrevBarra">
+      <span>📅 Previsão de vários pedidos de uma vez:</span>
+      <button type="button" onclick="marcarPrevVisiveis()" title="Marca todos os pedidos que estão aparecendo agora (respeita a busca e os filtros), até 200">Marcar todos os visíveis</button>
+      <button type="button" onclick="limparPrevSelecao()" style="background:none;border:1px solid var(--borda);color:var(--texto)">Limpar seleção</button>
+      <button type="button" id="btnPrevLote" onclick="abrirPrevLote()" disabled>Alterar previsão dos selecionados (0)</button>
+      <span id="prevBarraAviso" style="color:var(--cinza)"></span>
     </div>
     <div class="modal-body">
       <table id="modalTabela">
@@ -2958,6 +2985,16 @@ function configurarPopoverHistoricoTratativas() {
 
   const corpoModal = document.getElementById('modalTabelaBody');
   if (corpoModal) corpoModal.addEventListener('change', e => {
+    const cp = e.target.closest('.prev-sel');
+    if (cp) {
+      const ped = cp.dataset.pedido;
+      if (cp.checked) {
+        if (_prevSel.size >= PREV_LOTE_MAX) { cp.checked = false; document.getElementById('prevBarraAviso').textContent = `Máximo de ${PREV_LOTE_MAX} pedidos por vez.`; return; }
+        _prevSel.add(ped);
+      } else _prevSel.delete(ped);
+      atualizarBarraPrev();
+      return;
+    }
     const cx = e.target.closest('.fin-sel');
     if (!cx) return;
     const ped = cx.dataset.pedido;
@@ -4521,6 +4558,92 @@ async function confirmarFinalizarOcorrencia() {
   }
 }
 
+// ---------- Alterar a previsão de VÁRIOS pedidos de uma vez (Indefinido ou uma data) ----------
+// Marque as caixinhas ao lado da "Prev Etg" (ou "Marcar todos os visíveis"), escolha Indefinido/data e aplique.
+// É o mesmo efeito do lápis ✏️ (fica salvo como previsão manual e sobrevive às reimportações), só que em lote. Dá para refazer a qualquer momento.
+const PREV_LOTE_MAX = 200;
+const _prevSel = new Set();
+let _prevOcupado = false;
+
+function atualizarBarraPrev() {
+  const barra = document.getElementById('modalPrevBarra'); if (!barra) return;
+  const iPed = modalColunasAtuais.indexOf('Pedido'), tem = iPed >= 0 && modalColunasAtuais.indexOf('Prev Etg') >= 0 && modalDadosAtuais.length > 0;
+  barra.style.display = tem ? 'flex' : 'none';
+  if (iPed >= 0) { const ex = new Set(modalDadosAtuais.map(l => String(l[iPed] || '').trim())); Array.from(_prevSel).forEach(p => { if (!ex.has(p)) _prevSel.delete(p); }); }
+  const b = document.getElementById('btnPrevLote');
+  b.textContent = `Alterar previsão dos selecionados (${_prevSel.size})`; b.disabled = _prevSel.size === 0;
+}
+function limparPrevSelecao() {
+  _prevSel.clear(); document.getElementById('prevBarraAviso').textContent = '';
+  document.querySelectorAll('#modalTabelaBody .prev-sel').forEach(c => { c.checked = false; });
+  atualizarBarraPrev();
+}
+function marcarPrevVisiveis() {
+  const iPed = modalColunasAtuais.indexOf('Pedido'); let cortou = false;
+  modalLinhasFiltradas.forEach(l => {
+    const ped = iPed >= 0 ? String(l[iPed] || '').trim() : '';
+    if (!ped || _prevSel.has(ped)) return;
+    if (_prevSel.size >= PREV_LOTE_MAX) { cortou = true; return; }
+    _prevSel.add(ped);
+  });
+  document.getElementById('prevBarraAviso').textContent = cortou ? `Marquei até o limite de ${PREV_LOTE_MAX}; os demais ficaram de fora.` : '';
+  document.querySelectorAll('#modalTabelaBody .prev-sel').forEach(c => { c.checked = _prevSel.has(c.dataset.pedido); });
+  atualizarBarraPrev();
+}
+function abrirPrevLote() {
+  if (_prevOcupado || _prevSel.size === 0) return;
+  if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes.'); return; }
+  const lista = Array.from(_prevSel);
+  document.getElementById('prevLoteTitulo').textContent = `Alterar a previsão de ${lista.length} pedido${lista.length === 1 ? '' : 's'}`;
+  document.getElementById('prevLoteLista').innerHTML = lista.map(p => escapeHtml(p)).join(' · ');
+  document.getElementById('prevLoteIndef').checked = true; document.getElementById('prevLoteData').value = '';
+  setStatus('statusPrevLote', '', '');
+  atualizarPrevLote();
+  document.getElementById('prevLoteOverlay').style.display = 'flex';
+}
+function fecharPrevLote() { if (_prevOcupado) return; document.getElementById('prevLoteOverlay').style.display = 'none'; }
+function atualizarPrevLote() {
+  const n = _prevSel.size, indef = document.getElementById('prevLoteIndef').checked;
+  const ok = !_prevOcupado && n > 0 && (indef || document.getElementById('prevLoteData').value);
+  const b = document.getElementById('btnPrevLoteAplicar');
+  b.textContent = indef ? `Marcar ${n} como Indefinido` : `Aplicar a data a ${n} pedido${n === 1 ? '' : 's'}`;
+  toggleBtn('btnPrevLoteAplicar', !ok);
+}
+async function confirmarPrevLote() {
+  if (_prevOcupado || _prevSel.size === 0) return;
+  const indef = document.getElementById('prevLoteIndef').checked, dataIso = document.getElementById('prevLoteData').value;
+  if (!indef && !dataIso) return;
+  let novaPrevisao = 'Indefinido';
+  if (!indef) { const [a, m, d] = dataIso.split('-'); novaPrevisao = `${d}/${m}/${a}`; }
+  const pedidos = Array.from(_prevSel);
+  _prevOcupado = true; toggleBtn('btnPrevLoteAplicar', true); toggleBtn('btnPrevLoteCancelar', true);
+  setStatus('statusPrevLote', `Salvando a previsão de ${pedidos.length} pedido${pedidos.length === 1 ? '' : 's'}…`, 'carregando');
+  let ok = false;
+  try {
+    const resp = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'editarPrevisaoPedidosLote', pedidos, novaPrevisao }) });
+    const r = await resp.json();
+    if (r && r.ok === true) {
+      ok = true;
+      const nao = (r.naoEncontrados || []);
+      setStatus('statusPrevLote', `${r.atualizados} pedido${r.atualizados === 1 ? '' : 's'} agora com previsão ${r.previsao}.` + (nao.length ? ` Não encontrado${nao.length === 1 ? '' : 's'} em Pedidos Não Recebidos: ${nao.join(', ')}.` : ''), nao.length ? 'erro' : 'ok');
+    } else setStatus('statusPrevLote', 'Não consegui salvar: ' + ((r && (r.error || r.erro)) || 'resposta inesperada do servidor') + '. Confira a lista antes de tentar de novo.', 'erro');
+  } catch (err) {
+    setStatus('statusPrevLote', 'A resposta demorou ou falhou (' + ((err && err.message) || 'erro de rede') + '). Pode ser que tenha salvado: reabra a lista para conferir antes de tentar de novo.', 'erro');
+  } finally { _prevOcupado = false; toggleBtn('btnPrevLoteCancelar', false); atualizarPrevLote(); }
+  if (ok) {
+    _prevSel.clear();
+    carregarIndicadores(); // as contagens (indefinidos/atraso) podem ter mudado
+    setTimeout(() => {
+      document.getElementById('prevLoteOverlay').style.display = 'none';
+      const m = document.getElementById('modalOverlay');
+      if (m && getComputedStyle(m).display !== 'none' && ultimoFiltroPedidos) {
+        const f = ultimoFiltroPedidos;
+        verPedidos(f.transportadora, f.apenasAtraso, f.titulo, f.apenasIndefinido, f.apenasEntregue, f.apenasEmRota);
+      }
+    }, 1600);
+  }
+}
+
 // ---------- Finalizar VÁRIAS ocorrências de uma vez (lote) ----------
 // Você marca os pedidos, revisa tipo + solução de cada um, confirma, e o servidor envia tudo junto e CONFERE no sistema pedido a pedido.
 // Nada vem marcado sozinho. Se algo mudar entre a prévia e o envio, o servidor aborta tudo. Nunca repete o envio sozinho.
@@ -5008,7 +5131,7 @@ function mostrarModalCarregando(titulo, colunas) {
   modalFiltrosSelecionados = {};
   modalFiltroOrigem = '';
   modalOrdenacao = { indice: null, direcao: 1 };
-  _loteSel.clear();
+  _loteSel.clear(); _prevSel.clear();
   montarCabecalhoModal();
   document.getElementById('modalOverlay').style.display = 'flex';
 }
@@ -5100,7 +5223,7 @@ function aplicarFiltrosModal() {
   }
 
   if (busca) {
-    linhas = linhas.filter(l => l.some(v => String(v ?? '').toLowerCase().includes(busca)));
+    linhas = linhas.filter(l => l.some(v => String(v ?? '').replace(/<[^>]*>/g, ' ').toLowerCase().includes(busca))); // sem as tags HTML (caixinha, lápis...): a busca vê só o texto
   }
 
   if (modalOrdenacao.indice !== null) {
@@ -5141,6 +5264,7 @@ function aplicarFiltrosModal() {
       }).join('')}</tr>`).join('')
     : `<tr><td colspan="${numColunas}">Nenhum registro encontrado.</td></tr>`;
   atualizarBarraLote();
+  atualizarBarraPrev();
 }
 
 function baixarModalExcel() {
@@ -5223,7 +5347,8 @@ async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido
 function celulaPrevisaoEditavel(pedido, prevEtgFormatada) {
   const pedidoAttr = String(pedido).replace(/"/g, '&quot;');
   const texto = prevEtgFormatada || 'Indefinido';
-  return `${texto} <a class="num-link" title="Editar previsão" onclick="editarPrevisao('${pedidoAttr}')">✏️</a>`;
+  const marcado = _prevSel.has(String(pedido).trim()) ? ' checked' : '';
+  return `<input type="checkbox" class="prev-sel" data-pedido="${pedidoAttr}" title="Marcar para alterar a previsão em lote"${marcado}>${texto} <a class="num-link" title="Editar previsão" onclick="editarPrevisao('${pedidoAttr}')">✏️</a>`;
 }
 
 // ---------- Edição rápida de previsão (formulário abaixo dos importadores) ----------
