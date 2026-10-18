@@ -4868,7 +4868,8 @@ async function atualizarRodonavesAuto() {
     const l = await buscarJsonComRetry(API_URL, 2, { action: 'reconstruirRodonavesListar' });
     if (!l.ok) { falha(l.erro || 'sem resposta do servidor.'); return; }
     if (!l.dados || l.dados.ok !== true) { falha((l.dados && l.dados.erro) || 'resposta inesperada — confira se o Code.gs mais novo foi implantado (nova versão).'); return; }
-    const nfs = l.dados.nfs || [], lote = l.dados.loteMax || 40, paralelo = l.dados.paralelo || RTE_LOTES_EM_PARALELO;
+    const nfs = l.dados.nfs || [], lote = l.dados.loteMax || 40, paralelo = l.dados.paralelo || 1, simult = l.dados.simultaneas || 0;
+    const tPrep = Date.now() - t0; // medição: preparo (token + lista de NFs)
     if (nfs.length === 0) { falha('não há NFs da Rodonaves em Pedidos Não Recebidos.'); return; }
     const rows = []; let semRetorno = 0, erros = 0, amostra = '';
     // Vários lotes ao mesmo tempo (como os "workers" do robô): o Apps Script atende consultas em paralelo.
@@ -4880,23 +4881,32 @@ async function atualizarRodonavesAuto() {
         const r = await buscarJsonComRetry(API_URL, 2, { action: 'reconstruirRodonavesConsultar', nfs: lotes[k] });
         if (!r.ok) { erroLote = `falhou num dos lotes (${r.erro || 'erro'}).`; return; }
         if (!r.dados || r.dados.ok !== true) { erroLote = (r.dados && r.dados.erro) || 'resposta inesperada do servidor.'; return; }
-        resultados[k] = r.dados; feitas += lotes[k].length;
+        const sobrou = r.dados.restantes || [];
+        if (sobrou.length) lotes.push(sobrou); // o servidor não coube no tempo: o que faltou vira outra chamada (sempre avança, pois a 1ª rodada é garantida)
+        resultados[k] = r.dados; feitas += lotes[k].length - sobrou.length;
         setStatus('statusRteAuto', `Rodonaves: consultando a API… ${feitas} de ${nfs.length} NFs (${Math.round((Date.now() - t0) / 1000)} s)`, 'carregando');
         bar.style.width = Math.max(2, Math.round((feitas / nfs.length) * 80)) + '%';
       }
     };
+    setStatus('statusRteAuto', `Rodonaves: consultando a API… ${nfs.length} NFs (o servidor consulta em rodadas, costuma levar de 20 a 60 s)`, 'carregando');
     await Promise.all(Array.from({ length: Math.min(paralelo, lotes.length) }, trabalhador));
+    const tConsulta = Date.now() - t0 - tPrep; // medição: consulta à API (todas as chamadas)
     if (erroLote) { falha(erroLote); return; }
+    let somaMsApi = 0, repetidas = 0; resultados.forEach(d => { somaMsApi += d.msApi || 0; repetidas += d.repetidas || 0; });
     resultados.forEach(d => { (d.rows || []).forEach(x => rows.push(x)); semRetorno += d.semRetorno || 0; erros += d.erros || 0; if (!amostra && d.amostraErro) amostra = d.amostraErro; });
     if (rows.length === 0) { falha(`a Rodonaves não devolveu dados de nenhuma das ${nfs.length} NFs (${erros} com erro).` + (amostra ? ' Exemplo do erro: ' + amostra : '')); return; }
     if (erros > nfs.length * 0.25) { falha(`${erros} de ${nfs.length} NFs deram erro na consulta; melhor tentar de novo mais tarde.` + (amostra ? ' Exemplo do erro: ' + amostra : '')); return; }
     bar.style.width = '85%';
+    const tG0 = Date.now();
     await enviarEmLotes(rows, 'importBaixaEntregaRTE', 'statusRteAuto', 'progressRteAuto', 'progressBarRteAuto');
+    const tGravar = Date.now() - tG0; // medição: gravação na planilha
     if (document.getElementById('statusRteAuto').className.indexOf('erro') !== -1) return; // o próprio envio já explicou o problema
+    const seg = ms => (ms / 1000).toFixed(1) + ' s';
     const ent = rows.filter(x => String(x[11]).toUpperCase() === 'SIM').length;
     const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     setStatus('statusRteAuto', `Rodonaves atualizada às ${hora} (levou ${Math.round((Date.now() - t0) / 1000)} s): ${rows.length} de ${nfs.length} NFs com retorno da API (${ent} entregues)` +
-      (semRetorno ? `; ${semRetorno} sem retorno (a API não achou a nota nos 2 CNPJs)` : '') + (erros ? `; ${erros} com erro na consulta` + (amostra ? ' (ex.: ' + amostra + ')' : '') : '') + '.', 'ok');
+      (semRetorno ? `; ${semRetorno} sem retorno (a API não achou a nota nos 2 CNPJs)` : '') + (erros ? `; ${erros} com erro na consulta` + (amostra ? ' (ex.: ' + amostra + ')' : '') : '') + '.' +
+      ` ⏱ Tempos: preparo ${seg(tPrep)} · consulta ${seg(tConsulta)} em ${lotes.length} chamada${lotes.length === 1 ? '' : 's'} (até ${lote} NFs cada${simult ? `; ${simult} NFs por vez dentro do servidor` : ''}) (soma da espera pela API nos servidores: ${seg(somaMsApi)}${repetidas ? `; ${repetidas} consultas repetidas por 429/5xx` : ''}) · gravação ${seg(tGravar)}.`, 'ok');
     atualizarEmRotaTratativas();
     carregarIndicadores();
   } catch (err) {
