@@ -4874,14 +4874,16 @@ async function atualizarRodonavesAuto() {
     const rows = []; let semRetorno = 0, erros = 0, amostra = '';
     // Vários lotes ao mesmo tempo (como os "workers" do robô): o Apps Script atende consultas em paralelo.
     const lotes = []; for (let i = 0; i < nfs.length; i += lote) lotes.push(nfs.slice(i, i + lote));
-    const resultados = new Array(lotes.length); let proximo = 0, feitas = 0, erroLote = '';
+    const resultados = new Array(lotes.length); let proximo = 0, feitas = 0, erroLote = '', rodadaLenta = 0;
     const trabalhador = async () => {
       while (!erroLote) {
         const k = proximo++; if (k >= lotes.length) return;
-        const r = await buscarJsonComRetry(API_URL, 2, { action: 'reconstruirRodonavesConsultar', nfs: lotes[k] });
-        if (!r.ok) { erroLote = `falhou num dos lotes (${r.erro || 'erro'}).`; return; }
+        const r = await buscarJsonComRetry(API_URL, 1, { action: 'reconstruirRodonavesConsultar', nfs: lotes[k] }); // 1 tentativa: repetir uma chamada que já passou de 150 s só dobraria a espera
+        if (!r.ok) { erroLote = `falhou numa das chamadas (${r.erro || 'erro'}) depois de ${Math.round((Date.now() - t0) / 1000)} s; já consultadas: ${feitas} de ${nfs.length} NFs.`; return; }
         if (!r.dados || r.dados.ok !== true) { erroLote = (r.dados && r.dados.erro) || 'resposta inesperada do servidor.'; return; }
         const sobrou = r.dados.restantes || [];
+        if (sobrou.length && sobrou.length >= lotes[k].length) { erroLote = 'o servidor não conseguiu consultar nenhuma NF nesta chamada' + (r.dados.avisoRede ? ' (' + r.dados.avisoRede + ')' : '') + '.'; return; } // sem avanço: não ficar em laço
+        if (r.dados.maxRodadaMs) rodadaLenta = Math.max(rodadaLenta, r.dados.maxRodadaMs);
         if (sobrou.length) lotes.push(sobrou); // o servidor não coube no tempo: o que faltou vira outra chamada (sempre avança, pois a 1ª rodada é garantida)
         resultados[k] = r.dados; feitas += lotes[k].length - sobrou.length;
         setStatus('statusRteAuto', `Rodonaves: consultando a API… ${feitas} de ${nfs.length} NFs (${Math.round((Date.now() - t0) / 1000)} s)`, 'carregando');
@@ -4889,7 +4891,9 @@ async function atualizarRodonavesAuto() {
       }
     };
     setStatus('statusRteAuto', `Rodonaves: consultando a API… ${nfs.length} NFs (o servidor consulta em rodadas, costuma levar de 20 a 60 s)`, 'carregando');
-    await Promise.all(Array.from({ length: Math.min(paralelo, lotes.length) }, trabalhador));
+    // Relógio na tela: mesmo que uma chamada demore, a mensagem mostra que o portal não travou e quantos segundos já se passaram.
+    const relogio = setInterval(() => setStatus('statusRteAuto', `Rodonaves: consultando a API… ${feitas} de ${nfs.length} NFs (${Math.round((Date.now() - t0) / 1000)} s; o portal mostra o andamento a cada chamada, de até ~40 s)`, 'carregando'), 1000);
+    try { await Promise.all(Array.from({ length: Math.min(paralelo, lotes.length) }, trabalhador)); } finally { clearInterval(relogio); }
     const tConsulta = Date.now() - t0 - tPrep; // medição: consulta à API (todas as chamadas)
     if (erroLote) { falha(erroLote); return; }
     let somaMsApi = 0, repetidas = 0; resultados.forEach(d => { somaMsApi += d.msApi || 0; repetidas += d.repetidas || 0; });
@@ -4906,7 +4910,7 @@ async function atualizarRodonavesAuto() {
     const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     setStatus('statusRteAuto', `Rodonaves atualizada às ${hora} (levou ${Math.round((Date.now() - t0) / 1000)} s): ${rows.length} de ${nfs.length} NFs com retorno da API (${ent} entregues)` +
       (semRetorno ? `; ${semRetorno} sem retorno (a API não achou a nota nos 2 CNPJs)` : '') + (erros ? `; ${erros} com erro na consulta` + (amostra ? ' (ex.: ' + amostra + ')' : '') : '') + '.' +
-      ` ⏱ Tempos: preparo ${seg(tPrep)} · consulta ${seg(tConsulta)} em ${lotes.length} chamada${lotes.length === 1 ? '' : 's'} (até ${lote} NFs cada${simult ? `; ${simult} NFs por vez dentro do servidor` : ''}) (soma da espera pela API nos servidores: ${seg(somaMsApi)}${repetidas ? `; ${repetidas} consultas repetidas por 429/5xx` : ''}) · gravação ${seg(tGravar)}.`, 'ok');
+      ` ⏱ Tempos: preparo ${seg(tPrep)} · consulta ${seg(tConsulta)} em ${lotes.length} chamada${lotes.length === 1 ? '' : 's'} (até ${lote} NFs cada${simult ? `; ${simult} NFs por vez dentro do servidor` : ''}) (rodada mais lenta: ${seg(rodadaLenta)}; soma da espera pela API nos servidores: ${seg(somaMsApi)}${repetidas ? `; ${repetidas} consultas repetidas por 429/5xx` : ''}) · gravação ${seg(tGravar)}.`, 'ok');
     atualizarEmRotaTratativas();
     carregarIndicadores();
   } catch (err) {
