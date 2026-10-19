@@ -3743,6 +3743,7 @@ function aplicarFiltrosTratativas() {
           : (!!dataPrevisao && dataPrevisao < hoje);
         const linhaHoje = ehHoje(l[idxDataUltMsg]);
 
+        const finNaMensagem = indices.indexOf(idxMensagem) !== -1; // ✅ fica junto da mensagem (💬); se essa coluna estiver oculta, volta para a coluna Ocorrência
         const montarCelula = idx => {
           const valor = l[idx] === undefined || l[idx] === null ? '' : l[idx];
           let estilo = '';
@@ -3764,13 +3765,14 @@ function aplicarFiltrosTratativas() {
             const icone = (l.historico || []).length > 0
               ? ` <span class="hist-icone" data-idx="${posicao}" title="Ver tratativa completa">💬</span>`
               : '';
-            return `<td${atributosPisca}>${seloAbertura(l, hoje)}${escapeHtml(valor)}${icone}</td>`;
+            const fin = finNaMensagem ? ` <span class="finalizar-ocorrencia" data-idx="${posicao}" title="Finalizar esta ocorrência no sistema da empresa">✅</span>` : '';
+            return `<td${atributosPisca}>${seloAbertura(l, hoje)}${escapeHtml(valor)}${icone}${fin}</td>`;
           }
           if (idx === idxOcorrencia) {
             const ed = l.edicaoOcorrencia;
             const dica = ed ? escapeHtml(`Original: ${ed.original || 'não registrado'}${ed.por ? ' · alterada por ' + ed.por : ''}${ed.em ? ' em ' + ed.em : ''}`) : '';
             const selo = ed ? ` <span class="selo-editada" title="${dica}">alterada</span>` : '';
-            return `<td>${escapeHtml(valor)}${selo} <span class="lapis-ocorrencia" data-idx="${posicao}" title="Alterar tipo de ocorrência">✏️</span> <span class="finalizar-ocorrencia" data-idx="${posicao}" title="Finalizar esta ocorrência no sistema da empresa">✅</span></td>`;
+            return `<td>${escapeHtml(valor)}${selo} <span class="lapis-ocorrencia" data-idx="${posicao}" title="Alterar tipo de ocorrência">✏️</span> ${finNaMensagem ? '' : ` <span class="finalizar-ocorrencia" data-idx="${posicao}" title="Finalizar esta ocorrência no sistema da empresa">✅</span>`}</td>`;
           }
           if (idx === idxPedidoCol) {
             const u = l.urgente;
