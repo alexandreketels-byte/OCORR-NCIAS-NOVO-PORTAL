@@ -2965,6 +2965,8 @@ function configurarPopoverHistoricoTratativas() {
 
   configurarPopoverHistorico('tratativasTabelaBody', () => tratativasLinhasFiltradas);
   configurarPopoverHistorico('modalTabelaBody', () => modalLinhasFiltradas);
+  configurarPopoverHistorico('loteTabelaBody', () => (_lote ? _lote.itens.map(it => it.linha || {}) : [])); // balão 💬 dentro de "Finalizar várias"
+  configurarPopoverHistorico('finalizarPrevia', () => [_finLinha || {}]);                               // e dentro de "Finalizar" de um pedido
 
   const corpoTratativas = document.getElementById('tratativasTabelaBody');
   if (corpoTratativas) corpoTratativas.addEventListener('click', e => {
@@ -4480,11 +4482,15 @@ async function buscarTabDinamicaCentral() {
 // ---------- Finalizar ocorrência NO SISTEMA DA EMPRESA (a única ação do portal que grava lá) ----------
 // Um pedido por vez. 1) busca a PRÉVIA ao vivo no sistema; 2) você escolhe tipo + solução e marca a confirmação; 3) o servidor envia e
 // CONFERE no sistema depois. Nunca repete o envio sozinho: se a resposta demorar, avisa que PODE ter sido finalizada.
-let _finPedido = '', _finId = '', _finOcupado = false, _finPronto = false;
+let _finPedido = '', _finId = '', _finOcupado = false, _finPronto = false, _finLinha = null;
 function abrirFinalizarOcorrencia(pedido) {
   if (_finOcupado) return;
   if (!API_URL || API_URL.indexOf('COLE_AQUI') === 0) { alert('Configure a API_URL no código antes.'); return; }
-  _finPedido = String(pedido || '').trim(); _finId = ''; _finPronto = false;
+  _finPedido = String(pedido || '').trim(); _finId = ''; _finPronto = false; _finLinha = null;
+  { // linha do pedido que já está na tela (com a tratativa completa), para o balão 💬
+    const achar = (dados, cols) => { const i = cols.indexOf('Pedido'); return i < 0 ? null : (dados || []).find(l => String(l[i] || '').trim() === _finPedido && (l.historico || []).length > 0) || null; };
+    _finLinha = achar(modalDadosAtuais, modalColunasAtuais) || achar(tratativasDadosAtuais, COLUNAS_TRATATIVAS);
+  }
   document.getElementById('finalizarInfo').innerHTML = `Pedido <b>${escapeHtml(_finPedido)}</b>`;
   document.getElementById('finalizarPrevia').style.display = 'none';
   document.getElementById('finalizarForm').style.display = 'none';
@@ -4511,7 +4517,7 @@ async function carregarPreviaFinalizacao() {
     const it = r.item; _finId = it.idOcorrencia;
     const msgs = (it.ultimasMensagens || []).map(m => `<div class="fin-msg"><b>${escapeHtml(m.autor)}</b> · ${escapeHtml(m.data)}<br>${escapeHtml(m.texto)}</div>`).join('');
     const prev = document.getElementById('finalizarPrevia');
-    prev.innerHTML = `<b>${escapeHtml(it.cliente)}</b><br>Transportadora: ${escapeHtml(it.transportadora)} · Loja ${escapeHtml(it.loja)} · NF ${escapeHtml(it.nf)}<br>Ocorrência: ${escapeHtml(it.ocorrencia)} · Status: <b>${escapeHtml(it.status)}</b> · aberta em ${escapeHtml(it.aberturaEm)}${msgs}`;
+    prev.innerHTML = `<b>${escapeHtml(it.cliente)}</b>${_finLinha ? ' <span class="hist-icone" data-idx="0" title="Ver tratativa completa">💬</span>' : ''}<br>Transportadora: ${escapeHtml(it.transportadora)} · Loja ${escapeHtml(it.loja)} · NF ${escapeHtml(it.nf)}<br>Ocorrência: ${escapeHtml(it.ocorrencia)} · Status: <b>${escapeHtml(it.status)}</b> · aberta em ${escapeHtml(it.aberturaEm)}${msgs}`;
     prev.style.display = 'block';
     document.getElementById('finalizarTipo').innerHTML = '<option value="">Escolha o tipo...</option>' + (r.tipos || []).map(t => `<option value="${escapeHtml(t.codigo)}">${escapeHtml(t.nome)}</option>`).join('');
     document.getElementById('finalizarForm').style.display = 'block';
@@ -4685,7 +4691,7 @@ function abrirLote() {
   const itens = Array.from(_loteSel).map(ped => {
     const l = modalDadosAtuais.find(x => String(x[iPed] || '').trim() === ped);
     const m = l && iDt >= 0 ? String(l[iDt] || '').replace(/<[^>]*>/g, ' ').match(/\d{2}\/\d{2}\/\d{4}/) : null;
-    return { pedido: ped, dataEntrega: m ? m[0] : '', tipo: '', solucao: '', info: null, problema: '' };
+    return { pedido: ped, dataEntrega: m ? m[0] : '', tipo: '', solucao: '', info: null, problema: '', linha: l || null };
   });
   _lote = { itens, tiposHtml: '' }; _lotePronto = false; _loteHouveFinalizacao = false;
   document.getElementById('loteTitulo').textContent = `Finalizar ${itens.length} ocorrência${itens.length === 1 ? '' : 's'} no sistema`;
@@ -4737,7 +4743,7 @@ function renderLote() {
     if (it.problema) return `<tr class="lote-prob"><td><b>${escapeHtml(it.pedido)}</b></td><td colspan="4">⚠ ${escapeHtml(it.problema)} — este pedido fica de fora.</td></tr>`;
     const x = it.info || {};
     return `<tr><td><b>${escapeHtml(it.pedido)}</b></td>
-      <td>${escapeHtml(x.cliente || '')}<br><span class="desc">${escapeHtml(x.transportadora || '')} · NF ${escapeHtml(x.nf || '')} · ${escapeHtml(x.ocorrencia || '')} · ${escapeHtml(x.status || '')}</span>${x.ultimaMensagem ? `<br><span class="desc">“${escapeHtml(String(x.ultimaMensagem).slice(0, 90))}”</span>` : ''}</td>
+      <td>${escapeHtml(x.cliente || '')}<br><span class="desc">${escapeHtml(x.transportadora || '')} · NF ${escapeHtml(x.nf || '')} · ${escapeHtml(x.ocorrencia || '')} · ${escapeHtml(x.status || '')}</span>${x.ultimaMensagem ? `<br><span class="desc">“${escapeHtml(String(x.ultimaMensagem).slice(0, 90))}”</span>` : ''}${it.linha && (it.linha.historico || []).length ? ` <span class="hist-icone" data-idx="${i}" title="Ver tratativa completa">💬</span>` : ''}</td>
       <td><select class="campo-simples lote-tipo" data-i="${i}" onchange="loteCampo(${i})">${_lote.tiposHtml}</select></td>
       <td><input type="text" class="campo-simples lote-sol" data-i="${i}" maxlength="240" value="${escapeHtml(it.solucao)}" oninput="loteCampo(${i})"></td>
       <td><span class="desc lote-cont" data-i="${i}">${240 - it.solucao.length}</span></td></tr>`;
