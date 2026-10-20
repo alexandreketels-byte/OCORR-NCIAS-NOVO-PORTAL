@@ -4303,7 +4303,7 @@ async function atualizarNRAuto() {
     const nfs = l.dados.nfs || [], porPedido = l.dados.porPedido || 100, porDetalhe = l.dados.detalhesPorPedido || 25;
     if (nfs.length === 0) { falha('não há NFs da NR Express em Pedidos Não Recebidos.'); return; }
     // 1) tela de resultado do SSW (até 100 NFs por vez)
-    const rows = [], detalhes = [];
+    const rows = [], detalhes = [], titulosSSW = {};
     for (let i = 0; i < nfs.length; i += porPedido) {
       setStatus('statusNRAuto', `NR Express: consultando o SSW… ${Math.min(i + porPedido, nfs.length)} de ${nfs.length} NFs`, 'carregando');
       bar.style.width = Math.max(5, Math.round((i / nfs.length) * 50)) + '%';
@@ -4313,6 +4313,7 @@ async function atualizarNRAuto() {
       // se QUALQUER CNPJ não devolveu a lista (bloqueio, captcha, página de erro...), não importa nada: senão as notas desse CNPJ perderiam o status
       if ((r.dados.erros || []).length) { falha('o SSW não respondeu direito: ' + r.dados.erros.join(' | ') + '.'); return; }
       (r.dados.rows || []).forEach(x => rows.push(x)); (r.dados.detalhes || []).forEach(x => detalhes.push(x));
+      Object.keys(r.dados.titulos || {}).forEach(t => { titulosSSW[t] = (titulosSSW[t] || 0) + r.dados.titulos[t]; });
     }
     if (rows.length === 0) { falha(`o SSW não devolveu rastreio de nenhuma das ${nfs.length} NFs.`); return; }
     // 2) previsão de quem não trouxe no texto: abre "Mais detalhes" (vários ao mesmo tempo). Se falhar, só fica sem previsão — não trava.
@@ -4343,7 +4344,8 @@ async function atualizarNRAuto() {
     const sem = Math.max(0, nfs.length - rows.length), ent = rows.filter(x => x[1] === 'Entregue').length;
     el.textContent = `NR Express atualizada às ${hora} (levou ${Math.round((Date.now() - t0) / 1000)} s): ${rows.length} de ${nfs.length} NFs com rastreio no SSW (${ent} entregues)` +
       (sem ? `; ${sem} sem retorno (o SSW não mostra essas notas)` : '') +
-      (semPrevisao ? `; ${semPrevisao} sem previsão (não consegui ler${amostra ? ': ' + amostra : ''})` : '') + '. ' + el.textContent;
+      (semPrevisao ? `; ${semPrevisao} sem previsão (não consegui ler${amostra ? ': ' + amostra : ''})` : '') +
+      '. O SSW devolveu: ' + (Object.keys(titulosSSW).map(t => titulosSSW[t] + '× ' + t).join('; ') || '—') + '. ' + el.textContent;
     atualizarEmRotaTratativas();
     carregarIndicadores();
   } catch (err) {
