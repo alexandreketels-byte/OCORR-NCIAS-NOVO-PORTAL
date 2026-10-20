@@ -5411,7 +5411,7 @@ function celulaRetornoTransportadora(pedido, ret) {
   if (ret.erro) return `<span style="color:var(--cinza)" title="${escapeHtml('Não consegui ler o Controle de Entregas: ' + ret.erro)}">indisponível</span>`;
   const r = ret.mapa[chavePedidoFront(pedido)];
   if (!r) return '';
-  return `<span style="display:inline-block;min-width:200px;max-width:320px;white-space:normal"${r.data ? ` title="${escapeHtml('Respondido em ' + r.data)}"` : ''}>${escapeHtml(r.motivo)}</span>`;
+  return `<span style="display:inline-block;min-width:200px;max-width:320px;white-space:normal;color:var(--azul);font-weight:600"${r.data ? ` title="${escapeHtml('Respondido em ' + r.data)}"` : ''}>${escapeHtml(r.motivo)}</span>`;
 }
 
 let ultimoFiltroPedidos = null;
