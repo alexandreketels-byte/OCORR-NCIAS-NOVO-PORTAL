@@ -5172,7 +5172,7 @@ function exportarCSV(colunas, linhas, nomeArquivo) {
   const limpar = v => {
     if (v === undefined || v === null) return '""';
     // remove HTML embutido (ex: o lápis de editar da Prev Etg) antes de exportar
-    const texto = String(v).replace(/<[^>]*>/g, '').trim();
+    const texto = String(v).replace(/<[^>]*>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').trim();
     return '"' + texto.replace(/"/g, '""') + '"';
   };
   const linhasCSV = [colunas.map(limpar).join(';')]
@@ -5380,11 +5380,47 @@ function celulasEntregaUniversal(p) {
   return { entregue: 'Sim ' + etiquetas, data: primeira ? primeira[2] : '', origens: fontes.map(f => f[0]), datas: fontes.map(f => f[2]).filter(Boolean) };
 }
 
+// ---------- Retorno da transportadora (GFW) vindo do projeto "Controle de Entregas" ----------
+// Lá a GFW responde o MOTIVO do atraso de cada NF. Aqui só LEMOS essa resposta (nada é gravado no outro projeto) e mostramos numa coluna
+// no fim dos relatórios da GFW, ligando pelo número do PEDIDO. O endereço abaixo é o mesmo que a página do Controle de Entregas já usa.
+const CONTROLE_ENTREGAS_URL = 'https://script.google.com/macros/s/AKfycbxiF4c_-nxjNZ-G7cOI4lQiBvIAa31w2MEAFY2U4AXUpWIRmUSHl7PGAVEMgp1QR3pgng/exec';
+const COLUNA_RETORNO_TRANSP = 'Retorno da transportadora';
+let _retornosCache = { quando: 0, mapa: null };
+
+// Devolve { mapa } (pedido -> {motivo, data}) ou { erro }. Nunca lança erro: se o Controle de Entregas não responder, o relatório abre normal.
+async function buscarRetornosTransportadora() {
+  if (_retornosCache.mapa && Date.now() - _retornosCache.quando < 120000) return { mapa: _retornosCache.mapa }; // 2 min em memória
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 20000);
+  try {
+    const r = await _fetchOriginal(CONTROLE_ENTREGAS_URL, { signal: ctl.signal });
+    const dados = await r.json();
+    if (!Array.isArray(dados)) throw new Error((dados && dados.erro) || 'resposta inesperada');
+    const mapa = {};
+    dados.slice(1).forEach(l => { // posições da planilha do Controle de Entregas: 0 = Pedido, 12 = Motivo, 13 = Data Resp
+      const ped = chavePedidoFront(l[0]), motivo = String(l[12] === undefined || l[12] === null ? '' : l[12]).trim();
+      if (ped && motivo) mapa[ped] = { motivo: motivo, data: fmtData(l[13]) };
+    });
+    _retornosCache = { quando: Date.now(), mapa: mapa };
+    return { mapa: mapa };
+  } catch (e) {
+    return { erro: (e && e.name === 'AbortError') ? 'demorou demais' : ((e && e.message) || 'erro') };
+  } finally { clearTimeout(timer); }
+}
+
+function celulaRetornoTransportadora(pedido, ret) {
+  if (ret.erro) return `<span style="color:var(--cinza)" title="${escapeHtml('Não consegui ler o Controle de Entregas: ' + ret.erro)}">indisponível</span>`;
+  const r = ret.mapa[chavePedidoFront(pedido)];
+  if (!r) return '';
+  return `<span style="display:inline-block;min-width:200px;max-width:320px;white-space:normal"${r.data ? ` title="${escapeHtml('Respondido em ' + r.data)}"` : ''}>${escapeHtml(r.motivo)}</span>`;
+}
+
 let ultimoFiltroPedidos = null;
 
 async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregue, apenasEmRota) {
   ultimoFiltroPedidos = { transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregue, apenasEmRota };
-  mostrarModalCarregando(titulo, COLUNAS_PEDIDOS_NAO_RECEBIDOS);
+  const ehGFW = /gfw/i.test(String(transportadora || '')); // só nos relatórios da GFW: coluna extra com o retorno da transportadora
+  mostrarModalCarregando(titulo, ehGFW ? COLUNAS_PEDIDOS_NAO_RECEBIDOS.concat([COLUNA_RETORNO_TRANSP]) : COLUNAS_PEDIDOS_NAO_RECEBIDOS);
+  const pRetorno = ehGFW ? buscarRetornosTransportadora() : null; // busca ao mesmo tempo que os pedidos (não atrasa)
   const token = progressoModal.iniciar();
   progressoModal.etapa(token, 5, 85);
   const params = new URLSearchParams({
@@ -5404,6 +5440,7 @@ async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido
       `<tr><td colspan="${COLUNAS_PEDIDOS_NAO_RECEBIDOS.length}">Erro ao carregar pedidos (${escapeHtml(res.erro || 'resposta inesperada')}). Feche e abra o relatório de novo.</td></tr>`;
     return;
   }
+  const retorno = pRetorno ? await pRetorno : null;
   try {
     const linhas = res.dados.map(p => {
       const ent = celulasEntregaUniversal(p);
@@ -5414,6 +5451,7 @@ async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido
         ent.entregue, ent.data,
         p.ultimaOcorrencia || ''
       ];
+      if (retorno) linha.push(celulaRetornoTransportadora(p.pedido, retorno));
       linha.origens = ent.origens;                  // pro filtro "Entregue por"
       linha.datas = ent.datas;                      // pro filtro por período (vale a data de qualquer origem, como antes)
       linha.filtros = { 'Entregue': ent.origens.length ? 'Sim' : 'Não' }; // o dropdown "Entregue" filtra só Sim/Não, sem as etiquetas
