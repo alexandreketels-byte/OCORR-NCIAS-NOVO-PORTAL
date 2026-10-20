@@ -4303,7 +4303,7 @@ async function atualizarNRAuto() {
     const nfs = l.dados.nfs || [], porPedido = l.dados.porPedido || 100, porDetalhe = l.dados.detalhesPorPedido || 25;
     if (nfs.length === 0) { falha('não há NFs da NR Express em Pedidos Não Recebidos.'); return; }
     // 1) tela de resultado do SSW (até 100 NFs por vez)
-    const rows = [], detalhes = [], titulosSSW = {};
+    const rows = [], detalhes = [], titulosSSW = {}; let amostraSSW = '';
     for (let i = 0; i < nfs.length; i += porPedido) {
       setStatus('statusNRAuto', `NR Express: consultando o SSW… ${Math.min(i + porPedido, nfs.length)} de ${nfs.length} NFs`, 'carregando');
       bar.style.width = Math.max(5, Math.round((i / nfs.length) * 50)) + '%';
@@ -4313,6 +4313,7 @@ async function atualizarNRAuto() {
       // se QUALQUER CNPJ não devolveu a lista (bloqueio, captcha, página de erro...), não importa nada: senão as notas desse CNPJ perderiam o status
       if ((r.dados.erros || []).length) { falha('o SSW não respondeu direito: ' + r.dados.erros.join(' | ') + '.'); return; }
       (r.dados.rows || []).forEach(x => rows.push(x)); (r.dados.detalhes || []).forEach(x => detalhes.push(x));
+      if (r.dados.amostraHtml && !amostraSSW) amostraSSW = r.dados.amostraHtml;
       Object.keys(r.dados.titulos || {}).forEach(t => { titulosSSW[t] = (titulosSSW[t] || 0) + r.dados.titulos[t]; });
     }
     if (rows.length === 0) { falha(`o SSW não devolveu rastreio de nenhuma das ${nfs.length} NFs.`); return; }
@@ -4346,6 +4347,7 @@ async function atualizarNRAuto() {
       (sem ? `; ${sem} sem retorno (o SSW não mostra essas notas)` : '') +
       (semPrevisao ? `; ${semPrevisao} sem previsão (não consegui ler${amostra ? ': ' + amostra : ''})` : '') +
       '. O SSW devolveu: ' + (Object.keys(titulosSSW).map(t => titulosSSW[t] + '× ' + t).join('; ') || '—') + '. ' + el.textContent;
+    if (amostraSSW) { console.log('NR amostra HTML do SSW:', amostraSSW); el.insertAdjacentHTML('beforeend', '<br><small>Trecho recebido do SSW (me mande este texto):</small><br><textarea readonly style="width:100%;height:120px;font-size:11px">' + amostraSSW.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</textarea>'); }
     atualizarEmRotaTratativas();
     carregarIndicadores();
   } catch (err) {
