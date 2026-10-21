@@ -93,6 +93,12 @@
   button.btn-sistema { background: linear-gradient(135deg, #ffb020, #f08a00); color: #1b1200; font-weight: 700; font-size: 1rem; padding: 12px 22px; border: 2px solid #ffd27a; border-radius: 8px; box-shadow: 0 0 0 3px rgba(255,176,32,0.25), 0 3px 10px rgba(240,138,0,0.35); letter-spacing: 0.2px; transition: transform .12s, box-shadow .12s, filter .12s; }
   button.btn-sistema:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 0 0 4px rgba(255,176,32,0.35), 0 5px 14px rgba(240,138,0,0.5); }
   button.btn-sistema:active:not(:disabled) { transform: translateY(0); }
+  /* Indicador de pedidos por colaboradora (ao lado do "Buscar do sistema") */
+  .colab-card { display:flex; flex-direction:column; gap:2px; padding:6px 12px; border:1px solid var(--borda); border-left:4px solid var(--cor-colab, var(--cinza)); border-radius:8px; background: rgba(255,255,255,0.03); min-width:150px; }
+  .colab-card .colab-nome { font-size:0.72rem; font-weight:700; letter-spacing:.4px; color:var(--cor-colab, var(--cinza)); }
+  .colab-card .colab-num { font-size:1.35rem; font-weight:700; line-height:1.1; }
+  .colab-card .colab-num small { font-size:0.72rem; font-weight:400; color:var(--cinza); margin-left:4px; }
+  .colab-card .colab-sub { font-size:0.7rem; color:var(--cinza); }
   button.btn-sistema:disabled { background: var(--cinza); color: #fff; border-color: transparent; box-shadow: none; }
   .progress-wrap { margin-top: 12px; height: 10px; background: var(--destaque-claro); border-radius: 5px; overflow: hidden; display: none; }
   .progress-bar { height: 100%; background: var(--destaque); width: 0%; transition: width .2s; }
@@ -655,7 +661,10 @@
     <p class="desc" style="display:none">Cole aqui direto da tela do sistema (com as mensagens de cada pedido) — não precisa mais passar pelo Excel antes, a caixa já reconhece a tabela colada e organiza as colunas sozinha. Fica salvo neste navegador até você processar um texto novo.</p>
     <textarea id="colarOcorrenciasTexto" rows="8" style="display:none;width:100%;font-family:inherit;font-size:0.9rem;padding:10px;border:1px solid var(--borda);border-radius:8px;"></textarea>
     <button id="btnProcessarTratativas" onclick="processarOcorrenciasTexto()" style="display:none;margin-top:10px">Processar texto</button>
-    <button type="button" class="btn-sistema" id="btnBuscarCentral" onclick="buscarOcorrenciasCentral()" style="margin-top:10px;margin-left:6px" title="Entra no sistema da empresa, abre o Relatório de Ocorrências (todas, status Ambos) e carrega aqui, sem copiar e colar.">🔄 Buscar do sistema</button>
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:10px">
+    <button type="button" class="btn-sistema" id="btnBuscarCentral" onclick="buscarOcorrenciasCentral()" style="margin:0" title="Entra no sistema da empresa, abre o Relatório de Ocorrências (todas, status Ambos) e carrega aqui, sem copiar e colar.">🔄 Buscar do sistema</button>
+    <div id="indicadorColab" style="display:flex;flex-wrap:wrap;gap:10px"></div>
+    </div>
     <div class="progress-wrap" id="progressTratativas"><div class="progress-bar" id="progressBarTratativas"></div></div>
     <div class="status-line" id="statusTratativas"></div>
 
@@ -3675,7 +3684,41 @@ function limparFiltroDataEntregaTratativas() {
   aplicarFiltrosTratativas();
 }
 
+// ---------- Indicador: pedidos que cada colaboradora está tratando ----------
+// Conta o pedido para a colaboradora se QUALQUER mensagem do histórico foi escrita por ela
+// (pedido com mensagem das duas conta para as duas). Usa todas as ocorrências carregadas,
+// sem olhar os filtros da tabela.
+const COLABORADORAS_INDICADOR = [
+  { nome: 'CAMILA', rotulo: 'Camila', cor: 'var(--roxo)' },
+  { nome: 'VICTORIA', rotulo: 'Victória', cor: 'var(--vermelho)' }
+];
+function semAcentoMaiusc(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase(); }
+function atualizarIndicadorColaboradoras() {
+  const el = document.getElementById('indicadorColab');
+  if (!el) return;
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  const hoje = `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
+  const linhas = tratativasDadosAtuais || [];
+  el.innerHTML = COLABORADORAS_INDICADOR.map(c => {
+    let tratando = 0, ultima = 0, hojeQtd = 0;
+    linhas.forEach(l => {
+      const hist = l.historico || [];
+      const dela = hist.filter(m => semAcentoMaiusc(m.autor).startsWith(c.nome));
+      if (!dela.length) return;
+      tratando++;
+      if (semAcentoMaiusc(hist[hist.length - 1].autor).startsWith(c.nome)) ultima++;
+      if (dela.some(m => String(m.data || '').startsWith(hoje))) hojeQtd++;
+    });
+    return `<div class="colab-card" style="--cor-colab:${c.cor}" title="Pedidos com pelo menos uma mensagem de ${c.rotulo}. Se o pedido tem mensagem das duas, conta para as duas.">
+      <span class="colab-nome">${c.rotulo.toUpperCase()}</span>
+      <span class="colab-num">${tratando}<small>pedidos tratando</small></span>
+      <span class="colab-sub">movimentou hoje: ${hojeQtd} · última msg é dela: ${ultima}</span>
+    </div>`;
+  }).join('');
+}
+
 function aplicarFiltrosTratativas() {
+  atualizarIndicadorColaboradoras();
   const busca = (document.getElementById('tratativasBusca').value || '').toLowerCase().trim();
   let linhas = tratativasDadosAtuais;
 
