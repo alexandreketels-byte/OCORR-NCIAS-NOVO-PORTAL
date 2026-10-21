@@ -89,6 +89,11 @@
   input[type=file] { display: block; margin: 12px 0; color: var(--texto); }
   button { background: var(--destaque); color: #fff; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-size: 0.95rem; }
   button:disabled { background: var(--cinza); cursor: not-allowed; }
+  /* Botões "Buscar do sistema" (API): cor própria (âmbar), maior e com brilho, para não se confundirem com os demais */
+  button.btn-sistema { background: linear-gradient(135deg, #ffb020, #f08a00); color: #1b1200; font-weight: 700; font-size: 1rem; padding: 12px 22px; border: 2px solid #ffd27a; border-radius: 8px; box-shadow: 0 0 0 3px rgba(255,176,32,0.25), 0 3px 10px rgba(240,138,0,0.35); letter-spacing: 0.2px; transition: transform .12s, box-shadow .12s, filter .12s; }
+  button.btn-sistema:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 0 0 4px rgba(255,176,32,0.35), 0 5px 14px rgba(240,138,0,0.5); }
+  button.btn-sistema:active:not(:disabled) { transform: translateY(0); }
+  button.btn-sistema:disabled { background: var(--cinza); color: #fff; border-color: transparent; box-shadow: none; }
   .progress-wrap { margin-top: 12px; height: 10px; background: var(--destaque-claro); border-radius: 5px; overflow: hidden; display: none; }
   .progress-bar { height: 100%; background: var(--destaque); width: 0%; transition: width .2s; }
   .status-line { font-size: 0.85rem; color: var(--cinza); margin-top: 8px; }
@@ -439,7 +444,7 @@
       <p class="desc">Arquivo .csv exportado do sistema. A importação preserva o histórico: pedidos novos são adicionados e pedidos já existentes têm apenas Status Entrega e Receb Cliente atualizados.</p>
       <input type="file" id="fileTabDinamica">
       <button id="btnTabDinamica" onclick="importarTabDinamica()">Importar</button>
-      <button type="button" id="btnTabCentral" onclick="buscarTabDinamicaCentral()" style="margin-left:6px" title="Entra no sistema da empresa, gera a Tabela Dinâmica (cadastro da coleta mais antiga dos Pedidos Não Recebidos até hoje) e importa direto, sem baixar arquivo. Atualize os Pedidos Não Recebidos antes.">🔄 Buscar do sistema</button>
+      <button type="button" class="btn-sistema" id="btnTabCentral" onclick="buscarTabDinamicaCentral()" style="margin-left:6px" title="Entra no sistema da empresa, gera a Tabela Dinâmica (cadastro da coleta mais antiga dos Pedidos Não Recebidos até hoje) e importa direto, sem baixar arquivo. Atualize os Pedidos Não Recebidos antes.">🔄 Buscar do sistema</button>
       <div class="progress-wrap" id="progressTabDinamica"><div class="progress-bar" id="progressBarTabDinamica"></div></div>
       <div class="status-line" id="statusTabDinamica"></div>
       <div class="meta" id="metaTabDinamica"></div>
@@ -450,7 +455,7 @@
       <p class="desc">Relatório exportado do sistema (Data Coleta, Prev Etg, Atraso, Pedido, NF, Cliente, agrupado por Transportadora).</p>
       <input type="file" id="filePedidosNaoRecebidos">
       <button id="btnPedidosNaoRecebidos" onclick="importarPedidosNaoRecebidos()">Importar</button>
-      <button type="button" id="btnPNRCentral" onclick="buscarPedidosNaoRecebidosCentral()" style="margin-left:6px" title="Entra no sistema da empresa, abre o Relatório de Pedidos Não Recebidos Pelo Cliente (entregues de 01/01/2026 até hoje, todas as transportadoras) e importa direto, sem baixar arquivo.">🔄 Buscar do sistema</button>
+      <button type="button" class="btn-sistema" id="btnPNRCentral" onclick="buscarPedidosNaoRecebidosCentral()" style="margin-left:6px" title="Entra no sistema da empresa, abre o Relatório de Pedidos Não Recebidos Pelo Cliente (entregues de 01/01/2026 até hoje, todas as transportadoras) e importa direto, sem baixar arquivo.">🔄 Buscar do sistema</button>
       <div class="progress-wrap" id="progressPedidos"><div class="progress-bar" id="progressBarPedidos"></div></div>
       <div class="status-line" id="statusPedidos"></div>
       <div class="meta" id="metaPedidos"></div>
@@ -650,7 +655,7 @@
     <p class="desc" style="display:none">Cole aqui direto da tela do sistema (com as mensagens de cada pedido) — não precisa mais passar pelo Excel antes, a caixa já reconhece a tabela colada e organiza as colunas sozinha. Fica salvo neste navegador até você processar um texto novo.</p>
     <textarea id="colarOcorrenciasTexto" rows="8" style="display:none;width:100%;font-family:inherit;font-size:0.9rem;padding:10px;border:1px solid var(--borda);border-radius:8px;"></textarea>
     <button id="btnProcessarTratativas" onclick="processarOcorrenciasTexto()" style="display:none;margin-top:10px">Processar texto</button>
-    <button type="button" id="btnBuscarCentral" onclick="buscarOcorrenciasCentral()" style="margin-top:10px;margin-left:6px" title="Entra no sistema da empresa, abre o Relatório de Ocorrências (todas, status Ambos) e carrega aqui, sem copiar e colar.">🔄 Buscar do sistema</button>
+    <button type="button" class="btn-sistema" id="btnBuscarCentral" onclick="buscarOcorrenciasCentral()" style="margin-top:10px;margin-left:6px" title="Entra no sistema da empresa, abre o Relatório de Ocorrências (todas, status Ambos) e carrega aqui, sem copiar e colar.">🔄 Buscar do sistema</button>
     <div class="progress-wrap" id="progressTratativas"><div class="progress-bar" id="progressBarTratativas"></div></div>
     <div class="status-line" id="statusTratativas"></div>
 
