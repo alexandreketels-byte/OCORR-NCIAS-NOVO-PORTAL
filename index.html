@@ -4148,6 +4148,11 @@ function renderKpis(dados) {
       onclick: `verPedidos('TODAS', true, 'Todos os pedidos em atraso')` },
     { valor: perf.toFixed(1) + '%', rotulo: 'Performance geral', cor: corPerf }
   ];
+  // Entregues que ainda têm ocorrência em aberto, de TODAS as transportadoras juntas (pra finalizar tudo num lugar só)
+  const porT = dados.pedidosNaoRecebidos.porTransportadora || {};
+  const totOcor = Object.keys(porT).reduce((a, n) => a + (Number(porT[n].entreguesComOcorrencia) || 0), 0);
+  kpis.push({ valor: totOcor, rotulo: '🔔 Entregues com ocorrência em aberto', cor: totOcor > 0 ? 'var(--vermelho)' : '',
+    onclick: `verPedidos('TODAS', false, 'Entregues com ocorrência em aberto — todas as transportadoras', false, true, false, true)` });
   document.getElementById('kpis').innerHTML = kpis.map(k => {
     const clicavel = k.onclick ? ' clicavel' : '';
     const onclickAttr = k.onclick ? ` onclick="${k.onclick}"` : '';
@@ -4564,7 +4569,7 @@ async function confirmarFinalizarOcorrencia() {
       const m = document.getElementById('modalOverlay');
       if (m && getComputedStyle(m).display !== 'none' && ultimoFiltroPedidos) {
         const f = ultimoFiltroPedidos;
-        verPedidos(f.transportadora, f.apenasAtraso, f.titulo, f.apenasIndefinido, f.apenasEntregue, f.apenasEmRota);
+        verPedidos(f.transportadora, f.apenasAtraso, f.titulo, f.apenasIndefinido, f.apenasEntregue, f.apenasEmRota, f.apenasComOcorrencia);
       }
     }, 1800);
   }
@@ -4650,7 +4655,7 @@ async function confirmarPrevLote() {
       const m = document.getElementById('modalOverlay');
       if (m && getComputedStyle(m).display !== 'none' && ultimoFiltroPedidos) {
         const f = ultimoFiltroPedidos;
-        verPedidos(f.transportadora, f.apenasAtraso, f.titulo, f.apenasIndefinido, f.apenasEntregue, f.apenasEmRota);
+        verPedidos(f.transportadora, f.apenasAtraso, f.titulo, f.apenasIndefinido, f.apenasEntregue, f.apenasEmRota, f.apenasComOcorrencia);
       }
     }, 1600);
   }
@@ -4720,7 +4725,7 @@ async function atualizarAposLote() {
   const m = document.getElementById('modalOverlay');
   if (m && getComputedStyle(m).display !== 'none' && ultimoFiltroPedidos) {
     const f = ultimoFiltroPedidos;
-    verPedidos(f.transportadora, f.apenasAtraso, f.titulo, f.apenasIndefinido, f.apenasEntregue, f.apenasEmRota);
+    verPedidos(f.transportadora, f.apenasAtraso, f.titulo, f.apenasIndefinido, f.apenasEntregue, f.apenasEmRota, f.apenasComOcorrencia);
   }
 }
 async function carregarPreviaLote() {
@@ -5420,8 +5425,8 @@ function celulaRetornoTransportadora(pedido, ret) {
 
 let ultimoFiltroPedidos = null;
 
-async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregue, apenasEmRota) {
-  ultimoFiltroPedidos = { transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregue, apenasEmRota };
+async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregue, apenasEmRota, apenasComOcorrencia) {
+  ultimoFiltroPedidos = { transportadora, apenasAtraso, titulo, apenasIndefinido, apenasEntregue, apenasEmRota, apenasComOcorrencia };
   const ehGFW = /gfw/i.test(String(transportadora || '')); // só nos relatórios da GFW: coluna extra com o retorno da transportadora
   mostrarModalCarregando(titulo, ehGFW ? COLUNAS_PEDIDOS_NAO_RECEBIDOS.concat([COLUNA_RETORNO_TRANSP]) : COLUNAS_PEDIDOS_NAO_RECEBIDOS);
   const pRetorno = ehGFW ? buscarRetornosTransportadora() : null; // busca ao mesmo tempo que os pedidos (não atrasa)
@@ -5446,7 +5451,7 @@ async function verPedidos(transportadora, apenasAtraso, titulo, apenasIndefinido
   }
   const retorno = pRetorno ? await pRetorno : null;
   try {
-    const linhas = res.dados.map(p => {
+    const linhas = (apenasComOcorrencia ? res.dados.filter(p => p.ocorrenciaAberta) : res.dados).map(p => { // card "Entregues com ocorrência": só os que ainda têm ocorrência em aberto
       const ent = celulasEntregaUniversal(p);
       const linha = [
         p.pedido, p.nf, p.cliente, p.cidade, p.loja, fmtData(p.dataColeta),
@@ -5742,7 +5747,7 @@ async function editarPrevisao(pedido) {
 
     // Reabre a mesma lista que estava aberta, já com a previsão atualizada
     if (ultimoFiltroPedidos) {
-      verPedidos(ultimoFiltroPedidos.transportadora, ultimoFiltroPedidos.apenasAtraso, ultimoFiltroPedidos.titulo, ultimoFiltroPedidos.apenasIndefinido, ultimoFiltroPedidos.apenasEntregue, ultimoFiltroPedidos.apenasEmRota);
+      verPedidos(ultimoFiltroPedidos.transportadora, ultimoFiltroPedidos.apenasAtraso, ultimoFiltroPedidos.titulo, ultimoFiltroPedidos.apenasIndefinido, ultimoFiltroPedidos.apenasEntregue, ultimoFiltroPedidos.apenasEmRota, ultimoFiltroPedidos.apenasComOcorrencia);
     }
   } catch (err) {
     alert('Erro ao salvar a previsão: ' + err.message);
