@@ -646,10 +646,10 @@
   </div>
 
   <div class="indicadores" id="secTratativas">
-    <div class="secao-titulo"><h2>📋 Colar Tratativas de Ocorrências (texto)</h2></div>
-    <p class="desc">Cole aqui direto da tela do sistema (com as mensagens de cada pedido) — não precisa mais passar pelo Excel antes, a caixa já reconhece a tabela colada e organiza as colunas sozinha. Fica salvo neste navegador até você processar um texto novo.</p>
-    <textarea id="colarOcorrenciasTexto" rows="8" style="width:100%;font-family:inherit;font-size:0.9rem;padding:10px;border:1px solid var(--borda);border-radius:8px;"></textarea>
-    <button id="btnProcessarTratativas" onclick="processarOcorrenciasTexto()" style="margin-top:10px">Processar texto</button>
+    <div class="secao-titulo"><h2>📋 Ocorrências</h2></div>
+    <p class="desc" style="display:none">Cole aqui direto da tela do sistema (com as mensagens de cada pedido) — não precisa mais passar pelo Excel antes, a caixa já reconhece a tabela colada e organiza as colunas sozinha. Fica salvo neste navegador até você processar um texto novo.</p>
+    <textarea id="colarOcorrenciasTexto" rows="8" style="display:none;width:100%;font-family:inherit;font-size:0.9rem;padding:10px;border:1px solid var(--borda);border-radius:8px;"></textarea>
+    <button id="btnProcessarTratativas" onclick="processarOcorrenciasTexto()" style="display:none;margin-top:10px">Processar texto</button>
     <button type="button" id="btnBuscarCentral" onclick="buscarOcorrenciasCentral()" style="margin-top:10px;margin-left:6px" title="Entra no sistema da empresa, abre o Relatório de Ocorrências (todas, status Ambos) e carrega aqui, sem copiar e colar.">🔄 Buscar do sistema</button>
     <div class="progress-wrap" id="progressTratativas"><div class="progress-bar" id="progressBarTratativas"></div></div>
     <div class="status-line" id="statusTratativas"></div>
@@ -3340,7 +3340,7 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
     if (avisos.length) {
       const statusEl = document.getElementById('statusTratativas');
       if (statusEl) {
-        statusEl.textContent += (statusEl.textContent ? ' ' : '') + `Atenção: não consegui buscar tudo agora (${avisos.join('; ')}) — tente "Processar texto" de novo em alguns segundos.`;
+        statusEl.textContent += (statusEl.textContent ? ' ' : '') + `Atenção: não consegui buscar tudo agora (${avisos.join('; ')}) — tente "Buscar do sistema" de novo em alguns segundos.`;
         statusEl.className = 'status-line erro';
       }
     }
