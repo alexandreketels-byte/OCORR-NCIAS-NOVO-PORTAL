@@ -5429,6 +5429,9 @@ const COLUNAS_PEDIDOS_NAO_RECEBIDOS = ['Pedido', 'NF', 'Cliente', 'Cidade', 'Loj
 
 // Junta as 6 origens numa linha só: devolve as 2 células + os dados que o filtro/ordenação do modal usam.
 function celulasEntregaUniversal(p) {
+  // A planilha da Rodonaves/GFW guarda "—" quando ainda não houve entrega: isso não é uma data e não pode contar como entrega.
+  const dtOk = v => { const t = String(v === undefined || v === null ? '' : v).trim(); return (t === '—' || t === '-' || t === '–') ? '' : v; };
+  p = Object.assign({}, p, { dataEntregaGFW: dtOk(p.dataEntregaGFW), dataEntregaRTE: dtOk(p.dataEntregaRTE) });
   const fontes = [
     ['GFW', p.entregueGFW, fmtData(p.dataEntregaGFW)],
     ['RTE', p.entregueRTE, fmtData(p.dataEntregaRTE)],
