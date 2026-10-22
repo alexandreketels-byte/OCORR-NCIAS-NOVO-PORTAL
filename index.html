@@ -3327,7 +3327,7 @@ async function finalizarProcessamentoTratativas(registros, idBotao, aoSucessoLoc
         tipoFinal, r.status,
         infoEmRota.emRota ? 'Em Rota' : (infoEmRota.dataRomaneio || ''),
         fmtData(info.previsao || ''), info.recebCliente ? 'Sim' : 'Não',
-        fmtData(info.recebCliente || ''), m.data, m.autor, m.texto,
+        fmtData(info.recebCliente || ''), m.data || r.dtOcorr || '', m.autor, m.texto, // sem mensagem ainda: usa a data/hora de abertura da ocorrência (senão o pedido iria para o fim da lista)
         compactarHistorico(historico) // coluna oculta (não aparece na tabela) — só pra ir salva na planilha
       ];
       linha.historico = historico; // usado direto pelo balão de "ver tratativa completa" nesta sessão
@@ -3828,6 +3828,9 @@ function aplicarFiltrosTratativas() {
             const caixa = `<input type="checkbox" class="chk-urgente" data-idx="${posicao}" title="${dica}"${u ? ' checked' : ''}>`;
             const selo = u ? `<span class="selo-urgente" title="${dica}">URGENTE</span>` : '';
             return `<td>${caixa}${escapeHtml(valor)}${selo}</td>`;
+          }
+          if (idx === idxDataUltMsg && valor && !l[idxAutor] && !l[idxMensagem]) {
+            return `<td title="Ainda sem mensagem: mostrando a data e hora em que a ocorrência foi aberta">${valor}<div style="font-size:0.68rem;color:var(--cinza)">abertura</div></td>`;
           }
           return `<td${estilo ? ` style="${estilo}"` : ''}>${valor}</td>`;
         };
