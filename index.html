@@ -4911,6 +4911,9 @@ async function buscarOcorrenciasCentral() {
     const registros = r.dados.registros || [];
     if (!registros.length) { falha('o sistema não devolveu ocorrências.'); return; }
     await finalizarProcessamentoTratativas(registros, 'btnBuscarCentral', null);
+    // As ocorrências mudaram (ex.: uma foi finalizada): atualiza também os Indicadores, senão a célula
+    // "Entregues" continua piscando com ocorrência que já foi encerrada. O servidor já limpou o cache ao salvar.
+    try { await carregarIndicadores(); } catch (e) { console.error('Indicadores não atualizaram após buscar ocorrências:', e); }
   } catch (err) {
     falha(err.message + '.');
   } finally {
